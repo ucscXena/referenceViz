@@ -1,0 +1,129 @@
+.content {
+	display: flex;
+	flex-direction: column;
+	position: relative;
+}
+
+.content > * {
+	flex-grow: 1;
+}
+
+.title {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: 1rem; /* minimum space between elements */
+	flex-grow: 0;
+}
+
+/* required to set width of the status overlay */
+.graphWrapper {
+	position: relative;
+	width: 800px;
+	height: 800px;
+	margin-right: 5px;
+	border: 1px solid black;
+	cursor: crosshair;
+	flex-grow: 0;
+}
+
+.status {
+	flex-grow: 1;
+	margin: auto;
+	width: 100%;
+	height: 100%;
+	background-color: #00000080;
+	position: absolute;
+	z-index: 10;
+}
+
+.status img, .status button {
+	display: block;
+	margin: auto;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+}
+
+.tooltip {
+	position: absolute;
+	right: 0;
+	top: 28px;
+	background-color: #FFFFFF;
+	z-index: 10;
+	opacity: .6;
+}
+
+.tooltip :nth-child(1) span {
+    float: right;
+    font-size: 100%;
+    cursor: pointer;
+    border: 1px solid rgb(0, 0, 0, 0.87);
+    border-radius: 4px;
+    margin-right: 4px;
+    padding: 0 16px 16px 0;
+}
+
+.scale {
+	position: absolute;
+	right: 0;
+	top: 0;
+	background-color: #FFFFFF;
+	z-index: 10;
+	opacity: .6;
+}
+
+.scale :nth-child(1), .scale :nth-child(3) {
+	display: inline-block;
+	width: 1px;
+	height: 11px;
+	background-color: #000000;
+}
+
+.scale :nth-child(1) {
+	margin-left: 2px;
+}
+
+.scale :nth-child(3) {
+	margin-right: 2px;
+}
+
+.scale :nth-child(2) {
+	display: inline-block;
+	position: relative;
+	bottom: 5px;
+	width: 100px;
+	height: 1px;
+	background-color: #000000;
+}
+
+.controls {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	z-index: 10;
+	opacity: .6;
+	background-color: #FFFFFF;
+	width: 24px;
+	font-size: 90%;
+}
+
+/* gear button */
+.controls > :last-child {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	background-color: inherit;
+}
+
+.open {
+	width: 200px;
+	padding: 2px;
+}
+
+.fps {
+	position: absolute;
+	right: 0%;
+	bottom: 100%;
+	color: #B0B0B0
+}

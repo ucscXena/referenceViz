@@ -1,0 +1,15 @@
+.singlecell {
+	display: flex;
+	height: 100%;
+}
+
+.singlecell > :first-child {
+	flex: 0 0 auto;
+}
+
+.singlecell > :last-child {
+	flex: 1 1 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	min-width: 0;
+}

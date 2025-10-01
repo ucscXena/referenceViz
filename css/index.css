@@ -1,0 +1,19 @@
+/**
+ * UCSC Xena Client
+ * http://xena.ucsc.edu
+ *
+ * Root styling file to be included at app top level. Includes CSS reset and globals.
+ */
+
+/*
+ * Base CSS reset.
+ * This is a populate CSS reset, used to create a standardized, cross-browser base to build app-specific styles on
+ * top of.
+ */
+@import '~normalize.css';
+
+/*
+ * Fonts.
+ * Local font files for Material Icons.
+ */
+@import '../fonts/index.css';
