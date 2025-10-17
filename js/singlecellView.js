@@ -78,7 +78,9 @@ var getImageMeta =  path => ajax({
 var layerSelect = (layers, layer, onChange) =>
 	select({
 		id: 'layer-select',
+		label: 'Color by',
 		value: layer,
+		className: styles.layerSelect,
 		onChange}, ...layers.map((l, i) => menuItem({value: i}, l.name)));
 
 function forceRedraw(deck) {
@@ -186,6 +188,7 @@ export default el(class SinglecellView extends PureComponent {
 			div({className: styles.title},
 				layerSelector,
 				//					name ? span(name) : '',
+				span({className: styles.spacer}),
 				count ? span(`${count.toLocaleString()} cells`) : ''),
 			span({className: styles.fps, ref: this.onFPSRef}),
 			div({className: styles.graphWrapper, ref: this.onRef},
