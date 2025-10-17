@@ -6,9 +6,23 @@ set -o xtrace
 CIRCLE_PROJECT_USERNAME=${CIRCLE_PROJECT_USERNAME:-""}
 CIRCLE_PR_NUMBER=${CIRCLE_PR_NUMBER:-""}
 
-if [ "$CIRCLE_PROJECT_USERNAME" != 'ucscBrainExplorer' ] || [ ! -z $CIRCLE_PR_NUMBER ]; then
-	exit;
+if [ "$#" -lt 1 ]; then
+	echo -e "Usage:\n$0 <host_alias>"
+	exit 1;
 fi
+
+HOST_ALIAS="$1"
+
+case "$HOST_ALIAS" in
+	bedev) ;;
+	*) echo -e "Unknown host alias $HOST_ALIAS"; exit 1;;
+esac
+
+HOST=$(ssh -G "$HOST_ALIAS" | grep -oP '(?<=^hostname ).*')
+
+#if [ "$CIRCLE_PROJECT_USERNAME" != 'ucscBrainExplorer' ] || [ ! -z $CIRCLE_PR_NUMBER ]; then
+#	exit;
+#fi
 
 USER=ubuntu
 BUILD_DJANGO=build-django
@@ -36,4 +50,4 @@ rsync "${RSYNC_OPTS[@]}" --rsync-path='sudo rsync' build/ ${USER}@${HOST}:/var/w
 #    cd /var/www/backend/django
 #    python ./manage.py migrate
 #    sudo apache2ctl restart
-ENDSSH
+##ENDSSH
