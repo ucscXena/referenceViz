@@ -81,6 +81,13 @@ var layerSelect = (layers, layer, onChange) =>
 		value: layer,
 		onChange}, ...layers.map((l, i) => menuItem({value: i}, l.name)));
 
+function forceRedraw(deck) {
+	if (deck) {
+		deck.deck.setProps({}); // triggers re-render
+		deck.deck.redraw(true); // explicit redraw
+	}
+}
+
 export default el(class SinglecellView extends PureComponent {
 	state = {
 		tooltipID: undefined,
@@ -98,15 +105,23 @@ export default el(class SinglecellView extends PureComponent {
 			},
 			() => this.setState({error: true})
 		);
+		this.intervalId =  Let((lastPixelRatio = window.devicePixelRatio) =>
+			setInterval(() => {
+			  if (window.devicePixelRatio !== lastPixelRatio) {
+				lastPixelRatio = window.devicePixelRatio;
+				forceRedraw(this.deckGL);
+			  }
+			}, 500));
 		//		this.timer = setInterval(() => {
 		//			if (this.FPSRef && this.deckGL) {
 		//				this.FPSRef.innerHTML = `${this.deckGL.deck.metrics.fps.toFixed(0)} FPS`;
 		//			}
 		//		}, 1000);
 	}
-	//	componentWillUnmount() {
-	//		clearTimeout(this.timer);
-	//	}
+	componentWillUnmount() {
+//		clearTimeout(this.timer);
+		clearInterval(this.intervalId);
+	}
 	onFPSRef = FPSRef => {
 		this.FPSRef = FPSRef;
 	};
