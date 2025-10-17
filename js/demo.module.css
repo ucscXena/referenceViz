@@ -1,15 +1,20 @@
 .singlecell {
 	display: flex;
-	height: 100%;
+	height: 100vh;
+	width: 100%;
+	padding: 8px;
+	box-sizing: border-box;
 }
 
 .singlecell > :first-child {
-	flex: 0 0 auto;
+	flex: 1;
+	height: 100%;
 }
 
 .singlecell > :last-child {
-	flex: 1 1 0;
+	width: 450px;
+	flex-shrink: 0;
+	height: 100%;
 	overflow-y: auto;
 	overflow-x: hidden;
-	min-width: 0;
 }

@@ -14,17 +14,16 @@
 	align-items: flex-start;
 	gap: 1rem; /* minimum space between elements */
 	flex-grow: 0;
+	flex-shrink: 0;
 }
 
 /* required to set width of the status overlay */
 .graphWrapper {
 	position: relative;
-	width: 800px;
-	height: 800px;
 	margin-right: 5px;
 	border: 1px solid black;
 	cursor: crosshair;
-	flex-grow: 0;
+	flex: 1;
 }
 
 .status {
@@ -61,7 +60,6 @@
     border: 1px solid rgb(0, 0, 0, 0.87);
     border-radius: 4px;
     margin-right: 4px;
-    padding: 0 16px 16px 0;
 }
 
 .scale {
