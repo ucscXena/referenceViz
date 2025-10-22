@@ -1,7 +1,7 @@
 
 import React from 'react';
 import PureComponent from './PureComponent';
-import {Typography} from '@material-ui/core';
+import Typography from '@material-ui/core/Typography';
 import {map, last, zip} from './underscore_ext.js';
 import {el} from './react-hyper';
 

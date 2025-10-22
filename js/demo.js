@@ -5,7 +5,8 @@ import singlecellView from './singlecellView';
 import singlecellLegend from './singlecellLegend';
 import {div, el} from './react-hyper';
 import styles from './demo.module.css';
-import {MuiThemeProvider, CssBaseline} from '@material-ui/core';
+import MuiThemeProvider from '@material-ui/core/styles/MuiThemeProvider';
+import CssBaseline from '@material-ui/core/CssBaseline';
 import {xenaTheme as theme} from './theme';
 
 var muiThemeProvider = el(MuiThemeProvider);

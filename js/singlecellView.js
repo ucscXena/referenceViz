@@ -1,4 +1,7 @@
-import {Icon, IconButton, MenuItem, Slider} from '@material-ui/core';
+import Icon from '@material-ui/core/Icon';
+import IconButton from '@material-ui/core/IconButton';
+import MenuItem from '@material-ui/core/MenuItem';
+import Slider from '@material-ui/core/Slider';
 import PureComponent from './PureComponent';
 import styles from './singlecellView.module.css';
 import {div, el, img, label, span} from './react-hyper.js';

@@ -1,4 +1,6 @@
-import {FormControl, InputLabel, Select} from '@material-ui/core';
+import FormControl from '@material-ui/core/FormControl';
+import InputLabel from '@material-ui/core/InputLabel';
+import Select from '@material-ui/core/Select';
 import {el} from './react-hyper';
 var select = el(Select);
 var formControl = el(FormControl);
