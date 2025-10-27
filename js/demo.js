@@ -2,10 +2,10 @@
 import parseURL from './parseURL';
 import ReactDOM from 'react-dom';
 import singlecellView from './singlecellView';
-import singlecellLegend from './singlecellLegend';
+import controls from './controls';
 import {div, el} from './react-hyper';
 import styles from './demo.module.css';
-import MuiThemeProvider from '@material-ui/core/styles/MuiThemeProvider';
+import {ThemeProvider as MuiThemeProvider} from '@material-ui/core/styles';
 import CssBaseline from '@material-ui/core/CssBaseline';
 import {xenaTheme as theme} from './theme';
 
@@ -18,7 +18,7 @@ var segments = path.slice(1).replace(/\/$/, '').split(/\//);
 if (segments[0] === 'pyramid') {
 	var main = document.getElementById('main');
 	main.style.position = 'relative';
-	var state = {/*showColorPicker: true,*/ layer: 0}, onState;
+	var state = {/*showColorPicker: true,*/ layer: 0, filterLayer: -1}, onState;
 	var render = () => {
 		ReactDOM.render(
 			muiThemeProvider({theme},
@@ -28,7 +28,7 @@ if (segments[0] === 'pyramid') {
 						image: params.image,
 						state,
 						onState}),
-					singlecellLegend(state, onState))),
+					controls({state, onState}))),
 			main);
 	};
 	onState = fn => {

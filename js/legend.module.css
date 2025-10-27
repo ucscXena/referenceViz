@@ -39,6 +39,14 @@
 	width: 15px;
 	border: 1px;
 	border-style: solid;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+.colorBox > * {
+	font-size: 17px !important;
+	font-weight: bold;
 }
 
 .breakendBar {

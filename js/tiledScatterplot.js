@@ -2,65 +2,52 @@ import PureComponent from './PureComponent';
 import {el} from './react-hyper';
 import DeckGL from '@deck.gl/react';
 import {OrthographicView} from '@deck.gl/core';
-//import {scatterplotLayer} from '../ScatterplotLayer';
 import {ScatterplotLayer} from '@deck.gl/layers';
 import {DataFilterExtension} from '@deck.gl/extensions';
 var scatterplotLayer = ({id, ...props}) => new ScatterplotLayer({id, ...props});
 import {COORDINATE_SYSTEM} from '@deck.gl/core';
 import {TileLayer} from '@deck.gl/geo-layers';
 import {debounce} from './rx';
-import {get, Let} from './underscore_ext.js';
+import {get, Let, memoize1} from './underscore_ext.js';
 import '@luma.gl/debug';
-import {categoryMoreRgb} from './colorScales';
 import upng from 'upng-js';
+import {colorScale} from './colorScales';
+import setScale from './setScale';
 
 var deckGL = el(DeckGL);
 
-var get8Coords = (width, height, data) => {
-	const pts = [];
+var get8Value = ({data, width}) => (x, y) => data[x + y * width];
+var get16Value = ({data, width}) =>
+	(x, y) => Let((offset = (x + y * width) << 1) =>
+					(data[offset] << 8) + data[offset + 1]);
+
+var getValue = png => png.depth > 8 ? get16Value(png) : get8Value(png);
+
+function getCoords(png0, png1) {
+	const {width, height} = png0,
+		getColorValue = getValue(png0),
+		getFilterValue = getValue(png1),
+		pts = [];
+
 	for (let j = 0; j < height; j++)  {
 		for (let i = 0; i < width; ++i) {
-			var c = data[i + j * width];
+			var c = getColorValue(i, j),
+				f = getFilterValue(i, j);
 			if (c) {
 				// 0 is "no data". Decrement to get ordinal scale.
-				pts.push([i, j, c - 1]);
+				pts.push([i, j, c - 1, f - 1]);
 			}
 		}
 	}
 	return pts;
-};
-
-// Neither typed arrays nor DataView offer a way to read
-// a big endian array in a generic way. So, swapping the bytes here.
-var get16Coords = (width, height, data) => {
-	const pts = [];
-	for (let j = 0; j < height; j++)  {
-		for (let i = 0; i < width; ++i) {
-			var k = (i + j * width) << 1;
-			var c = (data[k] << 8) + data[k + 1];
-			if (c) {
-				// 0 is "no data". Decrement to get ordinal scale.
-				pts.push([i, j, c - 1]);
-			}
-		}
-	}
-	return pts;
-};
-
-var getCoords = img => {
-	var {width, height, data, depth} = upng.decode(img);
-
-	return (depth > 8 ? get16Coords : get8Coords)(width, height, data);
-};
-
-var colorfn = i => categoryMoreRgb[i % categoryMoreRgb.length];
+}
 
 var filterFn = hideColors =>
 	!hideColors ? () => 1 :
 		Let((hidden = new Set(hideColors)) =>
-			([, , c]) => hidden.has(c) ? 0 : 1);
+			([, , , c]) => hidden.has(c) ? 0 : 1);
 
-const scatterplotTile = ({data, id, modelMatrix, hideColors, radius}) =>
+const scatterplotTile = ({data, id, modelMatrix, colorfn, hideColors, radius}) =>
 	scatterplotLayer({
 		id: `scatter-plot-${id}`,
 		data,
@@ -71,12 +58,12 @@ const scatterplotTile = ({data, id, modelMatrix, hideColors, radius}) =>
 		getPosition: ([x, y]) =>  [x, y], // XXX switch to passing buffers?
 		lineWidthMinPixels: 20,
 		lineWidthMaxPixels: 800,
-		getRadius: radius, //1, //radius,
+		getRadius: radius,
 		radiusMinPixels: 1,
-		getFillColor: ([, , c]) =>  colorfn(c), // XXX switch to passing buffers?
+		getFillColor: ([, , c]) =>  colorfn.rgb(c), // XXX switch to passing buffers?
 		getFilterValue: filterFn(hideColors), // XXX switch to passing buffers?
 		filterRange: [1, 1],
-		updateTriggers: {getFilterValue: [hideColors]},
+		updateTriggers: {getFilterValue: [hideColors], getFillColor: [colorfn]},
 		extensions: [new DataFilterExtension({filterSize: 1})]
 	});
 
@@ -88,10 +75,17 @@ var getM = (s, [x, y, z = 0]) => [
 	x, y, z, 1
 ];
 
-var tileLayer = ({fileformat, index, levels, name, opacity, path,
-	size, tileSize, visible, hideColors, radius}) =>
+var filterUrl = ({path,  index: {x, y, z}, filterLayer, fileformat}) =>
+	`${path}/${filterLayer}-${z}-${y}-${x}.${fileformat}`;
+
+var imgPromise = (url, signal) =>
+	fetch(url, {signal}).then(r => r.blob()).then(b => b.arrayBuffer())
+		.then(b => upng.decode(b));
+
+var tileLayer = ({fileformat, index, levels, name, filterLayer, opacity, path,
+	colorfn, size, tileSize, visible, filterColors, radius}) =>
 	new TileLayer({
-		id: `tile-layer-${index}`,
+		id: `tile-layer-${index}-${filterLayer || name}`,
 		data: `${path}/${name}-{z}-{y}-{x}.${fileformat}`,
 		loadOptions: {
 			fetch: {
@@ -101,14 +95,18 @@ var tileLayer = ({fileformat, index, levels, name, opacity, path,
 				}
 			}
 		},
-		getTileData: ({url, signal}) => {
-			const data = fetch(url, {signal});
-
-			if (signal.aborted) {
-				return null;
-			}
-			return data.then(r => r.blob()).then(b => b.arrayBuffer())
-				.then(getCoords);
+		getTileData: ({url, signal, index}) => {
+			var colorPromise = imgPromise(url, signal),
+				filterPromise = filterLayer && filterLayer !== name ?
+					imgPromise(filterUrl({filterLayer, index, fileformat, path}),
+						signal) :
+					colorPromise;
+			return Promise.all([colorPromise, filterPromise])
+					.then(([colorImg, filterImg]) => {
+				if (signal.aborted) {return null;}
+				// Combine color and filter values: [x, y, colorValue, filterValue]
+				return getCoords(colorImg, filterImg);
+			});
 		},
 		minZoom: 0,
 		maxZoom: levels - 1,
@@ -128,10 +126,11 @@ var tileLayer = ({fileformat, index, levels, name, opacity, path,
 			var modelMatrix = getM(1 / (1 << z),
 				[x * tileSize >> z, y * tileSize >> z]);
 			return scatterplotTile(
-				{data, id: `${z}-${y}-${x}`, modelMatrix, hideColors, radius});
+				{data, id: `${z}-${y}-${x}`, modelMatrix, colorfn, hideColors: filterColors, radius});
 		},
 		updateTriggers: {
-			renderSubLayers: [hideColors, radius]
+			filterLayer,
+			renderSubLayers: [colorfn, filterColors, radius]
 		}
 	});
 
@@ -147,6 +146,8 @@ var currentScale = (levels, zoom, scale) => Math.pow(2, levels - zoom - 1) / sca
 
 class TiledScatterplot extends PureComponent {
 	static displayName = 'TiledScatterplot';
+	getScale = memoize1((codes, hidden) =>
+		colorScale(setScale(['ordinal', codes.length], hidden)));
 
 	onTooltip = ev => {
 		var {imageState, layer} = this.props;
@@ -166,9 +167,12 @@ class TiledScatterplot extends PureComponent {
 	}
 	render() {
 		var {props} = this,
-			{layer} = props,
+			{layer, filterLayer} = props,
 			// XXX color0? Probably should be cut
-			{image, imageState, radius, hidden: hideColors = []} = props,
+			{image, imageState, radius, hidden = [],
+				filtered: filterColors = []} = props,
+			codes = imageState.phenotypes[layer].int_to_category,
+			colorfn = this.getScale(codes, hidden),
 			{image_scalef: scale/*, offset*/} = image,
 			// TileLayer operates on the scale of the smallest downsample.
 			// Adjust the scale here for the number of downsamples, so the data
@@ -199,13 +203,15 @@ class TiledScatterplot extends PureComponent {
 			layers: [ // XXX expand to multiple channels?
 				tileLayer({
 					name: `p${layer}`, path: image.path,
+					filterLayer: filterLayer >= 0 && `p${filterLayer}`,
 					fileformat,
 					index: 'phenotype', // XXX review this
 					levels: imageState.levels,
 					size: imageState.size,
 					tileSize: imageState.tileSize,
 					visible: true,
-					hideColors,
+					colorfn,
+					filterColors,
 					radius
 				}),
 			],

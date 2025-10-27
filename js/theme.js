@@ -649,6 +649,32 @@ export const xenaTheme = createTheme(theme, {
 				fontSize: 24,
 			},
 		},
+		MuiTab: {
+			root: {
+				minHeight: 'unset',
+				minWidth: 'unset !important',
+				border: '1px solid #ccc',
+				backgroundColor: '#F0F0F0',
+				'&:first-child': {
+					borderTopLeftRadius: '4px'
+				},
+				'&:last-child': {
+					borderTopRightRadius: '4px'
+				},
+				'&.Mui-selected': {
+					backgroundColor: 'rgba(0,0,0,0)',
+					borderBottom: 'none',
+				}
+			}
+		},
+		MuiTabs: {
+			root: {
+				minHeight: 'unset'
+			},
+			indicator: {
+				display: 'none'
+			}
+		},
 		MuiToggleButton: {
 			root: {
 				...theme.typography.subtitle2,

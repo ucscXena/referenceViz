@@ -1,6 +1,5 @@
 import Icon from '@material-ui/core/Icon';
 import IconButton from '@material-ui/core/IconButton';
-import MenuItem from '@material-ui/core/MenuItem';
 import Slider from '@material-ui/core/Slider';
 import PureComponent from './PureComponent';
 import styles from './singlecellView.module.css';
@@ -12,7 +11,6 @@ import tiledScatterplot from './tiledScatterplot';
 import '../fonts/index.css';
 import Rx from './rx';
 import colorPicker from './colorPicker';
-import select from './select';
 var {ajax} = Rx.Observable;
 
 // XXX currently ignoring radiusBase param
@@ -22,7 +20,6 @@ var dotRange = () => Let((min = 1, max = 100) =>
 var iconButton = el(IconButton);
 var icon = el(Icon);
 var slider = el(Slider);
-var menuItem = el(MenuItem);
 
 // Styles
 
@@ -77,14 +74,6 @@ var getImageMeta =  path => ajax({
 		headers: {'X-Redirect-To': location.origin},
 		responseType: 'text', method: 'GET', crossDomain: true
 	}).map(r => JSON.parse(r.response));
-
-var layerSelect = (layers, layer, onChange) =>
-	select({
-		id: 'layer-select',
-		label: 'Color by',
-		value: layer,
-		className: styles.layerSelect,
-		onChange}, ...layers.map((l, i) => menuItem({value: i}, l.name)));
 
 function forceRedraw(deck) {
 	if (deck) {
@@ -166,30 +155,23 @@ export default el(class SinglecellView extends PureComponent {
 		// XXX add handle for click on label. See Map.js
 		this.setState({radius});
 	};
-	onLayer = ev => {
-		var layer = ev.target.value;
-		this.props.onState(state => merge(state, {layer}));
-	};
 	render() {
 		var handlers = pick(this.props, (v, k) => k.startsWith('on'));
 
-		var {onViewState, onTooltip, onClose, onControls, onDeck, onLayer, onRadius,
+		var {onViewState, onTooltip, onClose, onControls, onDeck, /*onLayer, */onRadius,
 			onReload} = this,
 			{image, state, onState, onShadow} = this.props,
-			{hidden, layer} = state || {},
+			{hidden, filtered, layer, filterLayer} = state || {},
 			error = this.state.error,
 			unit = false,
 			{container, tooltipValue, showControls, imageState, radius,
 				viewState} = this.state,
 			loading = !imageState,
-			count = get(imageState, 'count'),
+			count = get(imageState, 'count');
 			//			name = getIn(imageState, ['phenotypes', layer, 'name']),
-			layers = get(imageState, 'phenotypes', []),
-			layerSelector = layerSelect(layers, layer, onLayer);
 
 		return div({className: styles.content},
 			div({className: styles.title},
-				layerSelector,
 				//					name ? span(name) : '',
 				span({className: styles.spacer}),
 				count ? span(`${count.toLocaleString()} cells`) : ''),
@@ -203,8 +185,8 @@ export default el(class SinglecellView extends PureComponent {
 				...(tooltipValue ? [tooltipValueView(tooltipValue, onClose)] : []),
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck,
-					onTooltip, radius, viewState, hidden, image: {path: image,
-						'image_scalef': 1}, imageState, layer, container, // XXX scalef
+					onTooltip, radius, viewState, hidden, filtered, image: {path: image,
+						'image_scalef': 1}, imageState, layer, filterLayer, container, // XXX scalef
 					key: 'drawing'})));
 	}
 });
