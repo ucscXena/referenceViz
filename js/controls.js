@@ -45,12 +45,12 @@ export default el(class extends PureComponent {
 
 	onLayer = ev => {
 		var layer = ev.target.value;
-		this.props.onState(state => merge(state, {layer}));
+		this.props.onState(state => merge(state, {layer, hidden: []}));
 	};
 
 	onFilterLayer = ev => {
 		var filterLayer = ev.target.value;
-		this.props.onState(state => merge(state, {filterLayer}));
+		this.props.onState(state => merge(state, {filterLayer, filtered: []}));
 	};
 
 	render() {
