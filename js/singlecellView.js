@@ -11,6 +11,9 @@ import tiledScatterplot from './tiledScatterplot';
 import '../fonts/index.css';
 import Rx from './rx';
 import colorPicker from './colorPicker';
+import {colorScale} from './colorScales';
+import setScale from './setScale';
+import legendStyles from './legend.module.css';
 var {ajax} = Rx.Observable;
 
 // XXX currently ignoring radiusBase param
@@ -44,9 +47,13 @@ var scale = um =>
 	div({className: styles.scale},
 		span(), span(), span(), span(`${um == null ? '-' : um.toFixed()} \u03BCm`));
 
-var tooltipValueView = (value, onClick) =>
+var tooltipValueView = (code, color, onClick) =>
 	div({className: styles.tooltip},
-	    span(value, icon({onClick}, 'close')));
+		div({className: legendStyles.colorBox,
+			style: {backgroundColor: color}}),
+		code,
+		icon({onClick}, 'close')
+	);
 
 var labelFormat = v => v.toPrecision(2);
 var dotSize = ({state, onRadius: onChange}) =>
@@ -142,6 +149,8 @@ export default el(class SinglecellView extends PureComponent {
 		}
 	};
 	findSample = memoize1((samples, id) => indexOf(samples, id, true));
+	getScale = memoize1((codes, hidden) =>
+		colorScale(setScale(['ordinal', codes.length], hidden)));
 	onTooltip = i => {
 		this.setState({tooltipValue: i, tooltipID: undefined});
 	};
@@ -167,6 +176,9 @@ export default el(class SinglecellView extends PureComponent {
 			{container, tooltipValue, showControls, imageState, radius,
 				viewState} = this.state,
 			loading = !imageState,
+			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
+				.slice(1),
+			tooltipColor = this.getScale(codes, hidden)(tooltipValue),
 			count = get(imageState, 'count');
 			//			name = getIn(imageState, ['phenotypes', layer, 'name']),
 
@@ -182,7 +194,9 @@ export default el(class SinglecellView extends PureComponent {
 				get(state, 'showColorPicker') ? colorPicker({state, onState, layer}) :
 					null,
 				...(unit ? [scale(this.state.scale)] : []),
-				...(tooltipValue ? [tooltipValueView(tooltipValue, onClose)] : []),
+				...(tooltipValue != null ?
+					[tooltipValueView(codes[tooltipValue], tooltipColor, onClose)]
+					: []),
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck,
 					onTooltip, radius, viewState, hidden, filtered, image: {path: image,

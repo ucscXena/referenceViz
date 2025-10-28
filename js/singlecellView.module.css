@@ -54,21 +54,23 @@
 }
 
 .tooltip {
+	display: flex;
+	align-items: center;
 	position: absolute;
 	right: 0;
 	top: 28px;
 	background-color: #FFFFFF;
 	z-index: 10;
-	opacity: .6;
 }
 
-.tooltip :nth-child(1) span {
+.tooltip :nth-child(2) {
     float: right;
     font-size: 100%;
     cursor: pointer;
     border: 1px solid rgb(0, 0, 0, 0.87);
     border-radius: 4px;
     margin-right: 4px;
+    margin-left: 4px;
 	padding: 0 16px 16px 0;
 }
 

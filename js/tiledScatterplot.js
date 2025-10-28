@@ -150,11 +150,9 @@ class TiledScatterplot extends PureComponent {
 		colorScale(setScale(['ordinal', codes.length], hidden)));
 
 	onTooltip = ev => {
-		var {imageState, layer} = this.props;
 		if (ev.index >= 0) {
-			let codes = imageState.phenotypes[layer].int_to_category,
-				[, , i] = ev.tile.layers[0].props.data[ev.index];
-			this.props.onTooltip(codes[i + 1]);
+			let [, , i] = ev.tile.layers[0].props.data[ev.index];
+			this.props.onTooltip(i);
 		} else {
 			this.props.onTooltip(undefined);
 		}
@@ -171,7 +169,7 @@ class TiledScatterplot extends PureComponent {
 			// XXX color0? Probably should be cut
 			{image, imageState, radius, hidden = [],
 				filtered: filterColors = []} = props,
-			codes = imageState.phenotypes[layer].int_to_category,
+			codes = imageState.phenotypes[layer].int_to_category.slice(1),
 			colorfn = this.getScale(codes, hidden),
 			{image_scalef: scale/*, offset*/} = image,
 			// TileLayer operates on the scale of the smallest downsample.
