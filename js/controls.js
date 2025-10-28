@@ -12,8 +12,9 @@ var tab = el(Tab);
 var tabs = el(Tabs);
 var menuItem = el(MenuItem);
 
+var tabStyle = {overflowY: 'auto', overflowX: 'hidden', flex: 1};
 var tabPanel = ({value, index}, ...children) =>
-	div({hidden: value !== index}, ...children);
+	div({hidden: value !== index, style: tabStyle}, ...children);
 
 var layerSelect = (layers, layer, onChange) =>
 	select({
