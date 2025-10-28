@@ -6,7 +6,7 @@ import MenuItem from '@material-ui/core/MenuItem';
 import {el, div} from './react-hyper';
 import PureComponent from './PureComponent';
 import select from './select';
-import {merge, get} from './underscore_ext';
+import {Let, merge, get, getIn} from './underscore_ext';
 
 var tab = el(Tab);
 var tabs = el(Tabs);
@@ -29,6 +29,13 @@ var filterLayerSelect = (layers, layer, onChange) =>
 		value: layer,
 		onChange}, menuItem({value: -1}, 'None'),
 		...layers.map((l, i) => menuItem({value: i}, l.name)));
+
+var filterCount = state =>
+	Let((codes = getIn(state,
+		['imageState', 'phenotypes', state.filterLayer, 'int_to_category'], [])
+			.slice(1),
+		filtered = get(state, 'filtered', [])) =>
+		filtered.length ? `${codes.length - filtered.length} / ${codes.length}` : '');
 
 export default el(class extends PureComponent {
 	state = {tab: 0};
@@ -59,7 +66,7 @@ export default el(class extends PureComponent {
 			div(
 				tabs({value, onChange, variant: 'fullWidth'},
 					tab({label: 'Color'}),
-					tab({label: 'Filter'})),
+					tab({label: `Filter ${filterCount(state)}`})),
 				tabPanel({value, index: 0},
 					layerSelector,
 					singlecellLegend(state, onState)),
