@@ -17,7 +17,7 @@ import legendStyles from './legend.module.css';
 var {ajax} = Rx.Observable;
 
 // XXX currently ignoring radiusBase param
-var dotRange = () => Let((min = 1, max = 100) =>
+var dotRange = () => Let((min = 0.5, max = 10) =>
 	({min, max, step: (max - min) / 200}));
 
 var iconButton = el(IconButton);
@@ -95,7 +95,7 @@ export default el(class SinglecellView extends PureComponent {
 		tooltipValue: undefined,
 		scale: null,
 		showControls: false,
-		radius: 10
+		radius: 2
 	};
 	//	For displaying FPS
 	componentDidMount() {

@@ -47,7 +47,12 @@ var filterFn = hideColors =>
 		Let((hidden = new Set(hideColors)) =>
 			([, , , c]) => hidden.has(c) ? 0 : 1);
 
-const scatterplotTile = ({data, id, modelMatrix, colorfn, hideColors, radius}) =>
+var highlightFn = hideColors =>
+	!hideColors || !hideColors.length ? () => 1 :
+		Let((hidden = new Set(hideColors)) =>
+			([, , c]) => hidden.has(c) ? 0 : 1);
+
+const scatterplotTile = ({data, id, highlight, modelMatrix, colorfn, hideColors, radius}) =>
 	scatterplotLayer({
 		id: `scatter-plot-${id}`,
 		data,
@@ -58,12 +63,16 @@ const scatterplotTile = ({data, id, modelMatrix, colorfn, hideColors, radius}) =
 		getPosition: ([x, y]) =>  [x, y], // XXX switch to passing buffers?
 		lineWidthMinPixels: 20,
 		lineWidthMaxPixels: 800,
-		getRadius: radius,
+		radiusUnits: 'pixels',
+		getRadius: highlight.length ?
+			Let((fn = highlightFn(highlight)) => d => fn(d) ? radius : radius + 3) :
+			radius,
 		radiusMinPixels: 1,
 		getFillColor: ([, , c]) =>  colorfn.rgb(c), // XXX switch to passing buffers?
 		getFilterValue: filterFn(hideColors), // XXX switch to passing buffers?
 		filterRange: [1, 1],
-		updateTriggers: {getFilterValue: [hideColors], getFillColor: [colorfn]},
+		updateTriggers: {getFilterValue: [hideColors], getFillColor: [colorfn],
+			getRadius: highlight},
 		extensions: [new DataFilterExtension({filterSize: 1})]
 	});
 
@@ -83,7 +92,7 @@ var imgPromise = (url, signal) =>
 		.then(b => upng.decode(b));
 
 var tileLayer = ({fileformat, index, levels, name, filterLayer, opacity, path,
-	colorfn, size, tileSize, visible, filterColors, radius}) =>
+	highlight, colorfn, size, tileSize, visible, filterColors, radius}) =>
 	new TileLayer({
 		id: `tile-layer-${index}-${filterLayer || name}`,
 		data: `${path}/${name}-{z}-{y}-{x}.${fileformat}`,
@@ -126,7 +135,7 @@ var tileLayer = ({fileformat, index, levels, name, filterLayer, opacity, path,
 			var modelMatrix = getM(1 / (1 << z),
 				[x * tileSize >> z, y * tileSize >> z]);
 			return scatterplotTile(
-				{data, id: `${z}-${y}-${x}`, modelMatrix, colorfn, hideColors: filterColors, radius});
+				{data, id: `${z}-${y}-${x}`, modelMatrix, colorfn, highlight, hideColors: filterColors, radius});
 		},
 		updateTriggers: {
 			filterLayer,
@@ -172,15 +181,7 @@ class TiledScatterplot extends PureComponent {
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
 			colorfn = this.getScale(codes, hidden),
-			{image_scalef: scale/*, offset*/} = image,
-			// TileLayer operates on the scale of the smallest downsample.
-			// Adjust the scale here for the number of downsamples, so the data
-			// overlay lines up.
-			adj = (1 << imageState.levels - 1);
-
-//		var modelMatrix = getM(scale / adj, offset.map(c => c / adj));
-
-		radius = radius * scale / adj;
+			{image_scalef: scale/*, offset*/} = image;
 
 		var views = new OrthographicView({far: -1, near: 1}),
 			{levels, size: [iwidth, iheight],
@@ -204,6 +205,7 @@ class TiledScatterplot extends PureComponent {
 					name: `p${layer}`, path: image.path,
 					filterLayer: filterLayer >= 0 && `p${filterLayer}`,
 					fileformat,
+					highlight: hidden,
 					index: 'phenotype', // XXX review this
 					levels: imageState.levels,
 					size: imageState.size,
