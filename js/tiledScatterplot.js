@@ -8,7 +8,7 @@ var scatterplotLayer = ({id, ...props}) => new ScatterplotLayer({id, ...props});
 import {COORDINATE_SYSTEM} from '@deck.gl/core';
 import {TileLayer} from '@deck.gl/geo-layers';
 import {debounce} from './rx';
-import {get, Let, memoize1} from './underscore_ext.js';
+import {get, getIn, Let, memoize1} from './underscore_ext.js';
 import '@luma.gl/debug';
 import upng from 'upng-js';
 import {colorScale} from './colorScales';
@@ -169,7 +169,8 @@ class TiledScatterplot extends PureComponent {
 			// XXX color0? Probably should be cut
 			{image, imageState, radius, hidden = [],
 				filtered: filterColors = []} = props,
-			codes = imageState.phenotypes[layer].int_to_category.slice(1),
+			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
+				.slice(1),
 			colorfn = this.getScale(codes, hidden),
 			{image_scalef: scale/*, offset*/} = image,
 			// TileLayer operates on the scale of the smallest downsample.
