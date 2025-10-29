@@ -179,12 +179,12 @@ export default el(class SinglecellView extends PureComponent {
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
 			tooltipColor = this.getScale(codes, hidden)(tooltipValue),
-			count = get(imageState, 'count');
-			//			name = getIn(imageState, ['phenotypes', layer, 'name']),
+			count = get(imageState, 'count'),
+			name = get(imageState, 'reference_name');
 
 		return div({className: styles.content},
 			div({className: styles.title},
-				//					name ? span(name) : '',
+				name ? span(name) : '',
 				span({className: styles.spacer}),
 				count ? span(`${count.toLocaleString()} cells`) : ''),
 			span({className: styles.fps, ref: this.onFPSRef}),
