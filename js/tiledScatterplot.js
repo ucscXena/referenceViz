@@ -72,7 +72,7 @@ const scatterplotTile = ({data, id, highlight, modelMatrix, colorfn, hideColors,
 		getFilterValue: filterFn(hideColors), // XXX switch to passing buffers?
 		filterRange: [1, 1],
 		updateTriggers: {getFilterValue: [hideColors], getFillColor: [colorfn],
-			getRadius: highlight},
+			getRadius: [highlight, radius]},
 		extensions: [new DataFilterExtension({filterSize: 1})]
 	});
 
