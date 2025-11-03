@@ -33,7 +33,7 @@ function getCoords(png0, png1) {
 		for (let i = 0; i < width; ++i) {
 			var c = getColorValue(i, j),
 				f = getFilterValue(i, j);
-			if (c) {
+			if (c && f) {
 				// 0 is "no data". Decrement to get ordinal scale.
 				pts.push([i, j, c - 1, f - 1]);
 			}
