@@ -2,12 +2,14 @@ import singlecellLegend from './singlecellLegend';
 import filterLegend from './filterLegend';
 import Tab from '@material-ui/core/Tab';
 import Tabs from '@material-ui/core/Tabs';
+import Button from '@material-ui/core/Button';
 import MenuItem from '@material-ui/core/MenuItem';
 import {el, div} from './react-hyper';
 import PureComponent from './PureComponent';
 import select from './select';
-import {Let, merge, get, getIn} from './underscore_ext';
+import {Let, merge, get, getIn, range} from './underscore_ext';
 
+var button = el(Button);
 var tab = el(Tab);
 var tabs = el(Tabs);
 var menuItem = el(MenuItem);
@@ -38,6 +40,18 @@ var filterCount = state =>
 		filtered = get(state, 'filtered', [])) =>
 		filtered.length ? `${codes.length - filtered.length} / ${codes.length}` : '');
 
+
+var shButtonStyle = {
+	fontSize: '70%',
+	marginRight: 2,
+	minWidth: 'unset',
+	height: 30
+};
+
+var shButton = (onClick, txt) =>
+	button({style: shButtonStyle, onClick,
+		variant: 'outlined', size: 'small'}, txt);
+
 export default el(class extends PureComponent {
 	state = {tab: 0};
 	onChange = (ev, value) => {
@@ -54,8 +68,20 @@ export default el(class extends PureComponent {
 		this.props.onState(state => merge(state, {filterLayer, filtered: []}));
 	};
 
+	onHideAll = () => {
+		var {imageState, filterLayer} = this.props.state;
+		var codes = getIn(imageState, ['phenotypes', filterLayer, 'int_to_category'],
+			[]).slice(1);
+		this.props.onState(state => merge(state, {filtered: range(codes.length)}));
+	};
+
+	onShowAll = () => {
+		this.props.onState(state => merge(state, {filtered: []}));
+	};
+
 	render() {
-		var {onChange, onLayer, onFilterLayer, props: {onState, state}} = this,
+		var {onChange, onLayer, onFilterLayer, onHideAll, onShowAll,
+				props: {onState, state}} = this,
 			{tab: value} = this.state,
 			{imageState, layer, filterLayer} = state,
 			layers = get(imageState, 'phenotypes', []),
@@ -73,7 +99,11 @@ export default el(class extends PureComponent {
 					singlecellLegend(state, onState)),
 				tabPanel({value, index: 1},
 					filterSelector,
-					filterLayer >= 0 ?
-						filterLegend(state, onState) : null)));
+					...(filterLayer >= 0 ? [
+						div(
+							shButton(onHideAll, 'Hide all'),
+							shButton(onShowAll, 'Show all')),
+						filterLegend(state, onState)
+					] : []))));
 	}
 });
