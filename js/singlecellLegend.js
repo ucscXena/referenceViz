@@ -5,7 +5,8 @@ import legendStyles from './legend.module.css';
 var {item} = legendStyles;
 
 import {colorScale} from './colorScales';
-import {conj, contains, getIn, merge, range, without} from './underscore_ext.js';
+import {Let, concat, conj, contains, getIn, memoize1, merge, uniq, without} from
+	'./underscore_ext.js';
 import cmpCodes from './cmpCodes';
 import setScale from './setScale';
 
@@ -35,11 +36,15 @@ var onCode = (state, onState) => ev => {
 	}
 };
 
+var codesInView = memoize1((data = [], filtered = []) =>
+	Let((fs = new Set(filtered)) =>
+		uniq(concat(...data).filter(([, , , f]) => !fs.has(f)).map(([, , c]) => c))));
+
 export default function(state, onState) {
 	if (!state || !state.imageState) {
 		return null;
 	}
-	var {imageState, layer, customColor, hidden} = state;
+	var {imageState, layer, customColor, hidden, tileData, filtered} = state;
 	var codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 		.slice(1);
 
@@ -48,7 +53,7 @@ export default function(state, onState) {
 			onClick: onCode(state, onState),
 			column: {
 				codes,
-				codesInView: range(codes.length),
+				codesInView: codesInView(tileData, filtered),
 				color: setScale(['ordinal', codes.length, customColor], hidden)
 			}});
 }

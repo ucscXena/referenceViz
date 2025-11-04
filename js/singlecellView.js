@@ -164,11 +164,15 @@ export default el(class SinglecellView extends PureComponent {
 		// XXX add handle for click on label. See Map.js
 		this.setState({radius});
 	};
+	onTileData = tileData => {
+		this.props.onState(state => merge(state, {tileData}));
+	};
+
 	render() {
 		var handlers = pick(this.props, (v, k) => k.startsWith('on'));
 
 		var {onViewState, onTooltip, onClose, onControls, onDeck, /*onLayer, */onRadius,
-			onReload} = this,
+			onReload, onTileData} = this,
 			{image, state, onState, onShadow} = this.props,
 			{hidden, filtered, layer, filterLayer} = state || {},
 			error = this.state.error,
@@ -198,7 +202,7 @@ export default el(class SinglecellView extends PureComponent {
 					[tooltipValueView(codes[tooltipValue], tooltipColor, onClose)]
 					: []),
 				getStatusView({loading, error, onReload, key: 'status'}),
-				tiledScatterplot({...handlers, onViewState, onDeck,
+				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
 					onTooltip, radius, viewState, hidden, filtered, image: {path: image,
 						'image_scalef': 1}, imageState, layer, filterLayer, container, // XXX scalef
 					key: 'drawing'})));

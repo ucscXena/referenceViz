@@ -8,7 +8,7 @@ var scatterplotLayer = ({id, ...props}) => new ScatterplotLayer({id, ...props});
 import {COORDINATE_SYSTEM} from '@deck.gl/core';
 import {TileLayer} from '@deck.gl/geo-layers';
 import {debounce} from './rx';
-import {get, getIn, Let, memoize1} from './underscore_ext.js';
+import {get, getIn, Let, memoize1, pluck} from './underscore_ext.js';
 import '@luma.gl/debug';
 import upng from 'upng-js';
 import {colorScale} from './colorScales';
@@ -92,7 +92,8 @@ var imgPromise = (url, signal) =>
 		.then(b => upng.decode(b));
 
 var tileLayer = ({fileformat, index, levels, name, filterLayer, opacity, path,
-	highlight, colorfn, size, tileSize, visible, filterColors, radius}) =>
+	highlight, colorfn, size, tileSize, visible, filterColors, radius,
+	onTileData}) =>
 	new TileLayer({
 		id: `tile-layer-${index}-${filterLayer || name}`,
 		data: `${path}/${name}-{z}-{y}-{x}.${fileformat}`,
@@ -103,6 +104,9 @@ var tileLayer = ({fileformat, index, levels, name, filterLayer, opacity, path,
 					'X-Redirect-To': location.origin
 				}
 			}
+		},
+		onViewportLoad: tiles => {
+			onTileData(pluck(tiles, 'content').filter(x => x));
 		},
 		getTileData: ({url, signal, index}) => {
 			var colorPromise = imgPromise(url, signal),
@@ -174,7 +178,7 @@ class TiledScatterplot extends PureComponent {
 	}
 	render() {
 		var {props} = this,
-			{layer, filterLayer} = props,
+			{layer, filterLayer, onTileData} = props,
 			// XXX color0? Probably should be cut
 			{image, imageState, radius, hidden = [],
 				filtered: filterColors = []} = props,
@@ -213,7 +217,8 @@ class TiledScatterplot extends PureComponent {
 					visible: true,
 					colorfn,
 					filterColors,
-					radius
+					radius,
+					onTileData
 				}),
 			],
 			views,
