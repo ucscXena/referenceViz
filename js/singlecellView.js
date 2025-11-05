@@ -187,7 +187,8 @@ export default el(class SinglecellView extends PureComponent {
 		var {onViewState, onTooltip, onClose, onControls, onDeck, /*onLayer, */onRadius,
 			onReload, onTileData} = this,
 			{image, state, onState, onShadow} = this.props,
-			{hidden, filtered, layer, filterLayer, imageState, overlay} = state || {},
+			{hidden, filtered, layer, filterLayer, imageState, overlay,
+				hideOverlay} = state || {},
 			error = this.state.error,
 			unit = false,
 			{container, tooltipValue, showControls, radius,
@@ -217,7 +218,7 @@ export default el(class SinglecellView extends PureComponent {
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
 					onTooltip, radius, viewState, hidden, filtered, image,
-					imageState, overlay, layer, filterLayer, container,
+					imageState, overlay, hideOverlay, layer, filterLayer, container,
 					key: 'drawing'})));
 	}
 });

@@ -154,10 +154,11 @@ var initialZoom = props => {
 
 var currentScale = (levels, zoom, scale) => Math.pow(2, levels - zoom - 1) / scale;
 
-var overlayLayer = ({data, modelMatrix, radius}) =>
+var overlayLayer = ({data, modelMatrix, radius, visible}) =>
 	new ScatterplotLayer({
 		id: 'scatterplot-overlay',
 		data: {...data, length: data.x.length},
+		visible,
 		modelMatrix,
 		getLineWidth: 5,
 		pickable: true,
@@ -198,7 +199,7 @@ class TiledScatterplot extends PureComponent {
 		var {props} = this,
 			{layer, filterLayer, onTileData} = props,
 			// XXX color0? Probably should be cut
-			{image, imageState, overlay, radius, hidden = [],
+			{image, imageState, overlay, hideOverlay, radius, hidden = [],
 				filtered: filterColors = []} = props,
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
@@ -240,8 +241,8 @@ class TiledScatterplot extends PureComponent {
 					radius,
 					onTileData
 				}),
-				...(overlay ? [overlayLayer({data: overlay, radius, modelMatrix})] :
-					[])
+				...(overlay ? [overlayLayer({data: overlay, visible: !hideOverlay,
+					radius, modelMatrix})] : [])
 			],
 			views,
 			controller: true,

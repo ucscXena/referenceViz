@@ -2,17 +2,22 @@ import singlecellLegend from './singlecellLegend';
 import filterLegend from './filterLegend';
 import Tab from '@material-ui/core/Tab';
 import Tabs from '@material-ui/core/Tabs';
+import Typography from '@material-ui/core/Typography';
+import Icon from '@material-ui/core/Icon';
 import Button from '@material-ui/core/Button';
 import MenuItem from '@material-ui/core/MenuItem';
 import {el, div} from './react-hyper';
 import PureComponent from './PureComponent';
 import select from './select';
 import {Let, merge, get, getIn, range} from './underscore_ext';
+import legendStyles from './legend.module.css';
 
 var button = el(Button);
 var tab = el(Tab);
 var tabs = el(Tabs);
 var menuItem = el(MenuItem);
+var typography = el(Typography);
+var icon = el(Icon);
 
 var tabStyle = {overflowY: 'auto', overflowX: 'hidden', flex: 1};
 var tabPanel = ({value, index}, ...children) =>
@@ -52,6 +57,13 @@ var shButton = (onClick, txt) =>
 	button({style: shButtonStyle, onClick,
 		variant: 'outlined', size: 'small'}, txt);
 
+var overlayButton = (onClick, checked) =>
+	div({className: legendStyles.item, onClick},
+		div({className: legendStyles.colorBox, style: {backgroundColor: 'ffffff'}},
+			checked ? icon('checked') : null),
+		typography({component: 'label', className: legendStyles.label},
+			'Mapped data'));
+
 export default el(class extends PureComponent {
 	state = {tab: 0};
 	onChange = (ev, value) => {
@@ -79,15 +91,18 @@ export default el(class extends PureComponent {
 		this.props.onState(state => merge(state, {filtered: []}));
 	};
 
+	onOverlay = () => {
+		this.props.onState(state => merge(state, {hideOverlay: !state.hideOverlay}));
+	};
+
 	render() {
-		var {onChange, onLayer, onFilterLayer, onHideAll, onShowAll,
+		var {onChange, onLayer, onFilterLayer, onHideAll, onShowAll, onOverlay,
 				props: {onState, state}} = this,
 			{tab: value} = this.state,
-			{imageState, layer, filterLayer} = state,
+			{imageState, layer, filterLayer, overlay, hideOverlay} = state,
 			layers = get(imageState, 'phenotypes', []),
 			layerSelector = layerSelect(layers, layer, onLayer),
 			filterSelector = filterLayerSelect(layers, filterLayer, onFilterLayer);
-
 
 		return (
 			div(
@@ -95,6 +110,7 @@ export default el(class extends PureComponent {
 					tab({label: 'Color'}),
 					tab({label: `Filter ${filterCount(state)}`})),
 				tabPanel({value, index: 0},
+					overlay ? overlayButton(onOverlay, !hideOverlay) : null,
 					layerSelector,
 					singlecellLegend(state, onState)),
 				tabPanel({value, index: 1},
