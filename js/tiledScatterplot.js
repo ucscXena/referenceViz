@@ -57,12 +57,9 @@ const scatterplotTile = ({data, id, highlight, modelMatrix, colorfn, hideColors,
 		id: `scatter-plot-${id}`,
 		data,
 		modelMatrix: modelMatrix,
-		getLineWidth: 5,
 		pickable: true,
 		antialiasing: false,
 		getPosition: ([x, y]) =>  [x, y], // XXX switch to passing buffers?
-		lineWidthMinPixels: 20,
-		lineWidthMaxPixels: 800,
 		radiusUnits: 'pixels',
 		getRadius: highlight.length ?
 			Let((fn = highlightFn(highlight)) => d => fn(d) ? radius : radius + 3) :
@@ -157,6 +154,27 @@ var initialZoom = props => {
 
 var currentScale = (levels, zoom, scale) => Math.pow(2, levels - zoom - 1) / scale;
 
+var overlayLayer = ({data, modelMatrix, radius}) =>
+	new ScatterplotLayer({
+		id: 'scatterplot-overlay',
+		data: {...data, length: data.x.length},
+		modelMatrix,
+		getLineWidth: 5,
+		pickable: true,
+		antialiasing: false,
+		// XXX switch to buffers
+		getPosition: (_, {index, data}) =>  [data.x[index], data.y[index]],
+		lineWidthMinPixels: 1,
+		lineWidthMaxPixels: 1,
+		radiusUnits: 'pixels',
+		getRadius: radius + 1,
+		radiusMinPixels: 1,
+		stroked: true,
+		getStrokeColor: [0, 0, 0],
+		getFillColor: [255, 255, 255],
+		updateTriggers: {getRadius: [radius]}
+	});
+
 class TiledScatterplot extends PureComponent {
 	static displayName = 'TiledScatterplot';
 	getScale = memoize1((codes, hidden) =>
@@ -180,12 +198,14 @@ class TiledScatterplot extends PureComponent {
 		var {props} = this,
 			{layer, filterLayer, onTileData} = props,
 			// XXX color0? Probably should be cut
-			{image, imageState, radius, hidden = [],
+			{image, imageState, overlay, radius, hidden = [],
 				filtered: filterColors = []} = props,
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
 			colorfn = this.getScale(codes, hidden),
-			{image_scalef: scale/*, offset*/} = image;
+			{image_scalef: scale, offset} = imageState,
+			adj = (1 << imageState.levels - 1),
+			modelMatrix = getM(scale / adj, offset.map(c => c / adj));
 
 		var views = new OrthographicView({far: -1, near: 1}),
 			{levels, size: [iwidth, iheight],
@@ -206,7 +226,7 @@ class TiledScatterplot extends PureComponent {
 			},
 			layers: [ // XXX expand to multiple channels?
 				tileLayer({
-					name: `p${layer}`, path: image.path,
+					name: `p${layer}`, path: image,
 					filterLayer: filterLayer >= 0 && `p${filterLayer}`,
 					fileformat,
 					highlight: hidden,
@@ -220,6 +240,8 @@ class TiledScatterplot extends PureComponent {
 					radius,
 					onTileData
 				}),
+				...(overlay ? [overlayLayer({data: overlay, radius, modelMatrix})] :
+					[])
 			],
 			views,
 			controller: true,

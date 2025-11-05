@@ -26,6 +26,7 @@ if (segments[0] === 'pyramid') {
 				div({className: styles.singlecell},
 					singlecellView({
 						image: params.image,
+						overlay: params.overlay,
 						state,
 						onState}),
 					controls({state, onState}))),

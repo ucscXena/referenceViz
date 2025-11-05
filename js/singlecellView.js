@@ -4,8 +4,8 @@ import Slider from '@material-ui/core/Slider';
 import PureComponent from './PureComponent';
 import styles from './singlecellView.module.css';
 import {div, el, img, label, span} from './react-hyper.js';
-import {get, getIn, identity, indexOf, Let, memoize1, merge, omit,
-	pick} from './underscore_ext.js';
+import {get, getIn, identity, indexOf, Let, memoize1, merge, object, omit,
+	pick, pluck} from './underscore_ext.js';
 import spinner from './ajax-loader.gif';
 import tiledScatterplot from './tiledScatterplot';
 import '../fonts/index.css';
@@ -14,6 +14,7 @@ import colorPicker from './colorPicker';
 import {colorScale} from './colorScales';
 import setScale from './setScale';
 import legendStyles from './legend.module.css';
+import {tableFromIPC} from 'apache-arrow';
 var {ajax} = Rx.Observable;
 
 // XXX currently ignoring radiusBase param
@@ -77,10 +78,13 @@ var controlsView = ({state, showControls, onControls, onRadius}) =>
 
 var getImageMeta =  path => ajax({
 		url: `${path}/metadata.json`,
-		withCredentials: true,
-		headers: {'X-Redirect-To': location.origin},
 		responseType: 'text', method: 'GET', crossDomain: true
 	}).map(r => JSON.parse(r.response));
+
+var getOverlay = path => ajax({
+		url: `${path}`,
+		responseType: 'arraybuffer', method: 'GET', crossDomain: true
+	}).map(r => r.response);
 
 function forceRedraw(deck) {
 	if (deck) {
@@ -101,11 +105,20 @@ export default el(class SinglecellView extends PureComponent {
 	componentDidMount() {
 		getImageMeta(this.props.image).subscribe(
 			imageState => {
-				this.setState({imageState}); // XXX why local and upstream?
 				this.props.onState(state => merge(state, {imageState}));
 			},
 			() => this.setState({error: true})
 		);
+		this.props.overlay &&
+			getOverlay(this.props.overlay).subscribe(
+				ipc => {
+					var table = tableFromIPC(ipc);
+					var names = pluck(table.schema.fields, 'name');
+					var data = pluck(table.batches[0].data.children, 'values');
+					var overlay = object(names, data);
+					this.props.onState(state => merge(state, {overlay}));
+				},
+				() => this.setState({error: true}));
 		this.intervalId =  Let((lastPixelRatio = window.devicePixelRatio) =>
 			setInterval(() => {
 			  if (window.devicePixelRatio !== lastPixelRatio) {
@@ -174,10 +187,10 @@ export default el(class SinglecellView extends PureComponent {
 		var {onViewState, onTooltip, onClose, onControls, onDeck, /*onLayer, */onRadius,
 			onReload, onTileData} = this,
 			{image, state, onState, onShadow} = this.props,
-			{hidden, filtered, layer, filterLayer} = state || {},
+			{hidden, filtered, layer, filterLayer, imageState, overlay} = state || {},
 			error = this.state.error,
 			unit = false,
-			{container, tooltipValue, showControls, imageState, radius,
+			{container, tooltipValue, showControls, radius,
 				viewState} = this.state,
 			loading = !imageState,
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
@@ -203,8 +216,8 @@ export default el(class SinglecellView extends PureComponent {
 					: []),
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
-					onTooltip, radius, viewState, hidden, filtered, image: {path: image,
-						'image_scalef': 1}, imageState, layer, filterLayer, container, // XXX scalef
+					onTooltip, radius, viewState, hidden, filtered, image,
+					imageState, overlay, layer, filterLayer, container,
 					key: 'drawing'})));
 	}
 });
