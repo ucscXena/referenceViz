@@ -204,7 +204,7 @@ class TiledScatterplot extends PureComponent {
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
 			colorfn = this.getScale(codes, hidden),
-			{image_scalef: scale, offset} = imageState,
+			{image_scalef: scale = 1, offset = [0, 0]} = imageState,
 			adj = (1 << imageState.levels - 1),
 			modelMatrix = getM(scale / adj, offset.map(c => c / adj));
 
