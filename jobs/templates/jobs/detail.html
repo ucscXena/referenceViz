@@ -1,0 +1,41 @@
+{% load json_filters %}
+{% block content %}
+<h2>Job Detail</h2>
+
+<table class="job-detail">
+  <tr><th>ID</th><td>{{ job.id }}</td></tr>
+  <tr><th>File</th><td>{{ job.uploaded_file.name }}</td></tr>
+  <tr><th>Status</th><td><strong>{{ job.get_status_display }}</strong></td></tr>
+  <tr><th>Created</th><td>{{ job.created_at|date:"Y-m-d H:i:s" }}</td></tr>
+  <tr><th>Updated</th><td>{{ job.updated_at|date:"Y-m-d H:i:s" }}</td></tr>
+</table>
+
+{% if job.status == 'error' %}
+  <div class="error-box">
+    <h3>Error Details</h3>
+    <pre>{{ job.result.error|default:"(No error message)" }}</pre>
+    {% if job.result.traceback %}
+      <details>
+        <summary>Show traceback</summary>
+        <pre class="traceback">{{ job.result.traceback }}</pre>
+      </details>
+    {% endif %}
+  </div>
+{% elif job.status == 'complete' %}
+  <div class="result-box">
+    <h3>Results</h3>
+    <pre>{{ job.result|tojson }}</pre>
+  </div>
+{% endif %}
+
+<p><a href="{% url 'job_list' %}">Back to Jobs</a></p>
+
+<style>
+  .job-detail { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  .job-detail th, .job-detail td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+  .error-box { background: #ffecec; border: 1px solid #f5c6cb; padding: 1em; margin: 1em 0; border-radius: 4px; }
+  .result-box { background: #f8fff8; border: 1px solid #c3e6cb; padding: 1em; margin: 1em 0; border-radius: 4px; }
+  pre { white-space: pre-wrap; font-family: monospace; background: #f4f4f4; padding: 0.8em; border-radius: 4px; }
+  .traceback { font-size: 0.9em; max-height: 300px; overflow-y: auto; }
+</style>
+{% endblock %}

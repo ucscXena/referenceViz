@@ -1,0 +1,8 @@
+{% block content %}
+<h2>Upload a file for analysis</h2>
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Start Job</button>
+</form>
+{% endblock %}

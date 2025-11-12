@@ -1,0 +1,70 @@
+{% block content %}
+<h2>Welcome {{ user.email }}</h2>
+<p><a href="{% url 'job_create' %}">Map new cells</a></p>
+<form method="post" action="{% url 'delete_selected_jobs' %}" id="job-list-form">
+{% csrf_token %}
+<table border="1" cellpadding="5" cellspacing="0">
+    <thead>
+        <tr>
+			<th><input type="checkbox" id="select-all"></th>
+            <th>ID</th><th>File</th><th>Status</th><th>Created</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for job in jobs %}
+        <tr>
+			<td>
+				<input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
+			</td>
+			<td>{{ job.short_id }}</td>
+			<td>{{ job.short_uploaded_file }}</td>
+			<td>
+				{% if job.status == 'error' %}
+				  <a href="{% url 'job_detail' job.pk %}" style="color: red; font-weight: bold;">{{ job.get_status_display }}</a>
+				{% else %}
+				{{ job.get_status_display }}
+				{% endif %}
+			</td>
+
+			<td>{{ job.created_at|date:"Y-m-d H:i" }}</td>
+		</tr>
+	{% empty %}
+		<tr><td colspan="4">No jobs yet.</td></tr>
+	{% endfor %}
+	</tbody>
+</table>
+<div style="margin-top: 1em;">
+	<button type="submit" class="btn-delete" disabled>
+		Delete mappings
+	</button>
+</div>
+<script>
+document.getElementById('select-all').onclick = function() {
+    document.querySelectorAll('.job-checkbox').forEach(cb => cb.checked = this.checked);
+    toggleDeleteButton();
+};
+
+document.querySelectorAll('.job-checkbox').forEach(cb => {
+    cb.onclick = toggleDeleteButton;
+});
+
+function toggleDeleteButton() {
+    const anyChecked = document.querySelectorAll('.job-checkbox:checked').length > 0;
+    document.querySelector('.btn-delete').disabled = !anyChecked;
+}
+
+// Optional: Confirm before delete
+document.getElementById('job-list-form').onsubmit = function(e) {
+    if (!confirm('Are you sure you want to delete the selected jobs?')) {
+        e.preventDefault();
+    }
+};
+</script>
+
+<style>
+.btn-delete {
+    background: #d9534f; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;
+}
+.btn-delete:disabled { background: #aaa; cursor: not-allowed; }
+</style>
+{% endblock %}

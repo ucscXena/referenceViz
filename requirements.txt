@@ -1,0 +1,13 @@
+asgiref==3.8.1
+async-timeout==5.0.1
+click==8.1.8
+Django==3.2.24
+django-rq==3.1
+numpy==1.24.4
+psycopg2-binary==2.9.9
+pyarrow==17.0.0
+pytz==2025.2
+redis==6.1.1
+rq==2.3.3
+sqlparse==0.5.3
+typing-extensions==4.13.2
