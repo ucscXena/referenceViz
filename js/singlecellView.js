@@ -5,7 +5,7 @@ import PureComponent from './PureComponent';
 import styles from './singlecellView.module.css';
 import {div, el, img, label, span} from './react-hyper.js';
 import {assoc, get, getIn, identity, indexOf, Let, memoize1, merge, object, omit,
-	pick, pluck} from './underscore_ext.js';
+	pick, pluck, without} from './underscore_ext.js';
 import spinner from './ajax-loader.gif';
 import tiledScatterplot from './tiledScatterplot';
 import '../fonts/index.css';
@@ -119,7 +119,9 @@ export default el(class SinglecellView extends PureComponent {
 					var data = pluck(table.batches[0].data.children, 'values');
 					var overlay = assoc(object(names, data), '_dicts',
 						object(names, dicts));
-					this.props.onState(state => merge(state, {overlay}));
+					var overlayVars = without(names, 'x', 'y');
+					var overlayVar = overlayVars.length ? overlayVars[0] : 'None';
+					this.props.onState(state => merge(state, {overlay, overlayVar}));
 				},
 				() => this.setState({error: true}));
 		this.intervalId =  Let((lastPixelRatio = window.devicePixelRatio) =>
@@ -191,7 +193,7 @@ export default el(class SinglecellView extends PureComponent {
 			onReload, onTileData} = this,
 			{image, state, onState, onShadow} = this.props,
 			{hidden, filtered, layer, filterLayer, imageState, overlay,
-				hideOverlay, overlayVar, overlayFiltered} = state || {},
+				hideOverlay, overlayVar, overlayFiltered = []} = state || {},
 			error = this.state.error,
 			unit = false,
 			{container, tooltipValue, showControls, radius,
