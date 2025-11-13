@@ -4,12 +4,12 @@ import legend from './legend.js';
 import legendStyles from './legend.module.css';
 var {item} = legendStyles;
 
-import {conj, contains, getIn, merge, range, without} from './underscore_ext.js';
-import cmpCodes from './cmpCodes';
+import {conj, contains, getIn, groupBy, mapObject, memoize1, merge, range,
+    sortBy, without} from './underscore_ext.js';
 
-function codedLegend({column: {filtered = [], codes, codesInView}, onClick}) {
-	var data = codesInView.sort(cmpCodes(codes)),
-		labels = data.map(d => codes[d]),
+function codedLegend({column: {filtered = [], codes, lengths, codesInView}, onClick}) {
+	var data = sortBy(codesInView, c => lengths[c]),
+		labels = data.map(d => `${codes[d]} (${lengths[d]})`),
 		f = new Set(filtered),
 		checked = data.map(d => !f.has(d));
 
@@ -33,6 +33,8 @@ var onCode = (state, onState) => ev => {
 	}
 };
 
+var groupLengths = memoize1(data => mapObject(groupBy(data, x => x), v => v.length));
+
 export default function(state, onState) {
 	if (!state || state.overlayVar === 'None') {
 		return null;
@@ -44,6 +46,7 @@ export default function(state, onState) {
 			onClick: onCode(state, onState),
 			column: {
 				codes,
+				lengths: groupLengths(overlay[overlayVar]),
 				codesInView: range(codes.length),
 				filtered: overlayFiltered
 			}});
