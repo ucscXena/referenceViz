@@ -4,7 +4,7 @@ import Slider from '@material-ui/core/Slider';
 import PureComponent from './PureComponent';
 import styles from './singlecellView.module.css';
 import {div, el, img, label, span} from './react-hyper.js';
-import {get, getIn, identity, indexOf, Let, memoize1, merge, object, omit,
+import {assoc, get, getIn, identity, indexOf, Let, memoize1, merge, object, omit,
 	pick, pluck} from './underscore_ext.js';
 import spinner from './ajax-loader.gif';
 import tiledScatterplot from './tiledScatterplot';
@@ -114,8 +114,11 @@ export default el(class SinglecellView extends PureComponent {
 				ipc => {
 					var table = tableFromIPC(ipc);
 					var names = pluck(table.schema.fields, 'name');
+					var dicts = table.batches[0].data.children.map(f =>
+						f.dictionary && f.dictionary.toArray());
 					var data = pluck(table.batches[0].data.children, 'values');
-					var overlay = object(names, data);
+					var overlay = assoc(object(names, data), '_dicts',
+						object(names, dicts));
 					this.props.onState(state => merge(state, {overlay}));
 				},
 				() => this.setState({error: true}));
@@ -188,7 +191,7 @@ export default el(class SinglecellView extends PureComponent {
 			onReload, onTileData} = this,
 			{image, state, onState, onShadow} = this.props,
 			{hidden, filtered, layer, filterLayer, imageState, overlay,
-				hideOverlay} = state || {},
+				hideOverlay, overlayVar, overlayFiltered} = state || {},
 			error = this.state.error,
 			unit = false,
 			{container, tooltipValue, showControls, radius,
@@ -218,7 +221,7 @@ export default el(class SinglecellView extends PureComponent {
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
 					onTooltip, radius, viewState, hidden, filtered, image,
-					imageState, overlay, hideOverlay, layer, filterLayer, container,
+					imageState, overlay, overlayVar, overlayFiltered, hideOverlay, layer, filterLayer, container,
 					key: 'drawing'})));
 	}
 });

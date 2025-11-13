@@ -154,7 +154,8 @@ var initialZoom = props => {
 
 var currentScale = (levels, zoom, scale) => Math.pow(2, levels - zoom - 1) / scale;
 
-var overlayLayer = ({data, modelMatrix, radius, visible}) =>
+var overlayLayer = ({data, modelMatrix, radius, visible, overlayVar,
+		overlayFiltered}) =>
 	new ScatterplotLayer({
 		id: 'scatterplot-overlay',
 		data: {...data, length: data.x.length},
@@ -173,7 +174,16 @@ var overlayLayer = ({data, modelMatrix, radius, visible}) =>
 		stroked: true,
 		getStrokeColor: [0, 0, 0],
 		getFillColor: [255, 255, 255],
-		updateTriggers: {getRadius: [radius]}
+		updateTriggers: {
+			getRadius: [radius],
+			getFilterValue: [overlayVar, overlayFiltered],
+		},
+		filterRange: [1, 1],
+		filterEnabled: overlayVar !== 'None',
+		getFilterValue: overlayVar === 'None' ? 1 :
+		Let((hidden = new Set([-1, ...overlayFiltered])) =>
+			(_, {index, data}) => hidden.has(data[overlayVar][index]) ? 0 : 1),
+		extensions: [new DataFilterExtension({filterSize: 1})],
 	});
 
 class TiledScatterplot extends PureComponent {
@@ -199,8 +209,8 @@ class TiledScatterplot extends PureComponent {
 		var {props} = this,
 			{layer, filterLayer, onTileData} = props,
 			// XXX color0? Probably should be cut
-			{image, imageState, overlay, hideOverlay, radius, hidden = [],
-				filtered: filterColors = []} = props,
+			{image, imageState, overlay, overlayVar, overlayFiltered,
+				hideOverlay, radius, hidden = [], filtered: filterColors = []} = props,
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
 			colorfn = this.getScale(codes, hidden),
@@ -242,7 +252,7 @@ class TiledScatterplot extends PureComponent {
 					onTileData
 				}),
 				...(overlay ? [overlayLayer({data: overlay, visible: !hideOverlay,
-					radius, modelMatrix})] : [])
+					radius, modelMatrix, overlayVar, overlayFiltered})] : [])
 			],
 			views,
 			controller: true,

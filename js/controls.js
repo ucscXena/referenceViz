@@ -1,5 +1,6 @@
 import singlecellLegend from './singlecellLegend';
 import filterLegend from './filterLegend';
+import overlayLegend from './overlayLegend';
 import Tab from '@material-ui/core/Tab';
 import Tabs from '@material-ui/core/Tabs';
 import Typography from '@material-ui/core/Typography';
@@ -9,7 +10,7 @@ import MenuItem from '@material-ui/core/MenuItem';
 import {el, div} from './react-hyper';
 import PureComponent from './PureComponent';
 import select from './select';
-import {Let, merge, get, getIn, range} from './underscore_ext';
+import {get, getIn, keys, Let, merge, omit, range} from './underscore_ext';
 import legendStyles from './legend.module.css';
 
 var button = el(Button);
@@ -45,6 +46,14 @@ var filterCount = state =>
 		filtered = get(state, 'filtered', [])) =>
 		filtered.length ? `${codes.length - filtered.length} / ${codes.length}` : '');
 
+var overlaySelect = (vars, value, onChange) =>
+	select({
+		style: {minWidth: 200},
+		id: 'overlay-select',
+		label: 'Filter mapped data by',
+		value,
+		onChange}, menuItem({value: 'None'}, 'None'),
+		...vars.map(l => menuItem({value: l}, l)));
 
 var shButtonStyle = {
 	fontSize: '70%',
@@ -63,6 +72,8 @@ var overlayButton = (onClick, checked) =>
 			checked ? icon('checked') : null),
 		typography({component: 'label', className: legendStyles.label},
 			'Mapped data'));
+
+var overlayVariables = overlay => keys(omit(overlay, 'x', 'y', '_dicts'));
 
 export default el(class extends PureComponent {
 	state = {tab: 0};
@@ -95,22 +106,31 @@ export default el(class extends PureComponent {
 		this.props.onState(state => merge(state, {hideOverlay: !state.hideOverlay}));
 	};
 
+	onOverlayVar = ev => {
+		var overlayVar = ev.target.value;
+		this.props.onState(state => merge(state, {overlayVar, overlayFiltered: []}));
+	};
+
 	render() {
 		var {onChange, onLayer, onFilterLayer, onHideAll, onShowAll, onOverlay,
-				props: {onState, state}} = this,
+				onOverlayVar, props: {onState, state}} = this,
 			{tab: value} = this.state,
-			{imageState, layer, filterLayer, overlay, hideOverlay} = state,
+			{imageState, layer, filterLayer, overlayVar = 'None', overlay, hideOverlay} = state,
 			layers = get(imageState, 'phenotypes', []),
 			layerSelector = layerSelect(layers, layer, onLayer),
-			filterSelector = filterLayerSelect(layers, filterLayer, onFilterLayer);
+			filterSelector = filterLayerSelect(layers, filterLayer, onFilterLayer),
+			oVars = overlayVariables(overlay),
+			overlayTab = !!oVars.length;
 
 		return (
 			div(
 				tabs({value, onChange, variant: 'fullWidth'},
 					tab({label: 'Color'}),
-					tab({label: `Filter ${filterCount(state)}`})),
+					tab({label: `Filter ${filterCount(state)}`}),
+					...(overlayTab ? [tab({label: 'Mapped Data'})] : [])),
 				tabPanel({value, index: 0},
-					overlay ? overlayButton(onOverlay, !hideOverlay) : null,
+					overlay && !overlayTab ? overlayButton(onOverlay, !hideOverlay)
+						: null,
 					layerSelector,
 					singlecellLegend(state, onState)),
 				tabPanel({value, index: 1},
@@ -120,6 +140,11 @@ export default el(class extends PureComponent {
 							shButton(onHideAll, 'Hide all'),
 							shButton(onShowAll, 'Show all')),
 						filterLegend(state, onState)
-					] : []))));
+					] : [])),
+				...(overlayTab ?
+					[tabPanel({value, index: 2},
+						overlaySelect(oVars, overlayVar, onOverlayVar),
+						overlayLegend(state, onState))]
+						: [])));
 	}
 });
