@@ -3,18 +3,26 @@
 import legend from './legend.js';
 import legendStyles from './legend.module.css';
 var {item} = legendStyles;
+import {span} from './react-hyper';
 
 import {conj, contains, getIn, groupBy, mapObject, memoize1, merge, range,
     sortBy, without} from './underscore_ext.js';
 
+var pad = (width, x) => `${width - x.toString().length}ch`;
+var lengthStyle = (width, length) =>
+	({fontFamily: 'monospace', marginLeft: pad(width, length), marginRight: '1ch'});
+
 function codedLegend({column: {filtered = [], codes, lengths, codesInView}, onClick}) {
 	var data = sortBy(codesInView, c => lengths[c]),
-		labels = data.map(d => `${codes[d]} (${lengths[d]})`),
+		width = lengths[data[data.length - 1]].toString().length,
+		labels = data.map(d => span(span({style: lengthStyle(width, lengths[d])},
+			lengths[d].toString()), codes[d])),
+		titles = data.map(d => codes[d]),
 		f = new Set(filtered),
 		checked = data.map(d => !f.has(d));
 
-	return legend({checked, codes: data, labels, titles: labels, onClick, max: Infinity,
-		inline: true});
+	return legend({checked, codes: data, labels, titles, onClick, max: Infinity,
+		inline: false});
 }
 
 var firstMatch = (el, selector) =>
