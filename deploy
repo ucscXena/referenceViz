@@ -27,7 +27,7 @@ HOST=$(ssh -G "$HOST_ALIAS" | grep -oP '(?<=^hostname ).*')
 
 USER=ubuntu
 BUILD_DJANGO=build-django
-RSYNC_OPTS=(-a --delete -e "ssh -o StrictHostKeyChecking=no")
+RSYNC_OPTS=(-a --delete --exclude='.*.sw[opx]' -e "ssh -o StrictHostKeyChecking=no")
 
 npm run build:prod -- --bail
 
