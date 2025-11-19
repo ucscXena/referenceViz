@@ -5,8 +5,6 @@ ALLOWED_HOSTS = []
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'development'
 
-FORCE_SCRIPT_NAME = '/api'
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
@@ -21,3 +19,6 @@ DATABASES = {
         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
     }
 }
+
+# uncomment to test allauth
+#from .site_settings_private import *

@@ -1,0 +1,9 @@
+{% load allauth %}
+<form method="{{ attrs.method }}" action="{{ attrs.action }}" novalidate>
+  <div class="allauth-form-body">
+    {% slot body %}{% endslot %}
+  </div>
+  <div class="allauth-form-actions">
+    {% slot actions %}{% endslot %}
+  </div>
+</form>

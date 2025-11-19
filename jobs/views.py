@@ -17,10 +17,10 @@ class JobCreateView(CreateView):
 
     def form_valid(self, form):
         job = form.save(commit=False)
-        job.user = self.request.user  # Assuming authenticated user
+        job.user = self.request.user
         job.save()
         # XXX isn't UUID already a str?
-        rq_job = run_analysis.enqueue(str(job.id))  # Pass UUID as str for serialization
+        rq_job = run_analysis.enqueue(str(job.id))
         return super().form_valid(form)
 
 @login_required
@@ -32,7 +32,7 @@ def job_list(request):
     jobs = Job.objects.filter(user=request.user).order_by('-created_at')
     return render(
         request,
-        'jobs/list.html',          # template you will create
+        'jobs/list.html',
         {'jobs': jobs}
     )
 

@@ -1,0 +1,10 @@
+{% load allauth %}
+<div class="allauth-card">
+  {% if attrs.title %}<div class="allauth-card-title">{{ attrs.title }}</div>{% endif %}
+  <div class="allauth-card-body">
+    {% slot body %}{% endslot %}
+  </div>
+  <div class="allauth-card-actions">
+    {% slot actions %}{% endslot %}
+  </div>
+</div>

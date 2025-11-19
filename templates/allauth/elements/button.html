@@ -1,0 +1,7 @@
+{% load allauth %}
+<button
+  type="{{ attrs.type|default:'button' }}"
+  class="allauth-button{% if 'secondary' in attrs.tags %} secondary{% endif %}"
+>
+  {% slot %}{% endslot %}
+</button>

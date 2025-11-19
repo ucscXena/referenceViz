@@ -1,5 +1,6 @@
-{% block content %}
-<h2>Welcome {{ user.email }}</h2>
+{% extends "base.html" %}
+{% block base_content %}
+<div class="base-container">
 <p><a href="{% url 'job_create' %}">Map new cells</a></p>
 <form method="post" action="{% url 'delete_selected_jobs' %}" id="job-list-form">
 {% csrf_token %}
@@ -67,4 +68,5 @@ document.getElementById('job-list-form').onsubmit = function(e) {
 }
 .btn-delete:disabled { background: #aaa; cursor: not-allowed; }
 </style>
+</div>
 {% endblock %}

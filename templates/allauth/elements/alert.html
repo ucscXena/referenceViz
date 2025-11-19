@@ -1,0 +1,4 @@
+{% load allauth %}
+<div class="allauth-alert {% for t in attrs.tags %}{{ t }} {% endfor %}">
+  {% slot %}{% endslot %}
+</div>
