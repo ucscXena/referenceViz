@@ -36,19 +36,17 @@ rsync "${RSYNC_OPTS[@]}" --rsync-path='sudo rsync' build/ ${USER}@${HOST}:/var/w
 # copy to clean load directory, so we can rsync --delete
 rm -rf ${BUILD_DJANGO}
 mkdir ${BUILD_DJANGO}
-cp -a manage.py server jobs templates static ${BUILD_DJANGO}
+cp -a requirements.txt manage.py server jobs templates static ${BUILD_DJANGO}
 rsync "${RSYNC_OPTS[@]}" ${BUILD_DJANGO}/ ${USER}@${HOST}:/var/www/backend/django
 
-requirements=$(cat requirements.txt)
-requirements=$(echo ${requirements}) # drop carriage returns
 ssh -l${USER} ${HOST} <<-ENDSSH
     #set -o nounset # 'activate' accesses unbound vars
     set -o errexit
     set -o xtrace
     cp ~/settings/site_settings.py /var/www/backend/django/server/site_settings.py
     . /var/www/backend/virtualenv/bin/activate
-    pip install ${requirements}
     cd /var/www/backend/django
+    pip install --require-hashes -r requirements.txt
     python ./manage.py migrate
     python manage.py collectstatic
     sudo apache2ctl restart

@@ -1,0 +1,12 @@
+Django==4.2.26
+django-allauth==65.13.0
+django-rq==3.1
+cryptography==46.0.3
+pyarrow==17.0.0
+numpy==1.24.4
+redis==6.1.1
+requests==2.32.4
+rq==2.3.3
+psycopg2-binary==2.9.9  # only if you need it
+# optionally pin cffi explicitly:
+cffi==2.0.0
