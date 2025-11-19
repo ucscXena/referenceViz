@@ -126,6 +126,10 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static')
 ]
 
+# When behind a load balancer, this is needed for constructing urls
+# with the correct protocol.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # allauth things
 
 AUTHENTICATION_BACKENDS = [
