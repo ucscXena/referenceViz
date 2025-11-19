@@ -20,7 +20,10 @@ var menuItem = el(MenuItem);
 var typography = el(Typography);
 var icon = el(Icon);
 
-var tabStyle = {overflowY: 'auto', overflowX: 'hidden', flex: 1};
+// The 'transform' is a workaround for a chrome bug that causes
+// a scrolled element to be rendered at the wrong scroll position.
+var tabStyle = {overflowY: 'auto', overflowX: 'hidden', flex: 1,
+	transform: 'translateZ(0)'};
 var tabPanel = ({value, index}, ...children) =>
 	div({hidden: value !== index, style: tabStyle}, ...children);
 
