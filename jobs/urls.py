@@ -4,8 +4,11 @@ from . import views
 
 urlpatterns = [
     path('', views.job_list, name='job_list'),
-    path('create/', views.JobCreateView.as_view(), name='job_create'),
+    path('create/', views.upload_page, name='job_create'),
+    path('upload-url/', views.get_upload_url, name='upload_url'),
     path('<uuid:pk>/', views.job_detail, name='job_detail'),
-    path('jobs/delete-selected/',
-         views.delete_selected_jobs, name='delete_selected_jobs'),
-    ]
+    path('<uuid:pk>/status/', views.job_status, name='job_status'),
+    path('<uuid:pk>/download/', views.download_result, name='download_result'),
+    path('<uuid:job_id>/confirm/', views.confirm_upload, name='confirm_upload'),
+    path('jobs/delete-selected/', views.delete_selected_jobs, name='delete_selected_jobs'),
+]

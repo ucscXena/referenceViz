@@ -1,8 +1,63 @@
 {% block content %}
 <h2>Upload a file for analysis</h2>
-<form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Start Job</button>
+
+<form id="upload-form">
+  {% csrf_token %}
+  <input type="file" id="file-input" required>
+  <button type="submit">Start Job</button>
 </form>
+
+<div id="progress" style="display:none; margin-top:1em;">
+  <p id="progress-msg">Uploading…</p>
+</div>
+
+<script>
+document.getElementById('upload-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const file = document.getElementById('file-input').files[0];
+  if (!file) return;
+
+  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+  const progress = document.getElementById('progress');
+  const progressMsg = document.getElementById('progress-msg');
+
+  progress.style.display = 'block';
+  progressMsg.textContent = 'Requesting upload URL…';
+
+  // Step 1: get presigned POST from Django
+  const urlResp = await fetch('{% url "upload_url" %}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+    body: JSON.stringify({filename: file.name}),
+  });
+  if (!urlResp.ok) { progressMsg.textContent = 'Error getting upload URL.'; return; }
+  const {job_id, presigned} = await urlResp.json();
+
+  // Step 2: POST file directly to S3 using presigned fields
+  progressMsg.textContent = 'Uploading to S3…';
+  const formData = new FormData();
+  for (const [k, v] of Object.entries(presigned.fields)) {
+    formData.append(k, v);
+  }
+  formData.append('file', file);
+
+  const s3Resp = await fetch(presigned.url, {method: 'POST', body: formData});
+  if (s3Resp.status !== 204 && s3Resp.status !== 201) {
+    progressMsg.textContent = 'S3 upload failed (status ' + s3Resp.status + ').';
+    return;
+  }
+
+  // Step 3: tell Django the upload is done → enqueue worker
+  progressMsg.textContent = 'Queuing analysis…';
+  const confirmResp = await fetch(`/jobs/${job_id}/confirm/`, {
+    method: 'POST',
+    headers: {'X-CSRFToken': csrfToken},
+  });
+  if (!confirmResp.ok) { progressMsg.textContent = 'Error confirming upload.'; return; }
+
+  progressMsg.textContent = 'Job queued! Redirecting…';
+  window.location.href = '{% url "job_list" %}';
+});
+</script>
 {% endblock %}

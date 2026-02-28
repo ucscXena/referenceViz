@@ -1,57 +1,107 @@
-from django.shortcuts import render
+import json
 
-from django.views.generic.edit import CreateView
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect, render, get_object_or_404
-from django.urls import reverse_lazy
-from django.views.decorators.http import require_POST
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_GET, require_POST
+
+from .aws import boto_client
 from .models import Job
 from .tasks import run_analysis
-from .forms import JobUploadForm
 
-class JobCreateView(CreateView):
-    model = Job
-    form_class = JobUploadForm
-    template_name = 'jobs/create.html'
-    success_url = reverse_lazy('job_list')
 
-    def form_valid(self, form):
-        job = form.save(commit=False)
-        job.user = self.request.user
-        job.save()
-        # XXX isn't UUID already a str?
-        rq_job = run_analysis.enqueue(str(job.id))
-        return super().form_valid(form)
+@login_required
+@require_GET
+def upload_page(request):
+    return render(request, 'jobs/create.html')
+
+
+@login_required
+@require_POST
+def get_upload_url(request):
+    data = json.loads(request.body)
+    filename = data.get('filename', 'upload')
+
+    job = Job.objects.create(
+        user=request.user,
+        original_filename=filename,
+        status='pending',
+    )
+
+    s3_key = f"uploads/{job.id}/{filename}"
+    s3 = boto_client('s3')
+    presigned = s3.generate_presigned_post(
+        Bucket=settings.AWS_S3_BUCKET,
+        Key=s3_key,
+        ExpiresIn=300,
+    )
+
+    job.s3_input_key = s3_key
+    job.save()
+
+    return JsonResponse({'job_id': str(job.id), 'presigned': presigned})
+
+
+@login_required
+@require_POST
+def confirm_upload(request, job_id):
+    job = get_object_or_404(Job, pk=job_id, user=request.user)
+    run_analysis.delay(str(job.id))
+    return JsonResponse({'status': 'queued'})
+
 
 @login_required
 def job_list(request):
-    """
-    Render a page that shows every Job belonging to the current user,
-    ordered newest-first.
-    """
     jobs = Job.objects.filter(user=request.user).order_by('-created_at')
-    return render(
-        request,
-        'jobs/list.html',
-        {'jobs': jobs}
-    )
+    return render(request, 'jobs/list.html', {'jobs': jobs})
+
 
 @login_required
 def job_detail(request, pk):
-    """
-    Show full job details.
-    If status == 'error', display the error message from job.result.
-    """
     job = get_object_or_404(Job, pk=pk, user=request.user)
     return render(request, 'jobs/detail.html', {'job': job})
+
+
+@login_required
+def job_status(request, pk):
+    """JSON endpoint for client-side polling."""
+    job = get_object_or_404(Job, pk=pk, user=request.user)
+    data = {'status': job.status}
+    if job.status == 'complete' and job.result and job.result.get('s3_uri'):
+        data['has_download'] = True
+    if job.status == 'error' and job.result:
+        data['error'] = job.result.get('error', '')
+    return JsonResponse(data)
+
+
+@login_required
+def download_result(request, pk):
+    """Generate a presigned S3 URL and redirect the browser to it."""
+    job = get_object_or_404(Job, pk=pk, user=request.user)
+    s3_uri = job.result.get('s3_uri') if job.result else None
+    if not s3_uri:
+        from django.http import Http404
+        raise Http404
+
+    bucket, key = s3_uri.replace('s3://', '').split('/', 1)
+    filename = key.rsplit('/', 1)[-1]
+    s3 = boto_client('s3')
+    url = s3.generate_presigned_url(
+        'get_object',
+        Params={
+            'Bucket': bucket,
+            'Key': key,
+            'ResponseContentDisposition': f'attachment; filename="{filename}"',
+        },
+        ExpiresIn=300,
+    )
+    return redirect(url)
+
 
 @require_POST
 @login_required
 def delete_selected_jobs(request):
-    """
-    Delete jobs that belong to the user and are checked in the form.
-    """
-    selected_ids = request.POST.getlist('job_ids')  # list of UUID strings
-    # Filter by user + selected IDs
+    selected_ids = request.POST.getlist('job_ids')
     Job.objects.filter(user=request.user, id__in=selected_ids).delete()
     return redirect('job_list')

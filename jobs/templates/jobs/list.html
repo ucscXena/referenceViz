@@ -7,37 +7,41 @@
 <table border="1" cellpadding="5" cellspacing="0">
     <thead>
         <tr>
-			<th><input type="checkbox" id="select-all"></th>
-            <th>ID</th><th>File</th><th>Status</th><th>Created</th>
+            <th><input type="checkbox" id="select-all"></th>
+            <th>ID</th><th>File</th><th>Status</th><th>Created</th><th>Download</th>
         </tr>
     </thead>
     <tbody>
     {% for job in jobs %}
-        <tr>
-			<td>
-				<input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
-			</td>
-			<td>{{ job.short_id }}</td>
-			<td>{{ job.short_uploaded_file }}</td>
-			<td>
-				{% if job.status == 'error' %}
-				  <a href="{% url 'job_detail' job.pk %}" style="color: red; font-weight: bold;">{{ job.get_status_display }}</a>
-				{% else %}
-				{{ job.get_status_display }}
-				{% endif %}
-			</td>
-
-			<td>{{ job.created_at|date:"Y-m-d H:i" }}</td>
-		</tr>
-	{% empty %}
-		<tr><td colspan="4">No jobs yet.</td></tr>
-	{% endfor %}
-	</tbody>
+        <tr data-job-id="{{ job.id }}" data-status="{{ job.status }}">
+            <td>
+                <input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
+            </td>
+            <td>{{ job.short_id }}</td>
+            <td>{{ job.short_uploaded_file }}</td>
+            <td class="status-cell">
+                {% if job.status == 'error' %}
+                  <a href="{% url 'job_detail' job.pk %}" style="color: red; font-weight: bold;">{{ job.get_status_display }}</a>
+                {% else %}
+                  {{ job.get_status_display }}
+                {% endif %}
+            </td>
+            <td>{{ job.created_at|date:"Y-m-d H:i" }}</td>
+            <td class="download-cell">
+                {% if job.status == 'complete' and job.result.s3_uri %}
+                  <a href="{% url 'download_result' job.pk %}">Download</a>
+                {% endif %}
+            </td>
+        </tr>
+    {% empty %}
+        <tr><td colspan="6">No jobs yet.</td></tr>
+    {% endfor %}
+    </tbody>
 </table>
 <div style="margin-top: 1em;">
-	<button type="submit" class="btn-delete" disabled>
-		Delete mappings
-	</button>
+    <button type="submit" class="btn-delete" disabled>
+        Delete mappings
+    </button>
 </div>
 <script>
 document.getElementById('select-all').onclick = function() {
@@ -54,12 +58,57 @@ function toggleDeleteButton() {
     document.querySelector('.btn-delete').disabled = !anyChecked;
 }
 
-// Optional: Confirm before delete
 document.getElementById('job-list-form').onsubmit = function(e) {
     if (!confirm('Are you sure you want to delete the selected jobs?')) {
         e.preventDefault();
     }
 };
+
+// Poll status for non-terminal jobs
+(function() {
+  const TERMINAL = new Set(['complete', 'error']);
+  const LABELS = {pending: 'Pending', running: 'Running', complete: 'Complete', error: 'Error'};
+
+  function activeRows() {
+    return [...document.querySelectorAll('tr[data-job-id]')]
+      .filter(r => !TERMINAL.has(r.dataset.status));
+  }
+
+  function pollAll() {
+    const rows = activeRows();
+    if (rows.length === 0) return;
+
+    rows.forEach(row => {
+      const jobId = row.dataset.jobId;
+      fetch(`/jobs/${jobId}/status/`)
+        .then(r => r.json())
+        .then(data => {
+          const statusCell = row.querySelector('.status-cell');
+          const downloadCell = row.querySelector('.download-cell');
+          row.dataset.status = data.status;
+
+          if (data.status === 'error') {
+            statusCell.innerHTML = `<a href="/jobs/${jobId}/" style="color:red;font-weight:bold;">Error</a>`;
+          } else {
+            statusCell.textContent = LABELS[data.status] || data.status;
+          }
+
+          if (data.status === 'complete' && data.has_download) {
+            downloadCell.innerHTML = `<a href="/jobs/${jobId}/download/">Download</a>`;
+          }
+        })
+        .catch(() => {});
+    });
+
+    if (activeRows().length > 0) {
+      setTimeout(pollAll, 30000);
+    }
+  }
+
+  if (activeRows().length > 0) {
+    setTimeout(pollAll, 30000);
+  }
+})();
 </script>
 
 <style>

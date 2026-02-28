@@ -1,32 +1,73 @@
+import traceback
+from datetime import timedelta
+
+import django_rq
 from django_rq import job
+
 from .models import Job
-import json
+from .analysis import submit_to_sagemaker, check_sagemaker_result
 
-from .analysis import perform_analysis
+# 20 checks × 5 min = 100 min max wait
+MAX_CHECK_ATTEMPTS = 20
 
-@job('default')  # Use the 'default' queue
+
+@job('default')
 def run_analysis(job_id):
     """
-    RQ task: Process the uploaded file and update the Job model.
+    RQ task: submit to SageMaker and exit immediately.
+    A follow-up check_job_result task polls for completion.
     """
     job_instance = Job.objects.get(id=job_id)
     job_instance.status = 'running'
     job_instance.save()
 
     try:
-        # Run your Python analysis script
-        file_path = job_instance.uploaded_file.path
-        result_data = perform_analysis(file_path)  # Returns dict/JSON-serializable data
+        output_uri, failure_uri = submit_to_sagemaker(job_instance.s3_input_key)
+        # Stash the SageMaker output/failure URIs so the check task can find them
+        job_instance.result = {'output_uri': output_uri, 'failure_uri': failure_uri}
+        job_instance.save()
 
-        # Store as JSON (handles dicts or serializes others)
-        if isinstance(result_data, dict):
-            job_instance.result = result_data
-        else:
-            job_instance.result = json.loads(json.dumps(result_data))  # Ensure JSON-compatible
-
-        job_instance.status = 'complete'
+        django_rq.get_queue('default').enqueue_in(
+            timedelta(minutes=5), check_job_result, str(job_id)
+        )
     except Exception as e:
-        job_instance.result = {'error': str(e), 'traceback': str(e.__traceback__)}
+        job_instance.result = {'error': str(e), 'traceback': traceback.format_exc()}
         job_instance.status = 'error'
-    finally:
+        job_instance.save()
+
+
+@job('default')
+def check_job_result(job_id, attempt=0):
+    """
+    RQ task: check S3 once for a completed SageMaker output.
+    Re-enqueues itself (up to MAX_CHECK_ATTEMPTS) if the output is not yet ready.
+    """
+    job_instance = Job.objects.get(id=job_id)
+
+    if job_instance.status not in ('running', 'pending'):
+        return  # already resolved (e.g. duplicate call)
+
+    try:
+        output_uri = job_instance.result.get('output_uri')
+        failure_uri = job_instance.result.get('failure_uri')
+
+        result = check_sagemaker_result(output_uri, failure_uri)
+
+        if result is not None:
+            job_instance.result = result
+            job_instance.status = 'complete'
+            job_instance.save()
+            return
+
+        if attempt >= MAX_CHECK_ATTEMPTS:
+            raise TimeoutError(
+                f"SageMaker output not ready after {MAX_CHECK_ATTEMPTS * 5} minutes: {output_uri}"
+            )
+
+        django_rq.get_queue('default').enqueue_in(
+            timedelta(minutes=5), check_job_result, str(job_id), attempt + 1
+        )
+    except Exception as e:
+        job_instance.result = {'error': str(e), 'traceback': traceback.format_exc()}
+        job_instance.status = 'error'
         job_instance.save()

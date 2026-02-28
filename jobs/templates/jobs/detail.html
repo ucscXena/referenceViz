@@ -4,12 +4,13 @@
 
 <table class="job-detail">
   <tr><th>ID</th><td>{{ job.id }}</td></tr>
-  <tr><th>File</th><td>{{ job.uploaded_file.name }}</td></tr>
-  <tr><th>Status</th><td><strong>{{ job.get_status_display }}</strong></td></tr>
+  <tr><th>File</th><td>{{ job.original_filename }}</td></tr>
+  <tr><th>Status</th><td><strong id="status-text">{{ job.get_status_display }}</strong></td></tr>
   <tr><th>Created</th><td>{{ job.created_at|date:"Y-m-d H:i:s" }}</td></tr>
   <tr><th>Updated</th><td>{{ job.updated_at|date:"Y-m-d H:i:s" }}</td></tr>
 </table>
 
+<div id="result-area">
 {% if job.status == 'error' %}
   <div class="error-box">
     <h3>Error Details</h3>
@@ -24,11 +25,63 @@
 {% elif job.status == 'complete' %}
   <div class="result-box">
     <h3>Results</h3>
-    <pre>{{ job.result|tojson }}</pre>
+    {% if job.result.s3_uri %}
+      <p><a href="{% url 'download_result' job.pk %}" class="btn-download">Download result file</a></p>
+    {% endif %}
   </div>
 {% endif %}
+</div>
 
 <p><a href="{% url 'job_list' %}">Back to Jobs</a></p>
+
+{% if job.status == 'pending' or job.status == 'running' %}
+<p id="polling-notice" style="color:#666; font-style:italic;">
+  Checking for updates every 10 seconds…
+</p>
+<script>
+(function() {
+  const TERMINAL = new Set(['complete', 'error']);
+  const statusText = document.getElementById('status-text');
+  const resultArea = document.getElementById('result-area');
+  const notice = document.getElementById('polling-notice');
+
+  function poll() {
+    fetch('{% url "job_status" job.pk %}')
+      .then(r => r.json())
+      .then(data => {
+        statusText.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+
+        if (data.status === 'complete') {
+          if (data.has_download) {
+            resultArea.innerHTML = `
+              <div class="result-box">
+                <h3>Results</h3>
+                <p><a href="{% url 'download_result' job.pk %}" class="btn-download">Download result file</a></p>
+              </div>`;
+          } else {
+            resultArea.innerHTML = '<div class="result-box"><h3>Complete</h3></div>';
+          }
+          notice.remove();
+        } else if (data.status === 'error') {
+          resultArea.innerHTML = `
+            <div class="error-box">
+              <h3>Error Details</h3>
+              <pre>${data.error || '(No error message)'}</pre>
+            </div>`;
+          notice.remove();
+        }
+
+        if (!TERMINAL.has(data.status)) {
+          setTimeout(poll, 10000);
+        }
+      })
+      .catch(() => setTimeout(poll, 10000));
+  }
+
+  setTimeout(poll, 10000);
+})();
+</script>
+{% endif %}
 
 <style>
   .job-detail { border-collapse: collapse; width: 100%; margin: 1em 0; }
@@ -37,5 +90,7 @@
   .result-box { background: #f8fff8; border: 1px solid #c3e6cb; padding: 1em; margin: 1em 0; border-radius: 4px; }
   pre { white-space: pre-wrap; font-family: monospace; background: #f4f4f4; padding: 0.8em; border-radius: 4px; }
   .traceback { font-size: 0.9em; max-height: 300px; overflow-y: auto; }
+  .btn-download { display: inline-block; background: #5cb85c; color: white; padding: 0.5em 1em; border-radius: 4px; text-decoration: none; }
+  .btn-download:hover { background: #449d44; }
 </style>
 {% endblock %}

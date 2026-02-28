@@ -20,5 +20,13 @@ DATABASES = {
     }
 }
 
+# AWS / SageMaker — override these in site_settings_private.py
+AWS_REGION = 'us-east-1'
+AWS_S3_BUCKET = ''
+SAGEMAKER_ENDPOINT_NAME = ''
+# Optional explicit credentials (prefer IAM role or ~/.aws/credentials instead)
+AWS_ACCESS_KEY_ID = ''
+AWS_SECRET_ACCESS_KEY = ''
+
 # uncomment to test allauth
 #from .site_settings_private import *
