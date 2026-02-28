@@ -11,6 +11,13 @@ if [ "$#" -lt 1 ]; then
 	exit 1;
 fi
 
+EXPLORER=${EXPLORER:-"../data-explorer/out"}
+
+if [ ! -e "${EXPLORER}/references/index.html" ]; then
+	echo "Error: ${EXPLORER}/references/index.html not found"
+	exit 1;
+fi
+
 HOST_ALIAS="$1"
 
 case "$HOST_ALIAS" in
@@ -30,6 +37,7 @@ BUILD_DJANGO=build-django
 RSYNC_OPTS=(-a --delete --exclude='.*.sw[opx]' -e "ssh -o StrictHostKeyChecking=no")
 
 npm run build:prod -- --bail
+rsync -a --exclude='/index.html' "${EXPLORER}/" build
 
 # deploy
 rsync "${RSYNC_OPTS[@]}" --rsync-path='sudo rsync' build/ ${USER}@${HOST}:/var/www/html
