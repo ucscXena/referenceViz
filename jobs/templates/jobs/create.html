@@ -1,63 +1,137 @@
-{% block content %}
-<h2>Upload a file for analysis</h2>
+{% extends "base.html" %}
+{% block title %}Map New Cells — UCSC Brain Explorer{% endblock %}
+{% block base_content %}
+<div class="base-container">
+  <h1 class="base-h1">Map New Cells</h1>
+  <p class="upload-hint">Select an <code>.h5ad</code> file to upload. The file will be uploaded directly to S3 and queued for analysis.</p>
 
-<form id="upload-form">
-  {% csrf_token %}
-  <input type="file" id="file-input" required>
-  <button type="submit">Start Job</button>
-</form>
+  <div class="upload-area" id="upload-area">
+    <input type="file" id="file-input" accept=".h5ad" style="display:none">
+    <label for="file-input" class="upload-label" id="upload-label">
+      <span class="upload-icon">&#8679;</span>
+      <span id="upload-label-text">Choose a file&hellip;</span>
+    </label>
+  </div>
 
-<div id="progress" style="display:none; margin-top:1em;">
-  <p id="progress-msg">Uploading…</p>
+  <div id="progress" style="display:none; margin-top:1.25rem;">
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+    <p id="progress-msg" class="progress-msg">Preparing…</p>
+  </div>
+
+  <button id="submit-btn" class="base-button" style="margin-top:1.25rem; width:100%;" disabled>
+    Start analysis
+  </button>
+  <p style="margin-top:0.75rem; text-align:center;">
+    <a href="{% url 'job_list' %}" style="color:#1976d2; font-size:0.875rem;">Back to mappings</a>
+  </p>
 </div>
 
 <script>
-document.getElementById('upload-form').addEventListener('submit', async function(e) {
-  e.preventDefault();
+const fileInput = document.getElementById('file-input');
+const labelText = document.getElementById('upload-label-text');
+const submitBtn = document.getElementById('submit-btn');
+const progressDiv = document.getElementById('progress');
+const progressBar = document.getElementById('progress-bar');
+const progressMsg = document.getElementById('progress-msg');
+const csrfToken = '{{ csrf_token }}';
 
-  const file = document.getElementById('file-input').files[0];
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) {
+    labelText.textContent = fileInput.files[0].name;
+    submitBtn.disabled = false;
+  }
+});
+
+submitBtn.addEventListener('click', async () => {
+  const file = fileInput.files[0];
   if (!file) return;
 
-  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-  const progress = document.getElementById('progress');
-  const progressMsg = document.getElementById('progress-msg');
+  submitBtn.disabled = true;
+  progressDiv.style.display = 'block';
 
-  progress.style.display = 'block';
-  progressMsg.textContent = 'Requesting upload URL…';
-
-  // Step 1: get presigned POST from Django
-  const urlResp = await fetch('{% url "upload_url" %}', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-    body: JSON.stringify({filename: file.name}),
-  });
-  if (!urlResp.ok) { progressMsg.textContent = 'Error getting upload URL.'; return; }
-  const {job_id, presigned} = await urlResp.json();
-
-  // Step 2: POST file directly to S3 using presigned fields
-  progressMsg.textContent = 'Uploading to S3…';
-  const formData = new FormData();
-  for (const [k, v] of Object.entries(presigned.fields)) {
-    formData.append(k, v);
-  }
-  formData.append('file', file);
-
-  const s3Resp = await fetch(presigned.url, {method: 'POST', body: formData});
-  if (s3Resp.status !== 204 && s3Resp.status !== 201) {
-    progressMsg.textContent = 'S3 upload failed (status ' + s3Resp.status + ').';
-    return;
+  function setProgress(pct, msg) {
+    progressBar.style.width = pct + '%';
+    progressMsg.textContent = msg;
   }
 
-  // Step 3: tell Django the upload is done → enqueue worker
-  progressMsg.textContent = 'Queuing analysis…';
-  const confirmResp = await fetch(`/jobs/${job_id}/confirm/`, {
-    method: 'POST',
-    headers: {'X-CSRFToken': csrfToken},
-  });
-  if (!confirmResp.ok) { progressMsg.textContent = 'Error confirming upload.'; return; }
+  try {
+    setProgress(10, 'Requesting upload URL…');
+    const urlResp = await fetch('{% url "upload_url" %}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+      body: JSON.stringify({filename: file.name}),
+    });
+    if (!urlResp.ok) throw new Error('Failed to get upload URL');
+    const {job_id, presigned} = await urlResp.json();
 
-  progressMsg.textContent = 'Job queued! Redirecting…';
-  window.location.href = '{% url "job_list" %}';
+    setProgress(30, 'Uploading to S3…');
+    const formData = new FormData();
+    for (const [k, v] of Object.entries(presigned.fields)) formData.append(k, v);
+    formData.append('file', file);
+
+    const s3Resp = await fetch(presigned.url, {method: 'POST', body: formData});
+    if (s3Resp.status !== 204 && s3Resp.status !== 201)
+      throw new Error(`S3 upload failed (${s3Resp.status})`);
+
+    setProgress(80, 'Queuing analysis…');
+    const confirmResp = await fetch(`/jobs/${job_id}/confirm/`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': csrfToken},
+    });
+    if (!confirmResp.ok) throw new Error('Failed to confirm upload');
+
+    setProgress(100, 'Queued! Redirecting…');
+    window.location.href = '{% url "job_list" %}';
+  } catch (err) {
+    progressMsg.textContent = 'Error: ' + err.message;
+    progressBar.style.background = '#d32f2f';
+    submitBtn.disabled = false;
+  }
 });
 </script>
+
+<style>
+.upload-hint {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 1.25rem;
+}
+.upload-area {
+  border: 2px dashed #bdbdbd;
+  border-radius: 4px;
+  padding: 2rem 1rem;
+  text-align: center;
+  background: #fafafa;
+  transition: border-color 0.2s;
+}
+.upload-area:hover { border-color: #1976d2; }
+.upload-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #555;
+  font-size: 0.9rem;
+}
+.upload-icon { font-size: 2rem; color: #1976d2; line-height: 1; }
+.progress-bar-wrap {
+  background: #e0e0e0;
+  border-radius: 4px;
+  height: 6px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: #1976d2;
+  border-radius: 4px;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+.progress-msg {
+  font-size: 0.875rem;
+  color: #555;
+  margin: 0.5rem 0 0;
+}
+</style>
 {% endblock %}

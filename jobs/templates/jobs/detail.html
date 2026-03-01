@@ -1,96 +1,139 @@
+{% extends "base.html" %}
 {% load json_filters %}
-{% block content %}
-<h2>Job Detail</h2>
+{% block title %}Job {{ job.short_id }} — UCSC Brain Explorer{% endblock %}
+{% block base_content %}
+<div class="base-container wide">
 
-<table class="job-detail">
-  <tr><th>ID</th><td>{{ job.id }}</td></tr>
-  <tr><th>File</th><td>{{ job.original_filename }}</td></tr>
-  <tr><th>Status</th><td><strong id="status-text">{{ job.get_status_display }}</strong></td></tr>
-  <tr><th>Created</th><td>{{ job.created_at|date:"Y-m-d H:i:s" }}</td></tr>
-  <tr><th>Updated</th><td>{{ job.updated_at|date:"Y-m-d H:i:s" }}</td></tr>
-</table>
+  <div class="detail-header">
+    <h1 class="base-h1" style="margin:0;">Mapping Details</h1>
+    <a href="{% url 'job_list' %}" class="back-link">&#8592; Back to mappings</a>
+  </div>
 
-<div id="result-area">
-{% if job.status == 'error' %}
-  <div class="error-box">
-    <h3>Error Details</h3>
-    <pre>{{ job.result.error|default:"(No error message)" }}</pre>
-    {% if job.result.traceback %}
-      <details>
-        <summary>Show traceback</summary>
-        <pre class="traceback">{{ job.result.traceback }}</pre>
-      </details>
-    {% endif %}
+  <table class="detail-table">
+    <tr><th>ID</th><td>{{ job.id }}</td></tr>
+    <tr><th>File</th><td>{{ job.original_filename }}</td></tr>
+    <tr>
+      <th>Status</th>
+      <td><span id="status-text" class="status-{{ job.status }}">{{ job.get_status_display }}</span></td>
+    </tr>
+    <tr><th>Created</th><td>{{ job.created_at|date:"Y-m-d H:i:s" }}</td></tr>
+    <tr><th>Updated</th><td>{{ job.updated_at|date:"Y-m-d H:i:s" }}</td></tr>
+  </table>
+
+  <div id="result-area">
+  {% if job.status == 'error' %}
+    <div class="result-box error-box">
+      <h3>Error</h3>
+      <pre>{{ job.result.error|default:"(No error message)" }}</pre>
+      {% if job.result.traceback %}
+        <details>
+          <summary>Traceback</summary>
+          <pre class="traceback">{{ job.result.traceback }}</pre>
+        </details>
+      {% endif %}
+    </div>
+  {% elif job.status == 'complete' %}
+    <div class="result-box success-box">
+      <h3>Complete</h3>
+      {% if job.result.s3_uri %}
+        <a href="{% url 'download_result' job.pk %}" class="base-button">Download result file</a>
+      {% endif %}
+    </div>
+  {% endif %}
   </div>
-{% elif job.status == 'complete' %}
-  <div class="result-box">
-    <h3>Results</h3>
-    {% if job.result.s3_uri %}
-      <p><a href="{% url 'download_result' job.pk %}" class="btn-download">Download result file</a></p>
-    {% endif %}
-  </div>
-{% endif %}
+
 </div>
 
-<p><a href="{% url 'job_list' %}">Back to Jobs</a></p>
-
 {% if job.status == 'pending' or job.status == 'running' %}
-<p id="polling-notice" style="color:#666; font-style:italic;">
-  Checking for updates every 10 seconds…
-</p>
 <script>
 (function() {
   const TERMINAL = new Set(['complete', 'error']);
   const statusText = document.getElementById('status-text');
   const resultArea = document.getElementById('result-area');
-  const notice = document.getElementById('polling-notice');
 
   function poll() {
     fetch('{% url "job_status" job.pk %}')
       .then(r => r.json())
       .then(data => {
         statusText.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+        statusText.className = 'status-' + data.status;
 
         if (data.status === 'complete') {
-          if (data.has_download) {
-            resultArea.innerHTML = `
-              <div class="result-box">
-                <h3>Results</h3>
-                <p><a href="{% url 'download_result' job.pk %}" class="btn-download">Download result file</a></p>
-              </div>`;
-          } else {
-            resultArea.innerHTML = '<div class="result-box"><h3>Complete</h3></div>';
-          }
-          notice.remove();
+          resultArea.innerHTML = data.has_download
+            ? `<div class="result-box success-box"><h3>Complete</h3><a href="{% url 'download_result' job.pk %}" class="base-button">Download result file</a></div>`
+            : `<div class="result-box success-box"><h3>Complete</h3></div>`;
         } else if (data.status === 'error') {
-          resultArea.innerHTML = `
-            <div class="error-box">
-              <h3>Error Details</h3>
-              <pre>${data.error || '(No error message)'}</pre>
-            </div>`;
-          notice.remove();
+          resultArea.innerHTML = `<div class="result-box error-box"><h3>Error</h3><pre>${data.error || '(No error message)'}</pre></div>`;
         }
 
-        if (!TERMINAL.has(data.status)) {
-          setTimeout(poll, 10000);
-        }
+        if (!TERMINAL.has(data.status)) setTimeout(poll, 10000);
       })
       .catch(() => setTimeout(poll, 10000));
   }
-
   setTimeout(poll, 10000);
 })();
 </script>
 {% endif %}
 
 <style>
-  .job-detail { border-collapse: collapse; width: 100%; margin: 1em 0; }
-  .job-detail th, .job-detail td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
-  .error-box { background: #ffecec; border: 1px solid #f5c6cb; padding: 1em; margin: 1em 0; border-radius: 4px; }
-  .result-box { background: #f8fff8; border: 1px solid #c3e6cb; padding: 1em; margin: 1em 0; border-radius: 4px; }
-  pre { white-space: pre-wrap; font-family: monospace; background: #f4f4f4; padding: 0.8em; border-radius: 4px; }
-  .traceback { font-size: 0.9em; max-height: 300px; overflow-y: auto; }
-  .btn-download { display: inline-block; background: #5cb85c; color: white; padding: 0.5em 1em; border-radius: 4px; text-decoration: none; }
-  .btn-download:hover { background: #449d44; }
+.detail-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+.back-link {
+  font-size: 0.875rem;
+  color: #1976d2;
+  text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
+
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+.detail-table th {
+  width: 120px;
+  padding: 9px 12px;
+  text-align: left;
+  font-weight: 500;
+  color: #444;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+.detail-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  word-break: break-all;
+}
+
+.status-complete { color: #2e7d32; font-weight: 500; }
+.status-running  { color: #1565c0; font-weight: 500; }
+.status-pending  { color: #888; }
+.status-error    { color: #c62828; font-weight: 500; }
+
+.result-box {
+  border-radius: 4px;
+  padding: 1.25rem;
+  margin-top: 0.5rem;
+}
+.result-box h3 { margin: 0 0 0.75rem; font-size: 1rem; font-weight: 500; }
+.success-box { background: #f1f8e9; border: 1px solid #c5e1a5; }
+.error-box   { background: #ffebee; border: 1px solid #ffcdd2; }
+
+pre {
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 0.85rem;
+  background: rgba(0,0,0,0.04);
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin: 0;
+}
+.traceback { max-height: 280px; overflow-y: auto; font-size: 0.8rem; }
+details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top: 0.75rem; }
 </style>
 {% endblock %}

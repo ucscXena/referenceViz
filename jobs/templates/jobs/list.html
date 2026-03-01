@@ -1,67 +1,73 @@
 {% extends "base.html" %}
 {% block base_content %}
-<div class="base-container">
-<p><a href="{% url 'job_create' %}">Map new cells</a></p>
-<form method="post" action="{% url 'delete_selected_jobs' %}" id="job-list-form">
-{% csrf_token %}
-<table border="1" cellpadding="5" cellspacing="0">
+<div class="base-container wide">
+
+  <div class="list-toolbar">
+    <h1 class="list-title">Cell Mappings</h1>
+    <a href="{% url 'job_create' %}" class="base-button">Map new cells</a>
+  </div>
+
+  <form method="post" action="{% url 'delete_selected_jobs' %}" id="job-list-form">
+  {% csrf_token %}
+  <table class="job-table">
     <thead>
-        <tr>
-            <th><input type="checkbox" id="select-all"></th>
-            <th>ID</th><th>File</th><th>Status</th><th>Created</th><th>Download</th>
-        </tr>
+      <tr>
+        <th class="col-check"><input type="checkbox" id="select-all"></th>
+        <th class="col-id">ID</th>
+        <th class="col-file">File</th>
+        <th class="col-status">Status</th>
+        <th class="col-date">Created</th>
+        <th class="col-download">Download</th>
+      </tr>
     </thead>
     <tbody>
     {% for job in jobs %}
-        <tr data-job-id="{{ job.id }}" data-status="{{ job.status }}">
-            <td>
-                <input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
-            </td>
-            <td>{{ job.short_id }}</td>
-            <td>{{ job.short_uploaded_file }}</td>
-            <td class="status-cell">
-                {% if job.status == 'error' %}
-                  <a href="{% url 'job_detail' job.pk %}" style="color: red; font-weight: bold;">{{ job.get_status_display }}</a>
-                {% else %}
-                  {{ job.get_status_display }}
-                {% endif %}
-            </td>
-            <td>{{ job.created_at|date:"Y-m-d H:i" }}</td>
-            <td class="download-cell">
-                {% if job.status == 'complete' and job.result.s3_uri %}
-                  <a href="{% url 'download_result' job.pk %}">Download</a>
-                {% endif %}
-            </td>
-        </tr>
+      <tr data-job-id="{{ job.id }}" data-status="{{ job.status }}">
+        <td><input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox"></td>
+        <td class="col-id">{{ job.short_id }}</td>
+        <td>{{ job.short_uploaded_file }}</td>
+        <td class="status-cell">
+          {% if job.status == 'error' %}
+            <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
+          {% elif job.status == 'complete' %}
+            <span class="status-complete">Complete</span>
+          {% elif job.status == 'running' %}
+            <span class="status-running">Running</span>
+          {% else %}
+            <span class="status-pending">Pending</span>
+          {% endif %}
+        </td>
+        <td class="col-date download-cell">{{ job.created_at|date:"Y-m-d H:i" }}</td>
+        <td class="download-cell">
+          {% if job.status == 'complete' and job.result.s3_uri %}
+            <a href="{% url 'download_result' job.pk %}" class="link-download">Download</a>
+          {% endif %}
+        </td>
+      </tr>
     {% empty %}
-        <tr><td colspan="6">No jobs yet.</td></tr>
+      <tr><td colspan="6" class="empty-row">No mappings yet.</td></tr>
     {% endfor %}
     </tbody>
-</table>
-<div style="margin-top: 1em;">
-    <button type="submit" class="btn-delete" disabled>
-        Delete mappings
-    </button>
+  </table>
+
+  <div class="list-footer">
+    <button type="submit" class="btn-delete" disabled>Delete selected</button>
+  </div>
+  </form>
 </div>
+
 <script>
 document.getElementById('select-all').onclick = function() {
     document.querySelectorAll('.job-checkbox').forEach(cb => cb.checked = this.checked);
     toggleDeleteButton();
 };
-
-document.querySelectorAll('.job-checkbox').forEach(cb => {
-    cb.onclick = toggleDeleteButton;
-});
-
+document.querySelectorAll('.job-checkbox').forEach(cb => { cb.onclick = toggleDeleteButton; });
 function toggleDeleteButton() {
-    const anyChecked = document.querySelectorAll('.job-checkbox:checked').length > 0;
-    document.querySelector('.btn-delete').disabled = !anyChecked;
+    document.querySelector('.btn-delete').disabled =
+        document.querySelectorAll('.job-checkbox:checked').length === 0;
 }
-
 document.getElementById('job-list-form').onsubmit = function(e) {
-    if (!confirm('Are you sure you want to delete the selected jobs?')) {
-        e.preventDefault();
-    }
+    if (!confirm('Delete the selected mappings?')) e.preventDefault();
 };
 
 // Poll status for non-terminal jobs
@@ -76,46 +82,87 @@ document.getElementById('job-list-form').onsubmit = function(e) {
 
   function pollAll() {
     const rows = activeRows();
-    if (rows.length === 0) return;
-
+    if (!rows.length) return;
     rows.forEach(row => {
-      const jobId = row.dataset.jobId;
-      fetch(`/jobs/${jobId}/status/`)
+      fetch(`/jobs/${row.dataset.jobId}/status/`)
         .then(r => r.json())
         .then(data => {
-          const statusCell = row.querySelector('.status-cell');
-          const downloadCell = row.querySelector('.download-cell');
           row.dataset.status = data.status;
-
+          const cell = row.querySelector('.status-cell');
+          const jobId = row.dataset.jobId;
           if (data.status === 'error') {
-            statusCell.innerHTML = `<a href="/jobs/${jobId}/" style="color:red;font-weight:bold;">Error</a>`;
+            cell.innerHTML = `<a href="/jobs/${jobId}/" class="status-error">Error</a>`;
+          } else if (data.status === 'complete') {
+            cell.innerHTML = `<span class="status-complete">Complete</span>`;
+            if (data.has_download) {
+              row.querySelector('.download-cell:last-child').innerHTML =
+                `<a href="/jobs/${jobId}/download/" class="link-download">Download</a>`;
+            }
           } else {
-            statusCell.textContent = LABELS[data.status] || data.status;
+            cell.innerHTML = `<span class="status-${data.status}">${LABELS[data.status] || data.status}</span>`;
           }
-
-          if (data.status === 'complete' && data.has_download) {
-            downloadCell.innerHTML = `<a href="/jobs/${jobId}/download/">Download</a>`;
-          }
-        })
-        .catch(() => {});
+        }).catch(() => {});
     });
-
-    if (activeRows().length > 0) {
-      setTimeout(pollAll, 30000);
-    }
+    if (activeRows().length) setTimeout(pollAll, 30000);
   }
 
-  if (activeRows().length > 0) {
-    setTimeout(pollAll, 30000);
-  }
+  if (activeRows().length) setTimeout(pollAll, 30000);
 })();
 </script>
 
 <style>
-.btn-delete {
-    background: #d9534f; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
 }
-.btn-delete:disabled { background: #aaa; cursor: not-allowed; }
+.list-title {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: #333;
+  margin: 0;
+}
+.job-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.job-table th {
+  background: #f5f5f5;
+  border-bottom: 2px solid #e0e0e0;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 500;
+  color: #444;
+  white-space: nowrap;
+}
+.job-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.job-table tbody tr:hover { background: #fafafa; }
+.col-check { width: 36px; }
+.col-id    { width: 60px; font-family: monospace; }
+.col-date  { white-space: nowrap; color: #555; }
+.col-download { width: 90px; }
+
+.status-complete { color: #2e7d32; font-weight: 500; }
+.status-running  { color: #1565c0; font-weight: 500; }
+.status-pending  { color: #888; }
+.status-error    { color: #c62828; font-weight: 500; text-decoration: none; }
+.status-error:hover { text-decoration: underline; }
+.link-download   { color: #1976d2; text-decoration: none; font-weight: 500; }
+.link-download:hover { text-decoration: underline; }
+
+.list-footer { margin-top: 1rem; }
+.btn-delete {
+  background: #d32f2f; color: #fff; border: none;
+  padding: 7px 16px; border-radius: 4px; font-size: 0.875rem;
+  font-weight: 500; cursor: pointer;
+}
+.btn-delete:disabled { background: #bdbdbd; cursor: default; }
+.empty-row { color: #888; text-align: center; padding: 2rem; }
 </style>
-</div>
 {% endblock %}
