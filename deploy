@@ -59,4 +59,5 @@ ssh -l${USER} ${HOST} <<-ENDSSH
     python ./manage.py migrate
     python manage.py collectstatic
     sudo apache2ctl restart
+    sudo systemctl restart rqworker
 ENDSSH
