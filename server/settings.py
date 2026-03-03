@@ -113,9 +113,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'timestamped': {
+            'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
     'handlers': {
         'console': {
-            'class': 'logging.StreamHandler',  # writes to stderr -> Apache error.log
+            'class': 'logging.StreamHandler',  # writes to stderr -> Apache error.log (Apache prepends timestamp)
+        },
+        'console_timestamped': {
+            'class': 'logging.StreamHandler',  # used by rqworker; systemd captures stdout/stderr without timestamps
+            'formatter': 'timestamped',
         },
     },
     'root': {
@@ -127,6 +137,11 @@ LOGGING = {
             'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': True,
+        },
+        'rq.worker': {
+            'handlers': ['console_timestamped'],
+            'level': 'INFO',
+            'propagate': False,
         },
     },
 }
