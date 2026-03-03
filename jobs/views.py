@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
-from .aws import boto_client
+from .aws import boto_client, delete_s3_key, delete_s3_uri
 from .models import Job
 from .tasks import run_analysis
 
@@ -103,5 +103,30 @@ def download_result(request, pk):
 @login_required
 def delete_selected_jobs(request):
     selected_ids = request.POST.getlist('job_ids')
-    Job.objects.filter(user=request.user, id__in=selected_ids).delete()
+    jobs = Job.objects.filter(user=request.user, id__in=selected_ids)
+
+    for job in jobs:
+        _delete_job_s3_files(job)
+
+    jobs.delete()
     return redirect('job_list')
+
+
+def _delete_job_s3_files(job):
+    """Delete all S3 files associated with a job. Safe to call for any job status."""
+    result = job.result or {}
+
+    # Final result file (kept after completion, deleted when job is removed)
+    delete_s3_uri(result.get('s3_uri'))
+
+    # Input file and request JSON (normally deleted on completion, but may
+    # still exist for pending/running/error jobs)
+    delete_s3_key(job.s3_input_key)
+    if job.s3_input_key:
+        request_key = job.s3_input_key.replace('uploads/', 'requests/', 1) + '.json'
+        delete_s3_key(request_key)
+
+    # SageMaker envelope (stored in result while running, deleted on completion,
+    # but may still exist for failed jobs)
+    delete_s3_uri(result.get('output_uri'))
+    delete_s3_uri(result.get('failure_uri'))

@@ -4,6 +4,7 @@ from datetime import timedelta
 import django_rq
 from django_rq import job
 
+from .aws import delete_s3_key, delete_s3_uri
 from .models import Job
 from .analysis import submit_to_sagemaker, check_sagemaker_result
 
@@ -57,6 +58,14 @@ def check_job_result(job_id, attempt=0):
             job_instance.result = result
             job_instance.status = 'complete'
             job_instance.save()
+
+            # Delete intermediate files now that the result URI is saved.
+            # The final result file (s3_uri) is kept for the user to download.
+            delete_s3_key(job_instance.s3_input_key)
+            request_key = job_instance.s3_input_key.replace('uploads/', 'requests/', 1) + '.json'
+            delete_s3_key(request_key)
+            delete_s3_uri(output_uri)    # SageMaker output envelope
+            delete_s3_uri(failure_uri)   # failure file if present
             return
 
         if attempt >= MAX_CHECK_ATTEMPTS:
