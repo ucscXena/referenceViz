@@ -16,8 +16,8 @@
       <th>Status</th>
       <td><span id="status-text" class="status-{{ job.status }}">{{ job.get_status_display }}</span></td>
     </tr>
-    <tr><th>Created</th><td>{{ job.created_at|date:"Y-m-d H:i:s" }}</td></tr>
-    <tr><th>Updated</th><td>{{ job.updated_at|date:"Y-m-d H:i:s" }}</td></tr>
+    <tr><th>Created</th><td><time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i:s" }}</time></td></tr>
+    <tr><th>Updated</th><td><time datetime="{{ job.updated_at|date:"c" }}">{{ job.updated_at|date:"Y-m-d H:i:s" }}</time></td></tr>
   </table>
 
   <div id="result-area">
@@ -43,6 +43,14 @@
   </div>
 
 </div>
+
+<script>
+document.querySelectorAll('time[datetime]').forEach(el => {
+  el.textContent = new Date(el.getAttribute('datetime')).toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit'
+  });
+});
+</script>
 
 {% if job.status == 'pending' or job.status == 'running' %}
 <script>

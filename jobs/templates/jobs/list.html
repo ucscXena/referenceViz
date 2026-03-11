@@ -37,7 +37,7 @@
             <span class="status-pending">Pending</span>
           {% endif %}
         </td>
-        <td class="col-date download-cell">{{ job.created_at|date:"Y-m-d H:i" }}</td>
+        <td class="col-date download-cell"><time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time></td>
         <td class="download-cell">
           {% if job.status == 'complete' and job.result.s3_uri %}
             <a href="{% url 'download_result' job.pk %}" class="link-download">Download</a>
@@ -57,6 +57,12 @@
 </div>
 
 <script>
+document.querySelectorAll('time[datetime]').forEach(el => {
+  el.textContent = new Date(el.getAttribute('datetime')).toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+  });
+});
+
 document.getElementById('select-all').onclick = function() {
     document.querySelectorAll('.job-checkbox').forEach(cb => cb.checked = this.checked);
     toggleDeleteButton();
