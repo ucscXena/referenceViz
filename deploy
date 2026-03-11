@@ -55,9 +55,18 @@ ssh -l${USER} ${HOST} <<-ENDSSH
     cp ~/settings/site_settings.py /var/www/backend/django/server/site_settings.py
     . /var/www/backend/virtualenv/bin/activate
     cd /var/www/backend/django
+    # Stop rqworker before touching code. It runs jobs for 40+ minutes and
+    # can hold old code in memory, causing ORM errors if it picks up a new
+    # job mid-deploy. Jobs in the Redis queue simply wait and are picked up
+    # by the new worker after start.
+    sudo systemctl stop rqworker
     pip install --require-hashes -r requirements.txt
+    # Remove stale .pyc bytecode so Python recompiles fresh on next startup.
+    # pip skips packages already at the correct version, leaving old .pyc files
+    # in place, which can cause SQLCompiler/ORM errors.
+    find /var/www/backend -name '*.pyc' -delete
     python ./manage.py migrate
     python manage.py collectstatic
     sudo apache2ctl restart
-    sudo systemctl restart rqworker
+    sudo systemctl start rqworker
 ENDSSH
