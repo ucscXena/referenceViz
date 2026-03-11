@@ -20,10 +20,12 @@ DATABASES = {
     }
 }
 
-# AWS / SageMaker — override these in site_settings_private.py
+# AWS / SageMaker / Batch — override these in site_settings_private.py
 AWS_REGION = 'us-east-1'
 AWS_S3_BUCKET = ''
 SAGEMAKER_ENDPOINT_NAME = ''
+BATCH_JOB_QUEUE = 'cell-pipeline-queue'
+BATCH_JOB_DEFINITION = 'cell-pipeline-job'
 # Optional explicit credentials (prefer IAM role or ~/.aws/credentials instead)
 AWS_ACCESS_KEY_ID = ''
 AWS_SECRET_ACCESS_KEY = ''

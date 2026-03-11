@@ -13,34 +13,71 @@
     <tr><th>ID</th><td>{{ job.id }}</td></tr>
     <tr><th>File</th><td>{{ job.original_filename }}</td></tr>
     <tr>
-      <th>Status</th>
-      <td><span id="status-text" class="status-{{ job.status }}">{{ job.get_status_display }}</span></td>
+      <th>UCE Status</th>
+      <td><span id="uce-status-text" class="status-{{ job.status }}">{{ job.get_status_display }}</span></td>
     </tr>
     <tr><th>Created</th><td><time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i:s" }}</time></td></tr>
     <tr><th>Updated</th><td><time datetime="{{ job.updated_at|date:"c" }}">{{ job.updated_at|date:"Y-m-d H:i:s" }}</time></td></tr>
   </table>
 
-  <div id="result-area">
   {% if job.status == 'error' %}
-    <div class="result-box error-box">
-      <h3>Error</h3>
-      <pre>{{ job.result.error|default:"(No error message)" }}</pre>
-      {% if job.result.traceback %}
-        <details>
-          <summary>Traceback</summary>
-          <pre class="traceback">{{ job.result.traceback }}</pre>
-        </details>
-      {% endif %}
-    </div>
-  {% elif job.status == 'complete' %}
-    <div class="result-box success-box">
-      <h3>Complete</h3>
-      {% if job.result.s3_uri %}
-        <a href="{% url 'download_result' job.pk %}" class="base-button">Download result file</a>
-      {% endif %}
-    </div>
-  {% endif %}
+  <div class="result-box error-box">
+    <h3>UCE Embedding Error</h3>
+    <pre>{{ job.result.error|default:"(No error message)" }}</pre>
+    {% if job.result.traceback %}
+      <details>
+        <summary>Traceback</summary>
+        <pre class="traceback">{{ job.result.traceback }}</pre>
+      </details>
+    {% endif %}
   </div>
+  {% endif %}
+
+  {% if projections %}
+  <h2 class="section-heading">Projections</h2>
+  <table class="detail-table" id="projections-table">
+    <thead>
+      <tr>
+        <th>Reference</th>
+        <th>Status</th>
+        <th>Download</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for proj in projections %}
+    <tr data-proj-id="{{ proj.id }}">
+      <td>{{ proj.reference.name }}</td>
+      <td class="proj-status-cell">
+        <span class="status-{{ proj.status }}">{{ proj.get_status_display }}</span>
+      </td>
+      <td>
+        {% if proj.status == 'complete' and proj.result.s3_uri %}
+          <a href="{% url 'download_projection' proj.pk %}" class="link-download">Download</a>
+        {% else %}
+          —
+        {% endif %}
+      </td>
+    </tr>
+    {% if proj.status == 'error' and proj.result.error %}
+    <tr class="error-detail-row">
+      <td colspan="3">
+        <div class="result-box error-box" style="margin:0;">
+          <strong>{{ proj.reference.name }} error:</strong>
+          <pre style="margin-top:0.5rem;">{{ proj.result.error }}</pre>
+          {% if proj.result.traceback %}
+          <details>
+            <summary>Traceback</summary>
+            <pre class="traceback">{{ proj.result.traceback }}</pre>
+          </details>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
 
 </div>
 
@@ -52,33 +89,48 @@ document.querySelectorAll('time[datetime]').forEach(el => {
 });
 </script>
 
-{% if job.status == 'pending' or job.status == 'running' %}
+{% if job.status == 'pending' or job.status == 'running' or projections %}
 <script>
 (function() {
   const TERMINAL = new Set(['complete', 'error']);
-  const statusText = document.getElementById('status-text');
-  const resultArea = document.getElementById('result-area');
+  const uceStatusText = document.getElementById('uce-status-text');
+
+  function hasActiveWork() {
+    if (uceStatusText && !TERMINAL.has(uceStatusText.className.replace('status-', ''))) return true;
+    return [...document.querySelectorAll('.proj-status-cell span')].some(
+      s => !TERMINAL.has(s.className.replace('status-', ''))
+    );
+  }
 
   function poll() {
     fetch('{% url "job_status" job.pk %}')
       .then(r => r.json())
       .then(data => {
-        statusText.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
-        statusText.className = 'status-' + data.status;
-
-        if (data.status === 'complete') {
-          resultArea.innerHTML = data.has_download
-            ? `<div class="result-box success-box"><h3>Complete</h3><a href="{% url 'download_result' job.pk %}" class="base-button">Download result file</a></div>`
-            : `<div class="result-box success-box"><h3>Complete</h3></div>`;
-        } else if (data.status === 'error') {
-          resultArea.innerHTML = `<div class="result-box error-box"><h3>Error</h3><pre>${data.error || '(No error message)'}</pre></div>`;
+        if (uceStatusText) {
+          uceStatusText.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+          uceStatusText.className = 'status-' + data.status;
         }
 
-        if (!TERMINAL.has(data.status)) setTimeout(poll, 10000);
+        (data.projections || []).forEach(proj => {
+          const row = document.querySelector(`tr[data-proj-id="${proj.id}"]`);
+          if (!row) return;
+          const statusCell = row.querySelector('.proj-status-cell');
+          if (statusCell) {
+            const label = proj.status.charAt(0).toUpperCase() + proj.status.slice(1);
+            statusCell.innerHTML = `<span class="status-${proj.status}">${label}</span>`;
+          }
+          const dlCell = row.cells[2];
+          if (dlCell && proj.status === 'complete' && proj.has_download) {
+            dlCell.innerHTML = `<a href="/jobs/projections/${proj.id}/download/" class="link-download">Download</a>`;
+          }
+        });
+
+        if (hasActiveWork()) setTimeout(poll, 10000);
       })
-      .catch(() => setTimeout(poll, 10000));
+      .catch(() => { if (hasActiveWork()) setTimeout(poll, 10000); });
   }
-  setTimeout(poll, 10000);
+
+  if (hasActiveWork()) setTimeout(poll, 10000);
 })();
 </script>
 {% endif %}
@@ -97,6 +149,12 @@ document.querySelectorAll('time[datetime]').forEach(el => {
 }
 .back-link:hover { text-decoration: underline; }
 
+.section-heading {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #333;
+  margin: 1.75rem 0 0.75rem;
+}
 .detail-table {
   width: 100%;
   border-collapse: collapse;
@@ -117,11 +175,15 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   border-bottom: 1px solid #f0f0f0;
   word-break: break-all;
 }
+.error-detail-row td { padding: 0 12px 12px; border-bottom: none; }
 
 .status-complete { color: #2e7d32; font-weight: 500; }
 .status-running  { color: #1565c0; font-weight: 500; }
 .status-pending  { color: #888; }
 .status-error    { color: #c62828; font-weight: 500; }
+
+.link-download   { color: #1976d2; text-decoration: none; font-weight: 500; }
+.link-download:hover { text-decoration: underline; }
 
 .result-box {
   border-radius: 4px;
@@ -129,8 +191,7 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   margin-top: 0.5rem;
 }
 .result-box h3 { margin: 0 0 0.75rem; font-size: 1rem; font-weight: 500; }
-.success-box { background: #f1f8e9; border: 1px solid #c5e1a5; }
-.error-box   { background: #ffebee; border: 1px solid #ffcdd2; }
+.error-box { background: #ffebee; border: 1px solid #ffcdd2; }
 
 pre {
   white-space: pre-wrap;

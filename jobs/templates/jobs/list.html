@@ -4,7 +4,7 @@
 
   <div class="list-toolbar">
     <h1 class="list-title">Cell Mappings</h1>
-    <a href="{% url 'job_create' %}" class="base-button">Map new cells</a>
+    <a href="{% url 'reference_list' %}" class="base-button">Map new cells</a>
   </div>
 
   <form method="post" action="{% url 'delete_selected_jobs' %}" id="job-list-form">
@@ -12,21 +12,33 @@
   <table class="job-table">
     <thead>
       <tr>
-        <th class="col-check"><input type="checkbox" id="select-all"></th>
+        <th class="col-check"></th>
         <th class="col-id">ID</th>
         <th class="col-file">File</th>
-        <th class="col-status">Status</th>
         <th class="col-date">Created</th>
+        <th class="col-uce">UCE Status</th>
+        <th class="col-ref">Reference</th>
+        <th class="col-pstatus">Status</th>
         <th class="col-download">Download</th>
       </tr>
     </thead>
     <tbody>
     {% for job in jobs %}
-      <tr data-job-id="{{ job.id }}" data-status="{{ job.status }}">
-        <td><input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox"></td>
-        <td class="col-id">{{ job.short_id }}</td>
-        <td>{{ job.short_uploaded_file }}</td>
-        <td class="status-cell">
+      {% with projections=job.projections.all %}
+      {% with pcount=projections|length %}
+
+      {% for proj in projections %}
+      {% if forloop.first %}
+      <tr data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
+        <td rowspan="{{ pcount }}" class="col-check">
+          <input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
+        </td>
+        <td rowspan="{{ pcount }}" class="col-id">{{ job.short_id }}</td>
+        <td rowspan="{{ pcount }}">{{ job.short_uploaded_file }}</td>
+        <td rowspan="{{ pcount }}" class="col-date">
+          <time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time>
+        </td>
+        <td rowspan="{{ pcount }}" class="uce-status-cell">
           {% if job.status == 'error' %}
             <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
           {% elif job.status == 'complete' %}
@@ -37,15 +49,58 @@
             <span class="status-pending">Pending</span>
           {% endif %}
         </td>
-        <td class="col-date download-cell"><time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time></td>
-        <td class="download-cell">
-          {% if job.status == 'complete' and job.result.s3_uri %}
-            <a href="{% url 'download_result' job.pk %}" class="link-download">Download</a>
+      {% else %}
+      <tr data-proj-row="{{ proj.id }}">
+      {% endif %}
+        <td>{{ proj.reference.name }}</td>
+        <td class="proj-status-cell" data-proj-id="{{ proj.id }}">
+          {% if proj.status == 'error' %}
+            <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
+          {% elif proj.status == 'complete' %}
+            <span class="status-complete">Complete</span>
+          {% elif proj.status == 'running' %}
+            <span class="status-running">Running</span>
+          {% else %}
+            <span class="status-pending">Pending</span>
+          {% endif %}
+        </td>
+        <td class="proj-download-cell" data-proj-id="{{ proj.id }}">
+          {% if proj.status == 'complete' and proj.result.s3_uri %}
+            <a href="{% url 'download_projection' proj.pk %}" class="link-download">Download</a>
+          {% else %}
+            —
           {% endif %}
         </td>
       </tr>
+      {% empty %}
+      <tr data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
+        <td class="col-check">
+          <input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
+        </td>
+        <td class="col-id">{{ job.short_id }}</td>
+        <td>{{ job.short_uploaded_file }}</td>
+        <td class="col-date">
+          <time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time>
+        </td>
+        <td class="uce-status-cell">
+          {% if job.status == 'error' %}
+            <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
+          {% elif job.status == 'complete' %}
+            <span class="status-complete">Complete</span>
+          {% elif job.status == 'running' %}
+            <span class="status-running">Running</span>
+          {% else %}
+            <span class="status-pending">Pending</span>
+          {% endif %}
+        </td>
+        <td colspan="3" class="no-projections">—</td>
+      </tr>
+      {% endfor %}
+
+      {% endwith %}
+      {% endwith %}
     {% empty %}
-      <tr><td colspan="6" class="empty-row">No mappings yet.</td></tr>
+      <tr><td colspan="8" class="empty-row">No mappings yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -57,62 +112,111 @@
 </div>
 
 <script>
+// Local time formatting
 document.querySelectorAll('time[datetime]').forEach(el => {
   el.textContent = new Date(el.getAttribute('datetime')).toLocaleString(undefined, {
     year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
   });
 });
 
-document.getElementById('select-all').onclick = function() {
-    document.querySelectorAll('.job-checkbox').forEach(cb => cb.checked = this.checked);
-    toggleDeleteButton();
-};
+// Checkbox / delete button
+document.getElementById('select-all') && (document.getElementById('select-all').onclick = function() {
+  document.querySelectorAll('.job-checkbox').forEach(cb => cb.checked = this.checked);
+  toggleDeleteButton();
+});
 document.querySelectorAll('.job-checkbox').forEach(cb => { cb.onclick = toggleDeleteButton; });
 function toggleDeleteButton() {
-    document.querySelector('.btn-delete').disabled =
-        document.querySelectorAll('.job-checkbox:checked').length === 0;
+  document.querySelector('.btn-delete').disabled =
+    document.querySelectorAll('.job-checkbox:checked').length === 0;
 }
 document.getElementById('job-list-form').onsubmit = function(e) {
-    if (!confirm('Delete the selected mappings?')) e.preventDefault();
+  if (!confirm('Delete the selected mappings?')) e.preventDefault();
 };
 
-// Poll status for non-terminal jobs
+// Status polling
 (function() {
   const TERMINAL = new Set(['complete', 'error']);
   const LABELS = {pending: 'Pending', running: 'Running', complete: 'Complete', error: 'Error'};
 
-  function activeRows() {
+  function activeJobRows() {
     return [...document.querySelectorAll('tr[data-job-id]')]
-      .filter(r => !TERMINAL.has(r.dataset.status));
+      .filter(r => !TERMINAL.has(r.dataset.jobStatus));
+  }
+
+  function activeProjectionCells() {
+    return [...document.querySelectorAll('td[data-proj-id]')]
+      .filter(td => {
+        const span = td.querySelector('span');
+        return span && !TERMINAL.has(span.className.replace('status-', ''));
+      });
+  }
+
+  function jobRowsWithActiveProjRows() {
+    // also poll jobs that have non-terminal projections
+    const activeProj = new Set(
+      [...document.querySelectorAll('.proj-status-cell')].filter(td => {
+        const span = td.querySelector('span');
+        return span && !TERMINAL.has(span.className.replace('status-', ''));
+      }).map(td => {
+        // walk up to find the job row
+        let row = td.closest('tr');
+        while (row && !row.dataset.jobId) row = row.previousElementSibling;
+        return row ? row.dataset.jobId : null;
+      }).filter(Boolean)
+    );
+    return [...document.querySelectorAll('tr[data-job-id]')]
+      .filter(r => !TERMINAL.has(r.dataset.jobStatus) || activeProj.has(r.dataset.jobId));
   }
 
   function pollAll() {
-    const rows = activeRows();
+    const rows = jobRowsWithActiveProjRows();
     if (!rows.length) return;
+
     rows.forEach(row => {
-      fetch(`/jobs/${row.dataset.jobId}/status/`)
+      const jobId = row.dataset.jobId;
+      fetch(`/jobs/${jobId}/status/`)
         .then(r => r.json())
         .then(data => {
-          row.dataset.status = data.status;
-          const cell = row.querySelector('.status-cell');
-          const jobId = row.dataset.jobId;
-          if (data.status === 'error') {
-            cell.innerHTML = `<a href="/jobs/${jobId}/" class="status-error">Error</a>`;
-          } else if (data.status === 'complete') {
-            cell.innerHTML = `<span class="status-complete">Complete</span>`;
-            if (data.has_download) {
-              row.querySelector('.download-cell:last-child').innerHTML =
-                `<a href="/jobs/${jobId}/download/" class="link-download">Download</a>`;
+          // Update UCE status cell (rowspan cell is always on the first row of the job)
+          const uceCell = row.querySelector('.uce-status-cell');
+          if (uceCell) {
+            if (data.status === 'error') {
+              uceCell.innerHTML = `<a href="/jobs/${jobId}/" class="status-error">Error</a>`;
+            } else {
+              uceCell.innerHTML = `<span class="status-${data.status}">${LABELS[data.status] || data.status}</span>`;
             }
-          } else {
-            cell.innerHTML = `<span class="status-${data.status}">${LABELS[data.status] || data.status}</span>`;
+            row.dataset.jobStatus = data.status;
+          }
+
+          // Update projection cells
+          (data.projections || []).forEach(proj => {
+            const statusCell = document.querySelector(`.proj-status-cell[data-proj-id="${proj.id}"]`);
+            const downloadCell = document.querySelector(`.proj-download-cell[data-proj-id="${proj.id}"]`);
+            if (statusCell) {
+              if (proj.status === 'error') {
+                statusCell.innerHTML = `<a href="/jobs/${jobId}/" class="status-error">Error</a>`;
+              } else {
+                statusCell.innerHTML = `<span class="status-${proj.status}">${LABELS[proj.status] || proj.status}</span>`;
+              }
+            }
+            if (downloadCell && proj.status === 'complete' && proj.has_download) {
+              downloadCell.innerHTML = `<a href="/jobs/projections/${proj.id}/download/" class="link-download">Download</a>`;
+            }
+          });
+
+          // If UCE just completed, new projection rows may have been added server-side.
+          // Reload the page so they appear.
+          if (data.status === 'complete' && row.dataset.jobStatus !== 'complete' &&
+              (data.projections || []).length > 0) {
+            window.location.reload();
           }
         }).catch(() => {});
     });
-    if (activeRows().length) setTimeout(pollAll, 30000);
+
+    if (jobRowsWithActiveProjRows().length) setTimeout(pollAll, 30000);
   }
 
-  if (activeRows().length) setTimeout(pollAll, 30000);
+  if (jobRowsWithActiveProjRows().length) setTimeout(pollAll, 30000);
 })();
 </script>
 
@@ -144,15 +248,22 @@ document.getElementById('job-list-form').onsubmit = function(e) {
   white-space: nowrap;
 }
 .job-table td {
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid #f0f0f0;
   vertical-align: middle;
 }
-.job-table tbody tr:hover { background: #fafafa; }
+/* Visually group projection sub-rows within a job */
+tr[data-proj-row] td {
+  border-bottom: 1px solid #f8f8f8;
+  background: #fdfdfd;
+}
+.job-table tbody tr:last-child td { border-bottom: 1px solid #f0f0f0; }
 .col-check { width: 36px; }
 .col-id    { width: 60px; font-family: monospace; }
 .col-date  { white-space: nowrap; color: #555; }
+.col-uce   { white-space: nowrap; }
 .col-download { width: 90px; }
+.no-projections { color: #bbb; }
 
 .status-complete { color: #2e7d32; font-weight: 500; }
 .status-running  { color: #1565c0; font-weight: 500; }

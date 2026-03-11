@@ -3,6 +3,11 @@
 {% block base_content %}
 <div class="base-container">
   <h1 class="base-h1">Map New Cells</h1>
+
+  {% if reference %}
+  <p class="ref-badge">Projecting to: <strong>{{ reference.name }}</strong></p>
+  {% endif %}
+
   <p class="upload-hint">Select an <code>.h5ad</code> file to upload. The file will be uploaded directly to S3 and queued for analysis.</p>
 
   <div class="upload-area" id="upload-area">
@@ -21,6 +26,27 @@
   <button id="submit-btn" class="base-button" style="margin-top:1.25rem; width:100%;" disabled>
     Start analysis
   </button>
+
+  {% if reference and recent_jobs %}
+  <div class="recent-section">
+    <p class="recent-heading">Or use a recent embedding (faster — skips UCE step):</p>
+    <ul class="recent-list" id="recent-list">
+      {% for rj in recent_jobs %}
+      <li class="recent-item{% if forloop.counter > 5 %} recent-hidden{% endif %}"
+          data-job-id="{{ rj.id }}">
+        <button class="recent-btn" type="button">
+          <span class="recent-filename">{{ rj.original_filename }}</span>
+          <time datetime="{{ rj.created_at|date:"c" }}" class="recent-date">{{ rj.created_at|date:"Y-m-d" }}</time>
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if recent_jobs|length > 5 %}
+    <button class="show-all-btn" id="show-all-btn" type="button">Show all ({{ recent_jobs|length }})</button>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <p style="margin-top:0.75rem; text-align:center;">
     <a href="{% url 'job_list' %}" style="color:#1976d2; font-size:0.875rem;">Back to mappings</a>
   </p>
@@ -34,6 +60,7 @@ const progressDiv = document.getElementById('progress');
 const progressBar = document.getElementById('progress-bar');
 const progressMsg = document.getElementById('progress-msg');
 const csrfToken = '{{ csrf_token }}';
+const refId = '{{ reference.id|default:"" }}';
 
 fileInput.addEventListener('change', () => {
   if (fileInput.files.length) {
@@ -74,9 +101,11 @@ submitBtn.addEventListener('click', async () => {
       throw new Error(`S3 upload failed (${s3Resp.status})`);
 
     setProgress(80, 'Queuing analysis…');
+    const body = refId ? JSON.stringify({ref_id: refId}) : '{}';
     const confirmResp = await fetch(`/jobs/${job_id}/confirm/`, {
       method: 'POST',
-      headers: {'X-CSRFToken': csrfToken},
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+      body,
     });
     if (!confirmResp.ok) throw new Error('Failed to confirm upload');
 
@@ -88,9 +117,57 @@ submitBtn.addEventListener('click', async () => {
     submitBtn.disabled = false;
   }
 });
+
+// Convert <time> elements to local timezone
+document.querySelectorAll('time[datetime]').forEach(el => {
+  el.textContent = new Date(el.getAttribute('datetime')).toLocaleDateString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric'
+  });
+});
+
+// Recent embedding buttons
+document.querySelectorAll('.recent-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    if (!refId) return;
+    const jobId = btn.closest('[data-job-id]').dataset.jobId;
+    btn.disabled = true;
+    btn.textContent = 'Starting…';
+    try {
+      const resp = await fetch(`/jobs/${jobId}/project/`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({ref_id: refId}),
+      });
+      if (!resp.ok) throw new Error('Request failed');
+      const data = await resp.json();
+      window.location.href = data.redirect || '{% url "job_list" %}';
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'Error — try again';
+    }
+  });
+});
+
+// Show all recent embeddings
+const showAllBtn = document.getElementById('show-all-btn');
+if (showAllBtn) {
+  showAllBtn.addEventListener('click', () => {
+    document.querySelectorAll('.recent-hidden').forEach(el => el.classList.remove('recent-hidden'));
+    showAllBtn.style.display = 'none';
+  });
+}
 </script>
 
 <style>
+.ref-badge {
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  color: #1565c0;
+  margin-bottom: 1rem;
+}
 .upload-hint {
   font-size: 0.875rem;
   color: #666;
@@ -133,5 +210,51 @@ submitBtn.addEventListener('click', async () => {
   color: #555;
   margin: 0.5rem 0 0;
 }
+.recent-section {
+  margin-top: 1.75rem;
+  border-top: 1px solid #e0e0e0;
+  padding-top: 1.25rem;
+}
+.recent-heading {
+  font-size: 0.875rem;
+  color: #555;
+  margin: 0 0 0.75rem;
+}
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.recent-hidden { display: none; }
+.recent-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 9px 12px;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  text-align: left;
+  gap: 1rem;
+}
+.recent-btn:hover { background: #e3f2fd; border-color: #90caf9; }
+.recent-filename { color: #333; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-date { color: #888; white-space: nowrap; flex-shrink: 0; }
+.show-all-btn {
+  margin-top: 0.5rem;
+  background: none;
+  border: none;
+  color: #1976d2;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+}
+.show-all-btn:hover { text-decoration: underline; }
 </style>
 {% endblock %}

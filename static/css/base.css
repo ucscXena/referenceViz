@@ -76,7 +76,7 @@ body.base-root {
 
 /* Wider variant for tables and content pages */
 .base-container.wide {
-  max-width: 860px;
+  max-width: 1100px;
 }
 
 /* ── Typography ─────────────────────────────────────────── */
