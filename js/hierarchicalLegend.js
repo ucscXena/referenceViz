@@ -4,15 +4,14 @@ import Typography from '@material-ui/core/Typography';
 import Icon from '@material-ui/core/Icon';
 import taxonomy from '../hierarchicalLabelTaxonomy.json';
 import {colorScale} from './colorScales';
+import hierarchicalColors from './hierarchicalColors';
+import singlecellLegend from './singlecellLegend';
 import {Let, concat, conj, contains, getIn, merge, memoize1, uniq, without} from
 	'./underscore_ext';
 import legendStyles from './legend.module.css';
 
 var typography = el(Typography);
 var icon = el(Icon);
-
-var taxonomyGroups = taxonomy.Taxonomy;
-var groupNames = Object.keys(taxonomyGroups);
 
 var buildLookup = memoize1(codes => {
 	var result = {};
@@ -22,10 +21,11 @@ var buildLookup = memoize1(codes => {
 
 // Returns array of [groupName, codesArray] pairs, with an 'Other' group
 // appended for any codes not found in the taxonomy.
-var computeGroups = memoize1(codes =>
-	Let((lookup = buildLookup(codes),
+var computeGroups = memoize1((groups, codes) =>
+	Let((groupNames = Object.keys(groups),
+	     lookup = buildLookup(codes),
 	     named = groupNames.map(g =>
-	         [g, taxonomyGroups[g].map(l => lookup[l]).filter(c => c != null)]),
+	         [g, groups[g].map(l => lookup[l]).filter(c => c != null)]),
 	     grouped = new Set(named.reduce((acc, [, gc]) => acc.concat(gc), [])),
 	     other = codes.map((_, i) => i).filter(c => !grouped.has(c))) =>
 	    other.length ? [...named, ['Other', other]] : named));
@@ -36,6 +36,18 @@ var codesInView = memoize1((data = [], filtered = []) =>
 	        .filter(([, , , f]) => !fs.has(f))
 	        .map(([, , c]) => c)))));
 
+var computeColors = memoize1(hierarchicalColors);
+
+// Looks up the taxonomy groups for the current layer by matching the layer's
+// display name against the top-level keys of the taxonomy JSON.
+// Returns the groups object, or null if no match.
+var getTaxonomyGroups = (imageState, layer) =>
+	taxonomy[getIn(imageState, ['phenotypes', layer, 'name'])] || null;
+
+// ------------------------------------------------------------------
+// HierarchicalLegend: pure UI component.
+// Renders the two-level expandable legend for a given groups object.
+// ------------------------------------------------------------------
 class HierarchicalLegend extends PureComponent {
 	state = {expanded: {}};
 
@@ -62,16 +74,16 @@ class HierarchicalLegend extends PureComponent {
 	};
 
 	render() {
-		var {state: {imageState, layer, customColor, hidden = [], tileData, filtered}} =
-				this.props,
+		var {state: {imageState, layer, customColor, hidden = [], tileData, filtered},
+				groups} = this.props,
 			{expanded} = this.state,
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], []).slice(1),
 			colorFn = colorScale(['ordinal', codes.length, customColor]),
-			groups = computeGroups(codes),
+			groupList = computeGroups(groups, codes),
 			inView = codesInView(tileData, filtered);
 
 		return div({className: legendStyles.column},
-			groups
+			groupList
 				.map(([groupName, gc]) => [groupName, gc.filter(c => inView.has(c))])
 				.filter(([, gc]) => gc.length > 0)
 				.map(([groupName, gc]) =>
@@ -117,9 +129,51 @@ class HierarchicalLegend extends PureComponent {
 	}
 }
 
-var hierarchicalLegend = el(HierarchicalLegend);
+var hierarchicalLegendEl = el(HierarchicalLegend);
+
+// ------------------------------------------------------------------
+// LegendWrapper: manages color sync and decides which legend to show.
+// ------------------------------------------------------------------
+class LegendWrapper extends PureComponent {
+	getCodes() {
+		var {state: {imageState, layer}} = this.props;
+		return getIn(imageState, ['phenotypes', layer, 'int_to_category'], []).slice(1);
+	}
+
+	syncColors() {
+		var {state: {imageState, layer}, onState} = this.props;
+		if (!imageState) { return; }
+		var groups = getTaxonomyGroups(imageState, layer),
+			customColor = groups ?
+				computeColors(groups, this.getCodes()) :
+				undefined;
+		onState(s => merge(s, {customColor}));
+	}
+
+	componentDidMount() {
+		this.syncColors();
+	}
+
+	componentDidUpdate(prevProps) {
+		var {state: {imageState, layer}} = this.props,
+			{state: {imageState: prevImageState, layer: prevLayer}} = prevProps;
+		if (imageState !== prevImageState || layer !== prevLayer) {
+			this.syncColors();
+		}
+	}
+
+	render() {
+		var {state, onState} = this.props,
+			groups = getTaxonomyGroups(state.imageState, state.layer);
+		return groups ?
+			hierarchicalLegendEl({state, onState, groups}) :
+			singlecellLegend(state, onState);
+	}
+}
+
+var legendWrapper = el(LegendWrapper);
 
 export default (state, onState) =>
 	state && state.imageState ?
-		hierarchicalLegend({state, onState}) :
+		legendWrapper({state, onState}) :
 		null;

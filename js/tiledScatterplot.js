@@ -188,8 +188,8 @@ var overlayLayer = ({data, modelMatrix, radius, visible, overlayVar,
 
 class TiledScatterplot extends PureComponent {
 	static displayName = 'TiledScatterplot';
-	getScale = memoize1((codes, hidden) =>
-		colorScale(setScale(['ordinal', codes.length], hidden)));
+	getScale = memoize1((codes, hidden, customColor) =>
+		colorScale(setScale(['ordinal', codes.length, customColor], hidden)));
 
 	onTooltip = ev => {
 		if (ev.index >= 0) {
@@ -210,10 +210,11 @@ class TiledScatterplot extends PureComponent {
 			{layer, filterLayer, onTileData} = props,
 			// XXX color0? Probably should be cut
 			{image, imageState, overlay, overlayVar, overlayFiltered,
-				hideOverlay, radius, hidden = [], filtered: filterColors = []} = props,
+				hideOverlay, radius, hidden = [], filtered: filterColors = [],
+				customColor} = props,
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
-			colorfn = this.getScale(codes, hidden),
+			colorfn = this.getScale(codes, hidden, customColor),
 			{image_scalef: scale = 1, offset = [0, 0]} = imageState,
 			adj = (1 << imageState.levels - 1),
 			modelMatrix = getM(scale / adj, offset.map(c => c / adj));

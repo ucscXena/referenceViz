@@ -167,8 +167,8 @@ export default el(class SinglecellView extends PureComponent {
 		}
 	};
 	findSample = memoize1((samples, id) => indexOf(samples, id, true));
-	getScale = memoize1((codes, hidden) =>
-		colorScale(setScale(['ordinal', codes.length], hidden)));
+	getScale = memoize1((codes, hidden, customColor) =>
+		colorScale(setScale(['ordinal', codes.length, customColor], hidden)));
 	onTooltip = i => {
 		this.setState({tooltipValue: i, tooltipID: undefined});
 	};
@@ -193,7 +193,7 @@ export default el(class SinglecellView extends PureComponent {
 			onReload, onTileData} = this,
 			{image, state, onState, onShadow} = this.props,
 			{hidden, filtered, layer, filterLayer, imageState, overlay,
-				hideOverlay, overlayVar, overlayFiltered = []} = state || {},
+				hideOverlay, overlayVar, overlayFiltered = [], customColor} = state || {},
 			error = this.state.error,
 			unit = false,
 			{container, tooltipValue, showControls, radius,
@@ -201,7 +201,7 @@ export default el(class SinglecellView extends PureComponent {
 			loading = !imageState,
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
-			tooltipColor = this.getScale(codes, hidden)(tooltipValue),
+			tooltipColor = this.getScale(codes, hidden, customColor)(tooltipValue),
 			count = get(imageState, 'count'),
 			name = get(imageState, 'reference_name');
 
@@ -223,7 +223,7 @@ export default el(class SinglecellView extends PureComponent {
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
 					onTooltip, radius, viewState, hidden, filtered, image,
-					imageState, overlay, overlayVar, overlayFiltered, hideOverlay, layer, filterLayer, container,
+					imageState, overlay, overlayVar, overlayFiltered, hideOverlay, layer, filterLayer, container, customColor,
 					key: 'drawing'})));
 	}
 });
