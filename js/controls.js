@@ -1,4 +1,4 @@
-import singlecellLegend from './singlecellLegend';
+import hierarchicalLegend from './hierarchicalLegend';
 import filterLegend from './filterLegend';
 import overlayLegend from './overlayLegend';
 import Tab from '@material-ui/core/Tab';
@@ -135,7 +135,7 @@ export default el(class extends PureComponent {
 					overlay && !overlayTab ? overlayButton(onOverlay, !hideOverlay)
 						: null,
 					layerSelector,
-					singlecellLegend(state, onState)),
+					hierarchicalLegend(state, onState)),
 				tabPanel({value, index: 1},
 					filterSelector,
 					...(filterLayer >= 0 ? [
