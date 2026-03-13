@@ -1,70 +1,87 @@
 {% extends "base.html" %}
 {% block title %}Map New Cells — UCSC Brain Explorer{% endblock %}
 {% block base_content %}
-<div class="base-container">
-  <h1 class="base-h1">Map New Cells</h1>
+<div class="base-container{% if reference and recent_jobs %} wide{% endif %}">
 
-  {% if reference %}
-  <p class="ref-badge">Projecting to: <strong>{{ reference.name }}</strong></p>
-  {% endif %}
+  <div class="create-panels">
 
-  <p class="upload-hint">Select an <code>.h5ad</code> file to upload. The file will be uploaded directly to S3 and queued for analysis.</p>
+    <!-- ── Left: upload new file ── -->
+    <div class="create-panel">
+      <h2 class="panel-title">Map new cells</h2>
+      {% if reference %}
+      <p class="ref-badge">Projecting to: <strong>{{ reference.name }}</strong></p>
+      {% endif %}
+      <p class="panel-hint">Select an <code>.h5ad</code> file to upload. The file will be uploaded directly to S3 and queued for analysis.</p>
 
-  <div class="upload-area" id="upload-area">
-    <input type="file" id="file-input" accept=".h5ad" style="display:none">
-    <label for="file-input" class="upload-label" id="upload-label">
-      <span class="upload-icon">&#8679;</span>
-      <span id="upload-label-text">Choose a file&hellip;</span>
-    </label>
-  </div>
+      <div class="upload-area" id="upload-area">
+        <input type="file" id="file-input" accept=".h5ad" style="display:none">
+        <label for="file-input" class="upload-label">
+          <span class="upload-icon">&#8679;</span>
+          <span id="upload-label-text">Choose a file&hellip;</span>
+        </label>
+      </div>
 
-  <div id="progress" style="display:none; margin-top:1.25rem;">
-    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
-    <p id="progress-msg" class="progress-msg">Preparing…</p>
-  </div>
+      <div id="progress" style="display:none; margin-top:1.25rem;">
+        <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+        <p id="progress-msg" class="progress-msg">Preparing…</p>
+      </div>
 
-  <button id="submit-btn" class="base-button" style="margin-top:1.25rem; width:100%;" disabled>
-    Start analysis
-  </button>
+      <button id="submit-btn" class="base-button panel-submit" disabled>
+        Start analysis
+      </button>
+    </div>
 
-  {% if reference and recent_jobs %}
-  <div class="recent-section">
-    <p class="recent-heading">Or use a recent embedding (faster — skips UCE step):</p>
-    <ul class="recent-list" id="recent-list">
-      {% for rj in recent_jobs %}
-      <li class="recent-item{% if forloop.counter > 5 %} recent-hidden{% endif %}"
-          data-job-id="{{ rj.id }}">
-        <button class="recent-btn" type="button">
-          <span class="recent-filename">{{ rj.original_filename }}</span>
-          <time datetime="{{ rj.created_at|date:"c" }}" class="recent-date">{{ rj.created_at|date:"Y-m-d" }}</time>
-        </button>
-      </li>
-      {% endfor %}
-    </ul>
-    {% if recent_jobs|length > 5 %}
-    <button class="show-all-btn" id="show-all-btn" type="button">Show all ({{ recent_jobs|length }})</button>
+    {% if reference and recent_jobs %}
+    <!-- ── Right: remap existing embedding ── -->
+    <div class="create-panel">
+      <h2 class="panel-title">Remap cells to new reference</h2>
+      <p class="ref-badge">Projecting to: <strong>{{ reference.name }}</strong></p>
+      <p class="panel-hint">Remap cells previously uploaded to a new reference.</p>
+
+      <ul class="recent-list" id="recent-list">
+        {% for rj in recent_jobs %}
+        <li class="recent-item{% if forloop.counter > 5 %} recent-hidden{% endif %}"
+            data-job-id="{{ rj.id }}">
+          <button class="recent-btn" type="button">
+            <span class="recent-filename">{{ rj.original_filename }}</span>
+            <time datetime="{{ rj.created_at|date:"c" }}" class="recent-date">{{ rj.created_at|date:"Y-m-d" }}</time>
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if recent_jobs|length > 5 %}
+      <button class="show-all-btn" id="show-all-btn" type="button">Show all ({{ recent_jobs|length }})</button>
+      {% endif %}
+
+      <button id="remap-btn" class="base-button panel-submit" disabled>
+        Start analysis
+      </button>
+    </div>
     {% endif %}
-  </div>
-  {% endif %}
 
-  <p style="margin-top:0.75rem; text-align:center;">
-    <a href="{% url 'job_list' %}" style="color:#1976d2; font-size:0.875rem;">Back to mappings</a>
+  </div>
+
+  <p class="back-link">
+    <a href="{% url 'job_list' %}">Back to mappings</a>
   </p>
+
 </div>
 
 <script>
+const csrfToken = '{{ csrf_token }}';
+const refId = '{{ reference.id|default:"" }}';
+
+// ── Left panel: new file upload ──
+
 const fileInput = document.getElementById('file-input');
-const labelText = document.getElementById('upload-label-text');
 const submitBtn = document.getElementById('submit-btn');
 const progressDiv = document.getElementById('progress');
 const progressBar = document.getElementById('progress-bar');
 const progressMsg = document.getElementById('progress-msg');
-const csrfToken = '{{ csrf_token }}';
-const refId = '{{ reference.id|default:"" }}';
 
 fileInput.addEventListener('change', () => {
   if (fileInput.files.length) {
-    labelText.textContent = fileInput.files[0].name;
+    document.getElementById('upload-label-text').textContent = fileInput.files[0].name;
     submitBtn.disabled = false;
   }
 });
@@ -118,22 +135,28 @@ submitBtn.addEventListener('click', async () => {
   }
 });
 
-// Convert <time> elements to local timezone
-document.querySelectorAll('time[datetime]').forEach(el => {
-  el.textContent = new Date(el.getAttribute('datetime')).toLocaleDateString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric'
+// ── Right panel: remap existing embedding ──
+
+let selectedJobId = null;
+const remapBtn = document.getElementById('remap-btn');
+
+document.querySelectorAll('.recent-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.recent-item').forEach(li => li.classList.remove('recent-selected'));
+    const li = btn.closest('.recent-item');
+    li.classList.add('recent-selected');
+    selectedJobId = li.dataset.jobId;
+    if (remapBtn) remapBtn.disabled = false;
   });
 });
 
-// Recent embedding buttons
-document.querySelectorAll('.recent-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    if (!refId) return;
-    const jobId = btn.closest('[data-job-id]').dataset.jobId;
-    btn.disabled = true;
-    btn.textContent = 'Starting…';
+if (remapBtn) {
+  remapBtn.addEventListener('click', async () => {
+    if (!selectedJobId || !refId) return;
+    remapBtn.disabled = true;
+    remapBtn.textContent = 'Starting…';
     try {
-      const resp = await fetch(`/jobs/${jobId}/project/`, {
+      const resp = await fetch(`/jobs/${selectedJobId}/project/`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
         body: JSON.stringify({ref_id: refId}),
@@ -142,11 +165,11 @@ document.querySelectorAll('.recent-btn').forEach(btn => {
       const data = await resp.json();
       window.location.href = data.redirect || '{% url "job_list" %}';
     } catch (err) {
-      btn.disabled = false;
-      btn.textContent = 'Error — try again';
+      remapBtn.disabled = false;
+      remapBtn.textContent = 'Start analysis';
     }
   });
-});
+}
 
 // Show all recent embeddings
 const showAllBtn = document.getElementById('show-all-btn');
@@ -156,9 +179,44 @@ if (showAllBtn) {
     showAllBtn.style.display = 'none';
   });
 }
+
+// Convert <time> elements to local timezone
+document.querySelectorAll('time[datetime]').forEach(el => {
+  el.textContent = new Date(el.getAttribute('datetime')).toLocaleDateString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric'
+  });
+});
 </script>
 
 <style>
+.create-panels {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+.create-panel {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 1.5rem;
+  background: #fff;
+}
+.panel-title {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #333;
+  margin: 0 0 1rem;
+}
+.panel-hint {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 1.25rem;
+}
+.panel-submit {
+  margin-top: 1.25rem;
+  width: 100%;
+}
 .ref-badge {
   background: #e3f2fd;
   border: 1px solid #90caf9;
@@ -167,11 +225,6 @@ if (showAllBtn) {
   font-size: 0.9rem;
   color: #1565c0;
   margin-bottom: 1rem;
-}
-.upload-hint {
-  font-size: 0.875rem;
-  color: #666;
-  margin-bottom: 1.25rem;
 }
 .upload-area {
   border: 2px dashed #bdbdbd;
@@ -210,16 +263,6 @@ if (showAllBtn) {
   color: #555;
   margin: 0.5rem 0 0;
 }
-.recent-section {
-  margin-top: 1.75rem;
-  border-top: 1px solid #e0e0e0;
-  padding-top: 1.25rem;
-}
-.recent-heading {
-  font-size: 0.875rem;
-  color: #555;
-  margin: 0 0 0.75rem;
-}
 .recent-list {
   list-style: none;
   margin: 0;
@@ -244,6 +287,11 @@ if (showAllBtn) {
   gap: 1rem;
 }
 .recent-btn:hover { background: #e3f2fd; border-color: #90caf9; }
+.recent-selected .recent-btn {
+  background: #e3f2fd;
+  border-color: #1976d2;
+  outline: 2px solid #1976d2;
+}
 .recent-filename { color: #333; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-date { color: #888; white-space: nowrap; flex-shrink: 0; }
 .show-all-btn {
@@ -256,5 +304,10 @@ if (showAllBtn) {
   padding: 0;
 }
 .show-all-btn:hover { text-decoration: underline; }
+.back-link {
+  text-align: center;
+  margin-top: 1.5rem;
+}
+.back-link a { color: #1976d2; font-size: 0.875rem; }
 </style>
 {% endblock %}
