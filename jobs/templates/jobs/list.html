@@ -15,7 +15,6 @@
         <th class="col-check"></th>
         <th class="col-file">File</th>
         <th class="col-date">Created</th>
-        <th class="col-uce">UCE Status</th>
         <th class="col-ref">Reference</th>
         <th class="col-pstatus">Status</th>
         <th class="col-actions">Actions</th>
@@ -35,17 +34,6 @@
         <td rowspan="{{ pcount }}">{{ job.short_uploaded_file }}</td>
         <td rowspan="{{ pcount }}" class="col-date">
           <time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time>
-        </td>
-        <td rowspan="{{ pcount }}" class="uce-status-cell">
-          {% if job.status == 'error' %}
-            <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
-          {% elif job.status == 'complete' %}
-            <span class="status-complete">Complete</span>
-          {% elif job.status == 'running' %}
-            <span class="status-running">Running</span>
-          {% else %}
-            <span class="status-pending">Pending</span>
-          {% endif %}
         </td>
       {% else %}
       <tr data-proj-row="{{ proj.id }}">
@@ -80,25 +68,24 @@
         <td class="col-date">
           <time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time>
         </td>
+        <td class="no-projections">—</td>
         <td class="uce-status-cell">
           {% if job.status == 'error' %}
             <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
-          {% elif job.status == 'complete' %}
-            <span class="status-complete">Complete</span>
           {% elif job.status == 'running' %}
             <span class="status-running">Running</span>
           {% else %}
             <span class="status-pending">Pending</span>
           {% endif %}
         </td>
-        <td colspan="3" class="no-projections">—</td>
+        <td class="no-projections">—</td>
       </tr>
       {% endfor %}
 
       {% endwith %}
       {% endwith %}
     {% empty %}
-      <tr><td colspan="7" class="empty-row">No mappings yet.</td></tr>
+      <tr><td colspan="6" class="empty-row">No mappings yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -175,7 +162,7 @@ document.getElementById('job-list-form').onsubmit = function(e) {
       fetch(`/jobs/${jobId}/status/`)
         .then(r => r.json())
         .then(data => {
-          // Update UCE status cell (rowspan cell is always on the first row of the job)
+          // Update UCE status cell (present when job has no projections yet)
           const uceCell = row.querySelector('.uce-status-cell');
           if (uceCell) {
             if (data.status === 'error') {
@@ -259,7 +246,6 @@ tr[data-proj-row] td {
 .job-table tbody tr:last-child td { border-bottom: 1px solid #f0f0f0; }
 .col-check   { width: 36px; }
 .col-date    { white-space: nowrap; color: #555; }
-.col-uce     { white-space: nowrap; }
 .col-actions { width: 130px; white-space: nowrap; }
 .no-projections { color: #bbb; }
 
