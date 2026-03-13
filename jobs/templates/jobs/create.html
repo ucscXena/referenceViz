@@ -38,20 +38,18 @@
       <p class="ref-badge">Projecting to: <strong>{{ reference.name }}</strong></p>
       <p class="panel-hint">Remap cells previously uploaded to a new reference.</p>
 
-      <ul class="recent-list" id="recent-list">
-        {% for rj in recent_jobs %}
-        <li class="recent-item{% if forloop.counter > 5 %} recent-hidden{% endif %}"
-            data-job-id="{{ rj.id }}">
-          <button class="recent-btn" type="button">
-            <span class="recent-filename">{{ rj.original_filename }}</span>
-            <time datetime="{{ rj.created_at|date:"c" }}" class="recent-date">{{ rj.created_at|date:"Y-m-d" }}</time>
-          </button>
-        </li>
-        {% endfor %}
-      </ul>
-      {% if recent_jobs|length > 5 %}
-      <button class="show-all-btn" id="show-all-btn" type="button">Show all ({{ recent_jobs|length }})</button>
-      {% endif %}
+      <div class="recent-scroll">
+        <ul class="recent-list" id="recent-list">
+          {% for rj in recent_jobs %}
+          <li class="recent-item" data-job-id="{{ rj.id }}">
+            <button class="recent-btn" type="button">
+              <span class="recent-filename">{{ rj.original_filename }}</span>
+              <time datetime="{{ rj.created_at|date:"c" }}" class="recent-date">{{ rj.created_at|date:"Y-m-d" }}</time>
+            </button>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
 
       <button id="remap-btn" class="base-button panel-submit" disabled>
         Start analysis
@@ -171,15 +169,6 @@ if (remapBtn) {
   });
 }
 
-// Show all recent embeddings
-const showAllBtn = document.getElementById('show-all-btn');
-if (showAllBtn) {
-  showAllBtn.addEventListener('click', () => {
-    document.querySelectorAll('.recent-hidden').forEach(el => el.classList.remove('recent-hidden'));
-    showAllBtn.style.display = 'none';
-  });
-}
-
 // Convert <time> elements to local timezone
 document.querySelectorAll('time[datetime]').forEach(el => {
   el.textContent = new Date(el.getAttribute('datetime')).toLocaleDateString(undefined, {
@@ -192,7 +181,7 @@ document.querySelectorAll('time[datetime]').forEach(el => {
 .create-panels {
   display: flex;
   gap: 2rem;
-  align-items: flex-start;
+  align-items: stretch;
 }
 .create-panel {
   flex: 1;
@@ -201,7 +190,10 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   border-radius: 6px;
   padding: 1.5rem;
   background: #fff;
+  display: flex;
+  flex-direction: column;
 }
+.panel-submit { margin-top: auto; padding-top: 1.25rem; }
 .panel-title {
   font-size: 1.1rem;
   font-weight: 500;
@@ -214,7 +206,6 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   margin-bottom: 1.25rem;
 }
 .panel-submit {
-  margin-top: 1.25rem;
   width: 100%;
 }
 .ref-badge {
@@ -263,6 +254,14 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   color: #555;
   margin: 0.5rem 0 0;
 }
+.recent-scroll {
+  height: 160px;
+  overflow-y: auto;
+  border: 2px dashed #bdbdbd;
+  border-radius: 4px;
+  background: #fafafa;
+  padding: 0.5rem;
+}
 .recent-list {
   list-style: none;
   margin: 0;
@@ -271,7 +270,6 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   flex-direction: column;
   gap: 6px;
 }
-.recent-hidden { display: none; }
 .recent-btn {
   display: flex;
   justify-content: space-between;
@@ -294,16 +292,6 @@ document.querySelectorAll('time[datetime]').forEach(el => {
 }
 .recent-filename { color: #333; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-date { color: #888; white-space: nowrap; flex-shrink: 0; }
-.show-all-btn {
-  margin-top: 0.5rem;
-  background: none;
-  border: none;
-  color: #1976d2;
-  cursor: pointer;
-  font-size: 0.85rem;
-  padding: 0;
-}
-.show-all-btn:hover { text-decoration: underline; }
 .back-link {
   text-align: center;
   margin-top: 1.5rem;
