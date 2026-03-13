@@ -159,7 +159,7 @@ def presign_overlay(request):
 def download_projection(request, pk):
     """Presigned download for a completed projection result (parquet)."""
     projection = get_object_or_404(Projection, pk=pk, job__user=request.user)
-    s3_uri = projection.result.get('s3_uri') if projection.result else None
+    s3_uri = projection.result.get('predictions_s3_uri') if projection.result else None
     if not s3_uri:
         from django.http import Http404
         raise Http404
@@ -238,3 +238,4 @@ def _delete_job_s3_files(job):
     for projection in job.projections.all():
         proj_result = projection.result or {}
         delete_s3_uri(proj_result.get('s3_uri') or proj_result.get('output_s3_uri'))
+        delete_s3_uri(proj_result.get('predictions_s3_uri'))

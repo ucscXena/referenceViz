@@ -7,7 +7,7 @@ from .aws import boto_client
 logger = logging.getLogger(__name__)
 
 
-def submit_batch_job(uce_s3_uri, ref_s3_uri, output_s3_uri, job_name='cell-mapping'):
+def submit_batch_job(uce_s3_uri, ref_s3_uri, output_s3_uri, predictions_s3_uri, job_name='cell-mapping'):
     """
     Submit a projection job to AWS Batch.
     Returns the Batch job ID.
@@ -21,6 +21,7 @@ def submit_batch_job(uce_s3_uri, ref_s3_uri, output_s3_uri, job_name='cell-mappi
             'input_s3': uce_s3_uri,
             'ref_s3': ref_s3_uri,
             'output_s3': output_s3_uri,
+            'predictions_s3': predictions_s3_uri,
         },
     )
     return response['jobId']

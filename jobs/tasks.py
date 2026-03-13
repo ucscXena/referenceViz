@@ -98,20 +98,23 @@ def _submit_projection(projection, uce_s3_uri):
     Submit a Projection to AWS Batch and enqueue polling.
     Not an RQ task — called synchronously from check_job_result or project_existing view.
     """
-    output_s3_uri = (
+    base_uri = (
         f"s3://{settings.AWS_S3_BUCKET}/mapping-results/"
-        f"{projection.job_id}/{projection.reference_id}/output.parquet"
+        f"{projection.job_id}/{projection.reference_id}"
     )
+    output_s3_uri = f"{base_uri}/output.arrow"
+    predictions_s3_uri = f"{base_uri}/predictions.tsv"
     try:
         batch_job_id = submit_batch_job(
             uce_s3_uri=uce_s3_uri,
             ref_s3_uri=projection.reference.s3_uri,
             output_s3_uri=output_s3_uri,
+            predictions_s3_uri=predictions_s3_uri,
             job_name=f'cell-mapping-{str(projection.id)[:8]}',
         )
         projection.batch_job_id = batch_job_id
         projection.status = 'running'
-        projection.result = {'output_s3_uri': output_s3_uri}
+        projection.result = {'output_s3_uri': output_s3_uri, 'predictions_s3_uri': predictions_s3_uri}
         projection.save()
 
         django_rq.get_queue('default').enqueue_in(
@@ -138,8 +141,10 @@ def check_projection_result(projection_id, attempt=0):
         status, detail = check_batch_job(projection.batch_job_id)
 
         if status == 'complete':
-            output_s3_uri = projection.result.get('output_s3_uri')
-            projection.result = {'s3_uri': output_s3_uri}
+            projection.result = {
+                's3_uri': projection.result.get('output_s3_uri'),
+                'predictions_s3_uri': projection.result.get('predictions_s3_uri'),
+            }
             projection.status = 'complete'
             projection.save()
             return
