@@ -162,6 +162,9 @@ document.getElementById('job-list-form').onsubmit = function(e) {
       fetch(`/jobs/${jobId}/status/`)
         .then(r => r.json())
         .then(data => {
+          const prevStatus = row.dataset.jobStatus;
+          row.dataset.jobStatus = data.status;
+
           // Update UCE status cell (present when job has no projections yet)
           const uceCell = row.querySelector('.uce-status-cell');
           if (uceCell) {
@@ -170,7 +173,6 @@ document.getElementById('job-list-form').onsubmit = function(e) {
             } else {
               uceCell.innerHTML = `<span class="status-${data.status}">${LABELS[data.status] || data.status}</span>`;
             }
-            row.dataset.jobStatus = data.status;
           }
 
           // Update projection cells
@@ -190,9 +192,8 @@ document.getElementById('job-list-form').onsubmit = function(e) {
             }
           });
 
-          // If UCE just completed, new projection rows may have been added server-side.
-          // Reload the page so they appear.
-          if (data.status === 'complete' && row.dataset.jobStatus !== 'complete' &&
+          // If UCE just completed, reload so projection rows appear.
+          if (data.status === 'complete' && prevStatus !== 'complete' &&
               (data.projections || []).length > 0) {
             window.location.reload();
           }
