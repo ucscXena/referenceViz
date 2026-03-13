@@ -81,10 +81,20 @@ var getImageMeta =  path => ajax({
 		responseType: 'text', method: 'GET', crossDomain: true
 	}).map(r => JSON.parse(r.response));
 
-var getOverlay = path => ajax({
-		url: `${path}`,
+var fetchOverlay = url => ajax({
+		url,
 		responseType: 'arraybuffer', method: 'GET', crossDomain: true
 	}).map(r => r.response);
+
+var presignOverlay = uri => ajax({
+		url: `/jobs/presign/?uri=${encodeURIComponent(uri)}`,
+		responseType: 'text', method: 'GET'
+	}).map(r => JSON.parse(r.response).url);
+
+var getOverlay = path =>
+	path.startsWith('s3://') ?
+		presignOverlay(path).flatMap(fetchOverlay) :
+		fetchOverlay(path);
 
 function forceRedraw(deck) {
 	if (deck) {

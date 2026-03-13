@@ -13,13 +13,12 @@
     <thead>
       <tr>
         <th class="col-check"></th>
-        <th class="col-id">ID</th>
         <th class="col-file">File</th>
         <th class="col-date">Created</th>
         <th class="col-uce">UCE Status</th>
         <th class="col-ref">Reference</th>
         <th class="col-pstatus">Status</th>
-        <th class="col-download">Download</th>
+        <th class="col-actions">Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -33,7 +32,6 @@
         <td rowspan="{{ pcount }}" class="col-check">
           <input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
         </td>
-        <td rowspan="{{ pcount }}" class="col-id">{{ job.short_id }}</td>
         <td rowspan="{{ pcount }}">{{ job.short_uploaded_file }}</td>
         <td rowspan="{{ pcount }}" class="col-date">
           <time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time>
@@ -67,6 +65,7 @@
         <td class="proj-download-cell" data-proj-id="{{ proj.id }}">
           {% if proj.status == 'complete' and proj.result.s3_uri %}
             <a href="{% url 'download_projection' proj.pk %}" class="link-download">Download</a>
+            <a href="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" class="link-viz">Viz</a>
           {% else %}
             —
           {% endif %}
@@ -77,7 +76,6 @@
         <td class="col-check">
           <input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
         </td>
-        <td class="col-id">{{ job.short_id }}</td>
         <td>{{ job.short_uploaded_file }}</td>
         <td class="col-date">
           <time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time>
@@ -100,7 +98,7 @@
       {% endwith %}
       {% endwith %}
     {% empty %}
-      <tr><td colspan="8" class="empty-row">No mappings yet.</td></tr>
+      <tr><td colspan="7" class="empty-row">No mappings yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -200,7 +198,8 @@ document.getElementById('job-list-form').onsubmit = function(e) {
               }
             }
             if (downloadCell && proj.status === 'complete' && proj.has_download) {
-              downloadCell.innerHTML = `<a href="/jobs/projections/${proj.id}/download/" class="link-download">Download</a>`;
+              const vizUrl = `/visualization/${proj.reference_id}/?overlay=${encodeURIComponent(proj.s3_uri)}`;
+              downloadCell.innerHTML = `<a href="/jobs/projections/${proj.id}/download/" class="link-download">Download</a> <a href="${vizUrl}" class="link-viz">Viz</a>`;
             }
           });
 
@@ -258,11 +257,10 @@ tr[data-proj-row] td {
   background: #fdfdfd;
 }
 .job-table tbody tr:last-child td { border-bottom: 1px solid #f0f0f0; }
-.col-check { width: 36px; }
-.col-id    { width: 60px; font-family: monospace; }
-.col-date  { white-space: nowrap; color: #555; }
-.col-uce   { white-space: nowrap; }
-.col-download { width: 90px; }
+.col-check   { width: 36px; }
+.col-date    { white-space: nowrap; color: #555; }
+.col-uce     { white-space: nowrap; }
+.col-actions { width: 130px; white-space: nowrap; }
 .no-projections { color: #bbb; }
 
 .status-complete { color: #2e7d32; font-weight: 500; }
@@ -270,8 +268,8 @@ tr[data-proj-row] td {
 .status-pending  { color: #888; }
 .status-error    { color: #c62828; font-weight: 500; text-decoration: none; }
 .status-error:hover { text-decoration: underline; }
-.link-download   { color: #1976d2; text-decoration: none; font-weight: 500; }
-.link-download:hover { text-decoration: underline; }
+.link-download, .link-viz { color: #1976d2; text-decoration: none; font-weight: 500; }
+.link-download:hover, .link-viz:hover { text-decoration: underline; }
 
 .list-footer { margin-top: 1rem; }
 .btn-delete {

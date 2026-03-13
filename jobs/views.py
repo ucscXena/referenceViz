@@ -130,12 +130,29 @@ def job_status(request, pk):
         }
         if proj.status == 'complete' and proj.result and proj.result.get('s3_uri'):
             p['has_download'] = True
+            p['reference_id'] = proj.reference_id
+            p['s3_uri'] = proj.result['s3_uri']
         if proj.status == 'error' and proj.result:
             p['error'] = proj.result.get('error', '')
         projections.append(p)
 
     data['projections'] = projections
     return JsonResponse(data)
+
+
+@login_required
+@require_GET
+def presign_overlay(request):
+    """Return a fresh presigned URL for an S3 URI, after verifying ownership."""
+    s3_uri = request.GET.get('uri', '')
+    get_object_or_404(Projection, result__s3_uri=s3_uri, job__user=request.user)
+    bucket, key = s3_uri.replace('s3://', '').split('/', 1)
+    url = boto_client('s3').generate_presigned_url(
+        'get_object',
+        Params={'Bucket': bucket, 'Key': key},
+        ExpiresIn=3600,
+    )
+    return JsonResponse({'url': url})
 
 
 @login_required
