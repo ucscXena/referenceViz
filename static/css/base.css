@@ -97,6 +97,8 @@ body.base-root {
 /* ── Buttons ────────────────────────────────────────────── */
 .base-button {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0.5rem 1.5rem;
   font-size: 0.875rem;
   font-weight: 500;
