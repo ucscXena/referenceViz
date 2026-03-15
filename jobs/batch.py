@@ -7,6 +7,28 @@ from .aws import boto_client
 logger = logging.getLogger(__name__)
 
 
+def submit_uce_batch_job(input_s3_uri, output_s3_uri, job_name='uce-inference'):
+    """
+    Submit a UCE embedding job to AWS Batch.
+    Returns the Batch job ID.
+    """
+    batch = boto_client('batch')
+    response = batch.submit_job(
+        jobName=job_name,
+        jobQueue=settings.UCE_BATCH_JOB_QUEUE,
+        jobDefinition=settings.UCE_BATCH_JOB_DEFINITION,
+        parameters={
+            'input_s3': input_s3_uri,
+            'output_s3': output_s3_uri,
+            'model_s3': settings.UCE_MODEL_S3,
+            'species': 'human',
+            'batch_size': '10',
+            'nlayers': '33',
+        },
+    )
+    return response['jobId']
+
+
 def submit_batch_job(uce_s3_uri, ref_s3_uri, output_s3_uri, predictions_s3_uri, job_name='cell-mapping'):
     """
     Submit a projection job to AWS Batch.

@@ -6,21 +6,20 @@ from django.conf import settings
 from django_rq import job
 
 from .aws import delete_s3_key, delete_s3_uri
-from .batch import check_batch_job, submit_batch_job
+from .batch import check_batch_job, submit_batch_job, submit_uce_batch_job
 from .models import Job, Projection
-from .analysis import submit_to_sagemaker, check_sagemaker_result
 
-# 20 checks × 5 min = 100 min max wait for SageMaker
-MAX_CHECK_ATTEMPTS = 20
+# 60 checks × 5 min = 300 min max wait for UCE
+MAX_CHECK_ATTEMPTS = 60
 
-# 60 checks × 2 min = 120 min max wait for Batch
+# 60 checks × 2 min = 120 min max wait for projection
 MAX_PROJECTION_ATTEMPTS = 60
 
 
 @job('default')
 def run_analysis(job_id):
     """
-    RQ task: submit to SageMaker and exit immediately.
+    RQ task: submit UCE embedding job to Batch and exit immediately.
     A follow-up check_job_result task polls for completion.
     """
     job_instance = Job.objects.get(id=job_id)
@@ -28,8 +27,14 @@ def run_analysis(job_id):
     job_instance.save()
 
     try:
-        output_uri, failure_uri = submit_to_sagemaker(job_instance.s3_input_key)
-        job_instance.result = {'output_uri': output_uri, 'failure_uri': failure_uri}
+        input_s3_uri = f"s3://{settings.AWS_S3_BUCKET}/{job_instance.s3_input_key}"
+        uce_s3_uri = f"s3://{settings.AWS_S3_BUCKET}/uce-results/{job_id}/output.h5ad"
+        batch_job_id = submit_uce_batch_job(
+            input_s3_uri=input_s3_uri,
+            output_s3_uri=uce_s3_uri,
+            job_name=f'uce-{str(job_id)[:8]}',
+        )
+        job_instance.result = {'batch_job_id': batch_job_id, 'uce_s3_uri': uce_s3_uri}
         job_instance.save()
 
         django_rq.get_queue('default').enqueue_in(
@@ -44,8 +49,8 @@ def run_analysis(job_id):
 @job('default')
 def check_job_result(job_id, attempt=0):
     """
-    RQ task: check S3 once for a completed SageMaker output.
-    Re-enqueues itself (up to MAX_CHECK_ATTEMPTS) if the output is not yet ready.
+    RQ task: poll Batch once for a completed UCE job.
+    Re-enqueues itself (up to MAX_CHECK_ATTEMPTS) if the job is still running.
     On success, submits pending projections to Batch.
     """
     job_instance = Job.objects.get(id=job_id)
@@ -54,34 +59,27 @@ def check_job_result(job_id, attempt=0):
         return  # already resolved
 
     try:
-        output_uri = job_instance.result.get('output_uri')
-        failure_uri = job_instance.result.get('failure_uri')
+        batch_job_id = job_instance.result.get('batch_job_id')
+        uce_s3_uri = job_instance.result.get('uce_s3_uri')
+        status, detail = check_batch_job(batch_job_id)
 
-        result = check_sagemaker_result(output_uri, failure_uri)
-
-        if result is not None:
-            uce_s3_uri = result.get('s3_uri') or result.get('uce_s3_uri')
-            job_instance.result = {
-                'uce_s3_uri': uce_s3_uri,
-                'sagemaker_status': result.get('sagemaker_status'),
-            }
+        if status == 'complete':
+            job_instance.result = {'uce_s3_uri': uce_s3_uri}
             job_instance.status = 'complete'
             job_instance.save()
 
             delete_s3_key(job_instance.s3_input_key)
-            request_key = job_instance.s3_input_key.replace('uploads/', 'requests/', 1) + '.json'
-            delete_s3_key(request_key)
-            delete_s3_uri(output_uri)
-            delete_s3_uri(failure_uri)
 
-            # Submit any pending projections now that the UCE embedding is ready
             for projection in job_instance.projections.filter(status='pending'):
                 _submit_projection(projection, uce_s3_uri)
             return
 
+        if status == 'error':
+            raise RuntimeError(detail)
+
         if attempt >= MAX_CHECK_ATTEMPTS:
             raise TimeoutError(
-                f"SageMaker output not ready after {MAX_CHECK_ATTEMPTS * 5} minutes: {output_uri}"
+                f"UCE Batch job not finished after {MAX_CHECK_ATTEMPTS * 5} minutes"
             )
 
         django_rq.get_queue('default').enqueue_in(
