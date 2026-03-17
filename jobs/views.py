@@ -2,8 +2,10 @@ import json
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.db import transaction
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .aws import boto_client, delete_s3_key, delete_s3_uri
@@ -122,7 +124,7 @@ def job_status(request, pk):
         data['error'] = job.result.get('error', '')
 
     projections = []
-    for proj in job.projections.select_related('reference').all():
+    for proj in Projection.objects.select_related('reference').filter(job_id=str(job.pk)):
         p = {
             'id': str(proj.id),
             'reference_name': proj.reference.name,
@@ -214,6 +216,64 @@ def delete_selected_jobs(request):
 
     jobs.delete()
     return redirect('job_list')
+
+
+@csrf_exempt
+@require_POST
+def uce_callback(request):
+    """Internal callback from UCE Batch container."""
+    if not request.headers.get('X-Internal-Request'):
+        return HttpResponseForbidden()
+
+    data = json.loads(request.body)
+    status = data.get('status')
+    uce_s3_uri = data.get('uce_s3_uri')
+
+    if not uce_s3_uri:
+        return JsonResponse({'error': 'uce_s3_uri required'}, status=400)
+
+    try:
+        job = Job.objects.get(result__uce_s3_uri=uce_s3_uri)
+    except Job.DoesNotExist:
+        return JsonResponse({'status': 'not_found'}, status=404)
+
+    if status == 'running':
+        cell_count = data.get('cell_count')
+        with transaction.atomic():
+            job = Job.objects.select_for_update().get(pk=job.pk)
+            job.result = {**job.result, 'cell_count': cell_count}
+            job.save()
+        return JsonResponse({'status': 'ok'})
+
+    if status == 'success':
+        with transaction.atomic():
+            job = Job.objects.select_for_update().get(pk=job.pk)
+            if job.status != 'running':
+                return JsonResponse({'status': 'ignored'})
+            job.status = 'complete'
+            job.result = {k: v for k, v in job.result.items() if k != 'batch_job_id'}
+            job.save()
+            s3_input_key = job.s3_input_key
+            pending_projections = list(job.projections.filter(status='pending'))
+
+        delete_s3_key(s3_input_key)
+        for projection in pending_projections:
+            _submit_projection(projection, uce_s3_uri)
+        return JsonResponse({'status': 'ok'})
+
+    if status == 'error':
+        error_msg = data.get('error', 'Unknown error from UCE container')
+        with transaction.atomic():
+            job = Job.objects.select_for_update().get(pk=job.pk)
+            if job.status != 'running':
+                return JsonResponse({'status': 'ignored'})
+            job.status = 'error'
+            job.result = {**{k: v for k, v in job.result.items() if k != 'batch_job_id'},
+                          'error': error_msg}
+            job.save()
+        return JsonResponse({'status': 'ok'})
+
+    return JsonResponse({'error': 'invalid status'}, status=400)
 
 
 def _delete_job_s3_files(job):

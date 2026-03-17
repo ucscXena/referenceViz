@@ -20,6 +20,9 @@ DATABASES = {
     }
 }
 
+# Base URL of this server for internal callbacks (e.g. 'http://10.0.0.1')
+SERVER_BASE_URL = ''
+
 # AWS / Batch — override these in site_settings_private.py
 AWS_REGION = 'us-east-1'
 AWS_S3_BUCKET = ''

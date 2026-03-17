@@ -50,6 +50,9 @@ class Job(models.Model):
             return self.result.get('uce_s3_uri') or self.result.get('s3_uri')
         return None
 
+    def cell_count(self):
+        return self.result.get('cell_count') if self.result else None
+
 
 class Projection(models.Model):
     """One projection of a Job's UCE embedding into a Reference space."""

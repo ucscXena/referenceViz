@@ -31,7 +31,7 @@
         <td rowspan="{{ pcount }}" class="col-check">
           <input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
         </td>
-        <td rowspan="{{ pcount }}">{{ job.short_uploaded_file }}</td>
+        <td rowspan="{{ pcount }}">{{ job.short_uploaded_file }}{% if job.cell_count %}<br><span class="cell-count">{{ job.cell_count }} cells</span>{% endif %}</td>
         <td rowspan="{{ pcount }}" class="col-date">
           <time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time>
         </td>
@@ -64,7 +64,7 @@
         <td class="col-check">
           <input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
         </td>
-        <td>{{ job.short_uploaded_file }}</td>
+        <td>{{ job.short_uploaded_file }}{% if job.cell_count %}<br><span class="cell-count">{{ job.cell_count }} cells</span>{% endif %}</td>
         <td class="col-date">
           <time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time>
         </td>
@@ -247,6 +247,7 @@ tr[data-proj-row] td {
 .job-table tbody tr:last-child td { border-bottom: 1px solid #f0f0f0; }
 .col-check   { width: 36px; }
 .col-date    { white-space: nowrap; color: #555; }
+.cell-count  { font-size: 0.8rem; color: #888; }
 .col-actions { width: 130px; white-space: nowrap; }
 .no-projections { color: #bbb; }
 

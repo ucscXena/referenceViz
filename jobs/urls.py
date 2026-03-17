@@ -15,4 +15,5 @@ urlpatterns = [
     path('<uuid:job_id>/project/', views.project_existing, name='project_existing'),
     path('projections/<uuid:pk>/download/', views.download_projection, name='download_projection'),
     path('jobs/delete-selected/', views.delete_selected_jobs, name='delete_selected_jobs'),
+    path('uce-callback/', views.uce_callback, name='uce_callback'),
 ]

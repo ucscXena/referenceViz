@@ -43,7 +43,10 @@
           {% for rj in recent_jobs %}
           <li class="recent-item" data-job-id="{{ rj.id }}">
             <button class="recent-btn" type="button">
-              <span class="recent-filename">{{ rj.original_filename }}</span>
+              <span class="recent-filename">
+                {{ rj.original_filename }}
+                {% if rj.cell_count %}<span class="recent-cell-count">{{ rj.cell_count }} cells</span>{% endif %}
+              </span>
               <time datetime="{{ rj.created_at|date:"c" }}" class="recent-date">{{ rj.created_at|date:"Y-m-d" }}</time>
             </button>
           </li>
@@ -290,7 +293,8 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   border-color: #1976d2;
   outline: 2px solid #1976d2;
 }
-.recent-filename { color: #333; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-filename { color: #333; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; flex-direction: column; gap: 2px; }
+.recent-cell-count { font-size: 0.8rem; font-weight: 400; color: #888; }
 .recent-date { color: #888; white-space: nowrap; flex-shrink: 0; }
 .back-link {
   text-align: center;
