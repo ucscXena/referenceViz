@@ -114,9 +114,20 @@ export default el(class extends PureComponent {
 		this.props.onState(state => merge(state, {overlayVar, overlayFiltered: []}));
 	};
 
+	onOverlayHideAll = () => {
+		var {overlay, overlayVar} = this.props.state;
+		var codes = overlay._dicts[overlayVar];
+		this.props.onState(state => merge(state, {overlayFiltered: range(codes.length)}));
+	};
+
+	onOverlayShowAll = () => {
+		this.props.onState(state => merge(state, {overlayFiltered: []}));
+	};
+
 	render() {
 		var {onChange, onLayer, onFilterLayer, onHideAll, onShowAll, onOverlay,
-				onOverlayVar, props: {onState, state}} = this,
+				onOverlayVar, onOverlayHideAll, onOverlayShowAll,
+				props: {onState, state}} = this,
 			{tab: value} = this.state,
 			{imageState, layer, filterLayer, overlayVar = 'None', overlay, hideOverlay} = state,
 			layers = get(imageState, 'phenotypes', []),
@@ -147,6 +158,10 @@ export default el(class extends PureComponent {
 				...(overlayTab ?
 					[tabPanel({value, index: 2},
 						overlaySelect(oVars, overlayVar, onOverlayVar),
+						...(overlayVar !== 'None' ? [
+							div(
+								shButton(onOverlayHideAll, 'Hide all'),
+								shButton(onOverlayShowAll, 'Show all'))] : []),
 						overlayLegend(state, onState))]
 						: [])));
 	}
