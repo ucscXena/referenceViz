@@ -105,7 +105,7 @@ class HierarchicalLegend extends PureComponent {
 					                         backgroundColor:
 					                             allHidden ? '#000000' : colorFn(gc[0])}},
 					                null),
-					            typography({component: 'label', variant: 'body1',
+					            typography({component: 'label', variant: 'body2',
 					                    style: {fontWeight: 'bold', cursor: 'pointer',
 					                            overflow: 'hidden', textOverflow: 'ellipsis',
 					                            whiteSpace: 'nowrap', paddingTop: 4}},
@@ -124,7 +124,7 @@ class HierarchicalLegend extends PureComponent {
 					                            typography({component: 'label',
 					                                    className: legendStyles.label,
 					                                    variant: 'caption',
-					                                    style: {cursor: 'pointer', fontSize: '0.875rem'}},
+					                                    style: {cursor: 'pointer'}},
 					                                codes[code]))))) : null))));
 	}
 }

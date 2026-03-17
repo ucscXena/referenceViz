@@ -18,24 +18,28 @@ var hslToHex = (h, s, l) => {
 		Math.round((b + m) * 255));
 };
 
-// Hue offsets for the wedge: start at center, then expand outward in both
-// directions so adjacent sublabels stay visually related but distinct.
-var wedgeHueShifts = [0, 15, -15, 20, -20, 25, -25, 10, -10, 30, -30, 35, -35];
-
-// Dark → medium → light luminance strips, cycled for each hue position.
+// Dark → medium → light luminance strips.
 var wedgeLightnesses = [38, 54, 68];
 
 var wedgeSaturation = 70;
 
+// Degrees between adjacent hue positions within a strip.
+var wedgeHueStep = 6;
+
 // Generate 'count' colors in a wedge pattern around baseHue.
-// Each group of three consecutive colors uses the same hue shift and cycles
-// through dark / medium / light luminance, then moves to the next hue shift.
-var wedgeColors = (baseHue, count) =>
-	Array.from({length: count}, (_, i) =>
+// Colors are ordered as sorted strips: all dark shades first (sweeping the hue
+// range from most-negative offset to most-positive), then all medium shades,
+// then all light shades. This makes adjacent sublabels look similar and the
+// full list read as a smooth gradient rather than a random sequence.
+var wedgeColors = (baseHue, count) => {
+	var hueCount = Math.ceil(count / wedgeLightnesses.length),
+		hueStart = -Math.floor(hueCount / 2) * wedgeHueStep;
+	return Array.from({length: count}, (_, i) =>
 		hslToHex(
-			(baseHue + wedgeHueShifts[Math.floor(i / 3) % wedgeHueShifts.length] + 360) % 360,
+			(baseHue + hueStart + (i % hueCount) * wedgeHueStep + 360) % 360,
 			wedgeSaturation,
-			wedgeLightnesses[i % 3]));
+			wedgeLightnesses[Math.floor(i / hueCount)]));
+};
 
 // Generate a { codeIndex: hexColor } mapping from a taxonomy and a label list.
 //
