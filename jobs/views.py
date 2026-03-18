@@ -76,7 +76,7 @@ def get_upload_url(request):
 @login_required
 @require_POST
 def confirm_upload(request, job_id):
-    job = get_object_or_404(Job, pk=job_id, user=request.user)
+    job = get_object_or_404(Job, pk=str(job_id), user=request.user)
     data = json.loads(request.body) if request.body else {}
     ref_id = data.get('ref_id')
 
@@ -92,7 +92,7 @@ def confirm_upload(request, job_id):
 @require_POST
 def project_existing(request, job_id):
     """Start a projection for an existing Job (UCE embedding already computed)."""
-    job = get_object_or_404(Job, pk=job_id, user=request.user)
+    job = get_object_or_404(Job, pk=str(job_id), user=request.user)
     data = json.loads(request.body)
     ref_id = data.get('ref_id')
     reference = get_object_or_404(Reference, pk=ref_id)
@@ -121,7 +121,7 @@ def job_list(request):
 
 @login_required
 def job_detail(request, pk):
-    job = get_object_or_404(Job, pk=pk, user=request.user)
+    job = get_object_or_404(Job, pk=str(pk), user=request.user)
     projections = job.projections.select_related('reference').all()
     return render(request, 'jobs/detail.html', {'job': job, 'projections': projections})
 
@@ -129,7 +129,7 @@ def job_detail(request, pk):
 @login_required
 def job_status(request, pk):
     """JSON endpoint for client-side polling. Returns UCE status and all projections."""
-    job = get_object_or_404(Job, pk=pk, user=request.user)
+    job = get_object_or_404(Job, pk=str(pk), user=request.user)
     data = {'status': job.status}
     if job.status == 'error' and job.result:
         data['error'] = job.result.get('error', '')
@@ -175,7 +175,7 @@ def presign_overlay(request):
 @require_POST
 def set_projection_public(request, pk):
     """Toggle the public flag on a projection."""
-    projection = get_object_or_404(Projection, pk=pk, job__user=request.user)
+    projection = get_object_or_404(Projection, pk=str(pk), job__user=request.user)
     data = json.loads(request.body)
     projection.public = bool(data.get('public', False))
     projection.save()
@@ -185,7 +185,7 @@ def set_projection_public(request, pk):
 @login_required
 def download_projection(request, pk):
     """Presigned download for a completed projection result (parquet)."""
-    projection = get_object_or_404(Projection, pk=pk, job__user=request.user)
+    projection = get_object_or_404(Projection, pk=str(pk), job__user=request.user)
     s3_uri = projection.result.get('predictions_s3_uri') if projection.result else None
     if not s3_uri:
         from django.http import Http404
@@ -209,7 +209,7 @@ def download_projection(request, pk):
 @login_required
 def download_result(request, pk):
     """Presigned download for the UCE embedding h5ad (admin use)."""
-    job = get_object_or_404(Job, pk=pk, user=request.user)
+    job = get_object_or_404(Job, pk=str(pk), user=request.user)
     s3_uri = job.uce_s3_uri()
     if not s3_uri:
         from django.http import Http404
