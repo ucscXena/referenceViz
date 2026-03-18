@@ -59,12 +59,9 @@
             —
           {% endif %}
         </td>
-        <td class="col-public">
-          {% if proj.status == 'complete' %}
-            <input type="checkbox" class="public-checkbox" data-proj-id="{{ proj.id }}"{% if proj.public %} checked{% endif %} title="Allow URL sharing">
-          {% else %}
-            —
-          {% endif %}
+        <td class="col-public proj-public-cell{% if proj.status == 'complete' %} is-complete{% endif %}" data-proj-id="{{ proj.id }}">
+          <input type="checkbox" class="public-checkbox" data-proj-id="{{ proj.id }}"{% if proj.public %} checked{% endif %} title="Allow URL sharing">
+          <span class="public-dash">—</span>
         </td>
       </tr>
       {% empty %}
@@ -229,6 +226,10 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
               const vizUrl = `/visualization/${proj.reference_id}/?overlay=${encodeURIComponent(proj.s3_uri)}`;
               downloadCell.innerHTML = `<a href="/jobs/projections/${proj.id}/download/" class="link-download">Download</a> <a href="${vizUrl}" class="link-viz">Viz</a>`;
             }
+            if (proj.status === 'complete') {
+              document.querySelector(`.proj-public-cell[data-proj-id="${proj.id}"]`)
+                ?.classList.add('is-complete');
+            }
           });
 
           // If UCE just completed, reload so projection rows appear.
@@ -289,6 +290,9 @@ tr.job-row-alt td {
 .col-check   { width: 36px; }
 .col-date    { white-space: nowrap; color: #555; }
 .col-public  { width: 56px; text-align: center; }
+.proj-public-cell .public-checkbox { display: none; }
+.proj-public-cell.is-complete .public-checkbox { display: inline-block; }
+.proj-public-cell.is-complete .public-dash { display: none; }
 .cell-count  { font-size: 0.8rem; color: #888; }
 .col-actions { width: 130px; white-space: nowrap; }
 .no-projections { color: #bbb; }
