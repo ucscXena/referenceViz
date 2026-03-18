@@ -308,14 +308,14 @@ def _delete_job_s3_files(job):
     # UCE embedding (kept until job is deleted)
     delete_s3_uri(result.get('uce_s3_uri') or result.get('s3_uri'))
 
-    # Input file and SageMaker request JSON (normally gone after completion,
+    # Input file and UCE request JSON (normally gone after completion,
     # but may still exist for pending/running/error jobs)
     delete_s3_key(job.s3_input_key)
     if job.s3_input_key:
         request_key = job.s3_input_key.replace('uploads/', 'requests/', 1) + '.json'
         delete_s3_key(request_key)
 
-    # SageMaker envelope files (stored in result while running)
+    # Batch output/failure URIs (stored in result while running)
     delete_s3_uri(result.get('output_uri'))
     delete_s3_uri(result.get('failure_uri'))
 
