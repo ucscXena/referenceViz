@@ -113,6 +113,15 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   });
 });
 
+// Alternating job-group background
+(function() {
+  let alt = false;
+  document.querySelectorAll('.job-table tbody tr').forEach(row => {
+    if ('jobId' in row.dataset) alt = !alt;
+    if (alt) row.classList.add('job-row-alt');
+  });
+})();
+
 // Checkbox / delete button
 document.getElementById('select-all') && (document.getElementById('select-all').onclick = function() {
   document.querySelectorAll('.job-checkbox').forEach(cb => cb.checked = this.checked);
@@ -266,15 +275,17 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
 }
 .job-table td {
   padding: 8px 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: none;
   vertical-align: middle;
 }
-/* Visually group projection sub-rows within a job */
+/* Separator between projection sub-rows within a job */
 tr[data-proj-row] td {
-  border-bottom: 1px solid #f8f8f8;
-  background: #fdfdfd;
+  border-top: 1px solid #eeeeee;
 }
-.job-table tbody tr:last-child td { border-bottom: 1px solid #f0f0f0; }
+/* Alternating background per job group (applied by JS) */
+tr.job-row-alt td {
+  background-color: #f5f5f5;
+}
 .col-check   { width: 36px; }
 .col-date    { white-space: nowrap; color: #555; }
 .col-public  { width: 56px; text-align: center; }
