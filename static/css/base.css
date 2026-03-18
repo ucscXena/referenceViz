@@ -55,6 +55,26 @@ body.base-root {
   text-decoration: underline;
 }
 
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex: 1;
+  padding-left: 32px;
+}
+
+.header-nav-link {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #444;
+  text-decoration: none;
+}
+
+.header-nav-link:hover,
+.header-nav-link--active {
+  color: #1976d2;
+}
+
 /* ── Page content ───────────────────────────────────────── */
 .base-content {
   display: flex;

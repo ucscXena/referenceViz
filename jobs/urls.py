@@ -17,4 +17,5 @@ urlpatterns = [
     path('projections/<uuid:pk>/set-public/', views.set_projection_public, name='set_projection_public'),
     path('jobs/delete-selected/', views.delete_selected_jobs, name='delete_selected_jobs'),
     path('uce-callback/', views.uce_callback, name='uce_callback'),
+    path('user-status/', views.user_status, name='user_status'),
 ]

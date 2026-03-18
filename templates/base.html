@@ -19,6 +19,10 @@
       <a href="/jobs/" class="header-logo-link">
         <img src="{% static 'img/ucsc-be-logo.webp' %}" alt="UCSC Brain Explorer" class="header-logo">
       </a>
+      <nav class="header-nav">
+        <a href="/references/" class="header-nav-link">References</a>
+        <a href="/jobs/" class="header-nav-link header-nav-link--active">My Dashboard</a>
+      </nav>
       {% if user.email %}
       <div class="header-user">
         <span class="header-email">{{ user.email }}</span>

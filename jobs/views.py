@@ -13,6 +13,17 @@ from .models import Job, Projection, Reference
 from .tasks import run_analysis, _submit_projection
 
 
+@require_GET
+def user_status(request):
+    """Return current user info for cross-app header rendering."""
+    if request.user.is_authenticated:
+        return JsonResponse({
+            'email': request.user.email,
+            'logout_url': '/accounts/logout/',
+        })
+    return JsonResponse({'email': None})
+
+
 @login_required
 @require_GET
 def reference_list(request):
