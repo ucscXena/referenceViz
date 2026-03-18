@@ -67,6 +67,7 @@ class Projection(models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='projections')
     reference = models.ForeignKey(Reference, on_delete=models.CASCADE, related_name='projections')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    public = models.BooleanField(default=False)
     batch_job_id = models.CharField(max_length=255, blank=True)
     result = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

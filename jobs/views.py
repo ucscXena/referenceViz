@@ -142,12 +142,15 @@ def job_status(request, pk):
     return JsonResponse(data)
 
 
-@login_required
 @require_GET
 def presign_overlay(request):
-    """Return a fresh presigned URL for an S3 URI, after verifying ownership."""
+    """Return a fresh presigned URL for an S3 URI.
+    Public projections are accessible without login; private ones require ownership."""
     s3_uri = request.GET.get('uri', '')
-    get_object_or_404(Projection, result__s3_uri=s3_uri, job__user=request.user)
+    projection = get_object_or_404(Projection, result__s3_uri=s3_uri)
+    if not projection.public:
+        if not request.user.is_authenticated or projection.job.user != request.user:
+            return HttpResponseForbidden()
     bucket, key = s3_uri.replace('s3://', '').split('/', 1)
     url = boto_client('s3').generate_presigned_url(
         'get_object',
@@ -155,6 +158,17 @@ def presign_overlay(request):
         ExpiresIn=3600,
     )
     return JsonResponse({'url': url})
+
+
+@login_required
+@require_POST
+def set_projection_public(request, pk):
+    """Toggle the public flag on a projection."""
+    projection = get_object_or_404(Projection, pk=pk, job__user=request.user)
+    data = json.loads(request.body)
+    projection.public = bool(data.get('public', False))
+    projection.save()
+    return JsonResponse({'public': projection.public})
 
 
 @login_required

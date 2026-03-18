@@ -18,6 +18,7 @@
         <th class="col-ref">Reference</th>
         <th class="col-pstatus">Status</th>
         <th class="col-actions">Actions</th>
+        <th class="col-public">Public</th>
       </tr>
     </thead>
     <tbody>
@@ -58,6 +59,13 @@
             —
           {% endif %}
         </td>
+        <td class="col-public">
+          {% if proj.status == 'complete' %}
+            <input type="checkbox" class="public-checkbox" data-proj-id="{{ proj.id }}"{% if proj.public %} checked{% endif %} title="Allow URL sharing">
+          {% else %}
+            —
+          {% endif %}
+        </td>
       </tr>
       {% empty %}
       <tr data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
@@ -79,13 +87,14 @@
           {% endif %}
         </td>
         <td class="no-projections">—</td>
+        <td class="no-projections">—</td>
       </tr>
       {% endfor %}
 
       {% endwith %}
       {% endwith %}
     {% empty %}
-      <tr><td colspan="6" class="empty-row">No mappings yet.</td></tr>
+      <tr><td colspan="7" class="empty-row">No mappings yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -117,6 +126,27 @@ function toggleDeleteButton() {
 document.getElementById('job-list-form').onsubmit = function(e) {
   if (!confirm('Delete the selected mappings?')) e.preventDefault();
 };
+
+// Public toggle
+const csrfToken = '{{ csrf_token }}';
+document.querySelectorAll('.public-checkbox').forEach(cb => {
+  cb.addEventListener('change', function() {
+    const projId = this.dataset.projId;
+    const checked = this.checked;
+    this.disabled = true;
+    fetch(`/jobs/projections/${projId}/set-public/`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+      body: JSON.stringify({public: checked}),
+    }).then(r => {
+      if (!r.ok) this.checked = !checked; // revert on error
+    }).catch(() => {
+      this.checked = !checked;
+    }).finally(() => {
+      this.disabled = false;
+    });
+  });
+});
 
 // Status polling
 (function() {
@@ -247,6 +277,7 @@ tr[data-proj-row] td {
 .job-table tbody tr:last-child td { border-bottom: 1px solid #f0f0f0; }
 .col-check   { width: 36px; }
 .col-date    { white-space: nowrap; color: #555; }
+.col-public  { width: 56px; text-align: center; }
 .cell-count  { font-size: 0.8rem; color: #888; }
 .col-actions { width: 130px; white-space: nowrap; }
 .no-projections { color: #bbb; }
