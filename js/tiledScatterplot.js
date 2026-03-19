@@ -154,7 +154,7 @@ var initialZoom = props => {
 
 var currentScale = (levels, zoom, scale) => Math.pow(2, levels - zoom - 1) / scale;
 
-var overlayLayer = ({data, modelMatrix, radius, overlayRadius, visible, overlayVar,
+var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayVar,
 		overlayFiltered}) =>
 	new ScatterplotLayer({
 		id: 'scatterplot-overlay',
