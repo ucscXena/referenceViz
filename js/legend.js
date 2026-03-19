@@ -22,7 +22,7 @@ class Legend extends PureComponent {
 
 	render() {
 		var {labels, colors, titles, max, labelheader, footnotes, addBreakend = 0,
-				codes, checked, addNullNotation = 0, inline, onClick} = this.props,
+				codes, checked, highlighted, addNullNotation = 0, inline, onClick} = this.props,
 			style = classNames(onClick && compStyles.clickable,
 				inline && compStyles.inline),
 			ellipsis = labels.length > max,
@@ -30,7 +30,8 @@ class Legend extends PureComponent {
 				([l, t, code], i) =>
 					div({key: i, 'data-code': code, title: t,
 							className: compStyles.item},
-						div({className: compStyles.colorBox,
+						div({className: classNames(compStyles.colorBox,
+								highlighted && highlighted[i] && compStyles.colorBoxSelected),
 								style: colors ? {backgroundColor: colors[i]} : {}},
 							checked && checked[i] ? icon('check') : null),
 						typography({component: 'label', className: compStyles.label,

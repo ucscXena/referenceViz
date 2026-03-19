@@ -154,28 +154,23 @@ var initialZoom = props => {
 
 var currentScale = (levels, zoom, scale) => Math.pow(2, levels - zoom - 1) / scale;
 
-var overlayLayer = ({data, modelMatrix, radius, visible, overlayVar,
+var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayVar,
 		overlayFiltered}) =>
 	new ScatterplotLayer({
 		id: 'scatterplot-overlay',
 		data: {...data, length: data.x.length},
 		visible,
 		modelMatrix,
-		getLineWidth: 5,
 		pickable: true,
 		antialiasing: false,
 		// XXX switch to buffers
 		getPosition: (_, {index, data}) =>  [data.x[index], data.y[index]],
-		lineWidthMinPixels: 1,
-		lineWidthMaxPixels: 1,
 		radiusUnits: 'pixels',
-		getRadius: radius + 1,
+		getRadius: overlayRadius,
 		radiusMinPixels: 1,
-		stroked: true,
-		getStrokeColor: [0, 0, 0],
-		getFillColor: [255, 255, 255],
+		getFillColor: [0, 0, 0],
 		updateTriggers: {
-			getRadius: [radius],
+			getRadius: [overlayRadius],
 			getFilterValue: [overlayVar, overlayFiltered],
 		},
 		filterRange: [1, 1],
@@ -188,11 +183,11 @@ var overlayLayer = ({data, modelMatrix, radius, visible, overlayVar,
 
 class TiledScatterplot extends PureComponent {
 	static displayName = 'TiledScatterplot';
-	getScale = memoize1((codes, hidden) =>
-		colorScale(setScale(['ordinal', codes.length], hidden)));
+	getScale = memoize1(codes =>
+		colorScale(setScale(['ordinal', codes.length])));
 
 	onTooltip = ev => {
-		if (ev.index >= 0) {
+		if (ev.index >= 0 && ev.tile) {
 			let [, , i] = ev.tile.layers[0].props.data[ev.index];
 			this.props.onTooltip(i);
 		} else {
@@ -210,10 +205,10 @@ class TiledScatterplot extends PureComponent {
 			{layer, filterLayer, onTileData} = props,
 			// XXX color0? Probably should be cut
 			{image, imageState, overlay, overlayVar, overlayFiltered,
-				hideOverlay, radius, hidden = [], filtered: filterColors = []} = props,
+				hideOverlay, radius, overlayRadius, hidden = [], filtered: filterColors = []} = props,
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
-			colorfn = this.getScale(codes, hidden),
+			colorfn = this.getScale(codes),
 			{image_scalef: scale = 1, offset = [0, 0]} = imageState,
 			adj = (1 << imageState.levels - 1),
 			modelMatrix = getM(scale / adj, offset.map(c => c / adj));
@@ -252,7 +247,7 @@ class TiledScatterplot extends PureComponent {
 					onTileData
 				}),
 				...(overlay ? [overlayLayer({data: overlay, visible: !hideOverlay,
-					radius, modelMatrix, overlayVar, overlayFiltered})] : [])
+					radius, overlayRadius, modelMatrix, overlayVar, overlayFiltered})] : [])
 			],
 			views,
 			controller: true,

@@ -18,7 +18,7 @@ import {tableFromIPC} from 'apache-arrow';
 var {ajax} = Rx.Observable;
 
 // XXX currently ignoring radiusBase param
-var dotRange = () => Let((min = 0.5, max = 10) =>
+var dotRange = () => Let((min = 0.5, max = 6) =>
 	({min, max, step: (max - min) / 200}));
 
 var iconButton = el(IconButton);
@@ -57,20 +57,26 @@ var tooltipValueView = (code, color, onClick) =>
 	);
 
 var labelFormat = v => v.toPrecision(2);
-var dotSize = ({state, onRadius: onChange}) =>
-	!state.radiusBase ? null :
-	div(label('Dot size'),
-		slider({...dotRange(state.radiusBase),
+var dotSlider = (labelTxt, range, value, onChange) =>
+	div(label(labelTxt),
+		slider({...range,
 			valueLabelDisplay: 'auto',
 			valueLabelFormat: labelFormat,
-			marks: [{value: state.radiusBase,
-				label: state.radiusBase.toPrecision(2)}],
-				value: state.radius, onChange}));
+			value, onChange}));
+
+var dotSizes = ({state, onRadius, onOverlayRadius, hasOverlay}) =>
+	!state.radiusBase ? null :
+	div(dotSlider('Reference', dotRange(state.radiusBase), state.radius, onRadius),
+		...(hasOverlay ?
+			[dotSlider('Mapped data', dotRange(state.radiusBase), state.overlayRadius,
+				onOverlayRadius)] :
+			[]));
 
 var s = (...args) => id(...args).join(' ');
 
-var controlsView = ({state, showControls, onControls, onRadius}) =>
-	Let((controls = id(dotSize({state, onRadius}))) =>
+var controlsView = ({state, showControls, onControls, onRadius, onOverlayRadius,
+		hasOverlay}) =>
+	Let((controls = id(dotSizes({state, onRadius, onOverlayRadius, hasOverlay}))) =>
 		div({className: s(styles.controls,
 			              showControls && controls.length && styles.open)},
 			...(showControls ? controls : []),
@@ -109,7 +115,8 @@ export default el(class SinglecellView extends PureComponent {
 		tooltipValue: undefined,
 		scale: null,
 		showControls: false,
-		radius: 2
+		radius: 1.5,
+		overlayRadius: 3
 	};
 	//	For displaying FPS
 	componentDidMount() {
@@ -177,8 +184,8 @@ export default el(class SinglecellView extends PureComponent {
 		}
 	};
 	findSample = memoize1((samples, id) => indexOf(samples, id, true));
-	getScale = memoize1((codes, hidden) =>
-		colorScale(setScale(['ordinal', codes.length], hidden)));
+	getScale = memoize1(codes =>
+		colorScale(setScale(['ordinal', codes.length])));
 	onTooltip = i => {
 		this.setState({tooltipValue: i, tooltipID: undefined});
 	};
@@ -192,6 +199,9 @@ export default el(class SinglecellView extends PureComponent {
 		// XXX add handle for click on label. See Map.js
 		this.setState({radius});
 	};
+	onOverlayRadius = (ev, overlayRadius) => {
+		this.setState({overlayRadius});
+	};
 	onTileData = tileData => {
 		this.props.onState(state => merge(state, {tileData}));
 	};
@@ -200,18 +210,18 @@ export default el(class SinglecellView extends PureComponent {
 		var handlers = pick(this.props, (v, k) => k.startsWith('on'));
 
 		var {onViewState, onTooltip, onClose, onControls, onDeck, /*onLayer, */onRadius,
-			onReload, onTileData} = this,
+			onOverlayRadius, onReload, onTileData} = this,
 			{image, state, onState, onShadow} = this.props,
 			{hidden, filtered, layer, filterLayer, imageState, overlay,
 				hideOverlay, overlayVar, overlayFiltered = []} = state || {},
 			error = this.state.error,
 			unit = false,
-			{container, tooltipValue, showControls, radius,
+			{container, tooltipValue, showControls, radius, overlayRadius,
 				viewState} = this.state,
 			loading = !imageState,
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
-			tooltipColor = this.getScale(codes, hidden)(tooltipValue),
+			tooltipColor = this.getScale(codes)(tooltipValue),
 			count = get(imageState, 'count'),
 			name = get(imageState, 'reference_name');
 
@@ -222,8 +232,9 @@ export default el(class SinglecellView extends PureComponent {
 				count ? span(`${count.toLocaleString()} cells`) : ''),
 			span({className: styles.fps, ref: this.onFPSRef}),
 			div({className: styles.graphWrapper, ref: this.onRef},
-				controlsView({state: {radiusBase: 10, radius}, showControls, onControls,
-					onRadius, onShadow}),
+				controlsView({state: {radiusBase: 10, radius, overlayRadius},
+					showControls, onControls, onRadius, onOverlayRadius,
+					hasOverlay: !!overlay, onShadow}),
 				get(state, 'showColorPicker') ? colorPicker({state, onState, layer}) :
 					null,
 				...(unit ? [scale(this.state.scale)] : []),
@@ -232,7 +243,7 @@ export default el(class SinglecellView extends PureComponent {
 					: []),
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
-					onTooltip, radius, viewState, hidden, filtered, image,
+					onTooltip, radius, overlayRadius, viewState, hidden, filtered, image,
 					imageState, overlay, overlayVar, overlayFiltered, hideOverlay, layer, filterLayer, container,
 					key: 'drawing'})));
 	}

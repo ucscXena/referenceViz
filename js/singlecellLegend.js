@@ -10,14 +10,16 @@ import {Let, concat, conj, contains, getIn, memoize1, merge, uniq, without} from
 import cmpCodes from './cmpCodes';
 import setScale from './setScale';
 
-function codedLegend({column: {color, codes, codesInView}, onClick}) {
+function codedLegend({column: {color, codes, codesInView, hidden = []}, onClick}) {
 	var colorFn = colorScale(color),
 		data = codesInView.sort(cmpCodes(codes)),
+		hiddenSet = new Set(hidden),
+		highlighted = data.map(d => hiddenSet.has(d)),
 		colors = data.map(colorFn),
 		labels = data.map(d => codes[d]);
 
 	return legend({colors, codes: data, labels, titles: labels, onClick, max: Infinity,
-		inline: true});
+		inline: true, highlighted});
 }
 
 var firstMatch = (el, selector) =>
@@ -54,6 +56,7 @@ export default function(state, onState) {
 			column: {
 				codes,
 				codesInView: codesInView(tileData, filtered),
-				color: setScale(['ordinal', codes.length, customColor], hidden)
+				color: setScale(['ordinal', codes.length, customColor]),
+			hidden
 			}});
 }
