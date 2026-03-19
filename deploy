@@ -53,6 +53,7 @@ ssh -l${USER} ${HOST} <<-ENDSSH
     set -o errexit
     set -o xtrace
     cp ~/settings/site_settings.py /var/www/backend/django/server/site_settings.py
+    cp ~/settings/config.js /var/www/html/config.js
     . /var/www/backend/virtualenv/bin/activate
     cd /var/www/backend/django
     # Stop rqworker before touching code. It runs jobs for 40+ minutes and
