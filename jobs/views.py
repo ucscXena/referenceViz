@@ -340,6 +340,52 @@ def uce_callback(request):
     return JsonResponse({'error': 'invalid status'}, status=400)
 
 
+@csrf_exempt
+@require_POST
+def projection_callback(request):
+    """Internal callback from projection Batch container."""
+    if not request.headers.get('X-Internal-Request'):
+        return HttpResponseForbidden()
+
+    data = json.loads(request.body)
+    status = data.get('status')
+    output_s3_uri = data.get('output_s3_uri')
+
+    if not output_s3_uri:
+        return JsonResponse({'error': 'output_s3_uri required'}, status=400)
+
+    try:
+        projection = Projection.objects.get(result__output_s3_uri=output_s3_uri)
+    except Projection.DoesNotExist:
+        return JsonResponse({'status': 'not_found'}, status=404)
+
+    if status == 'success':
+        with transaction.atomic():
+            projection = Projection.objects.select_for_update().get(pk=str(projection.pk))
+            if projection.status != 'running':
+                return JsonResponse({'status': 'ignored'})
+            projection.result = {
+                's3_uri': projection.result.get('output_s3_uri'),
+                'predictions_s3_uri': projection.result.get('predictions_s3_uri'),
+            }
+            projection.status = 'complete'
+            projection.save()
+        return JsonResponse({'status': 'ok'})
+
+    if status == 'error':
+        error_msg = data.get('error', 'Unknown error from projection container')
+        with transaction.atomic():
+            projection = Projection.objects.select_for_update().get(pk=str(projection.pk))
+            if projection.status != 'running':
+                return JsonResponse({'status': 'ignored'})
+            projection.result = {**projection.result, 'error': error_msg}
+            projection.status = 'error'
+            projection.save()
+        return JsonResponse({'status': 'ok'})
+
+    return JsonResponse({'error': 'invalid status'}, status=400)
+
+
 def _delete_job_s3_files(job):
     """Delete all S3 files associated with a job and its projections."""
     result = job.result or {}

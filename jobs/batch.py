@@ -30,22 +30,26 @@ def submit_uce_batch_job(input_s3_uri, output_s3_uri, callback_url, job_name='uc
     return response['jobId']
 
 
-def submit_batch_job(uce_s3_uri, ref_s3_uri, output_s3_uri, predictions_s3_uri, job_name='cell-mapping'):
+def submit_batch_job(uce_s3_uri, ref_s3_uri, output_s3_uri, predictions_s3_uri,
+                     callback_url=None, job_name='cell-mapping'):
     """
     Submit a projection job to AWS Batch.
     Returns the Batch job ID.
     """
     batch = boto_client('batch')
+    parameters = {
+        'input_s3': uce_s3_uri,
+        'ref_s3': ref_s3_uri,
+        'output_s3': output_s3_uri,
+        'predictions_s3': predictions_s3_uri,
+    }
+    if callback_url:
+        parameters['callback_url'] = callback_url
     response = batch.submit_job(
         jobName=job_name,
         jobQueue=settings.BATCH_JOB_QUEUE,
         jobDefinition=settings.BATCH_JOB_DEFINITION,
-        parameters={
-            'input_s3': uce_s3_uri,
-            'ref_s3': ref_s3_uri,
-            'output_s3': output_s3_uri,
-            'predictions_s3': predictions_s3_uri,
-        },
+        parameters=parameters,
     )
     return response['jobId']
 

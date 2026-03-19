@@ -118,11 +118,13 @@ def _submit_projection(projection, uce_s3_uri):
     output_s3_uri = f"{base_uri}/output.arrow"
     predictions_s3_uri = f"{base_uri}/predictions.tsv"
     try:
+        callback_url = f"{settings.SERVER_BASE_URL}/jobs/projection-callback/"
         batch_job_id = submit_batch_job(
             uce_s3_uri=uce_s3_uri,
             ref_s3_uri=projection.reference.s3_uri,
             output_s3_uri=output_s3_uri,
             predictions_s3_uri=predictions_s3_uri,
+            callback_url=callback_url,
             job_name=f'cell-mapping-{str(projection.id)[:8]}',
         )
         projection.batch_job_id = batch_job_id
