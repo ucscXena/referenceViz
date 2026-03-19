@@ -1,7 +1,7 @@
 /* base.css */
 body.base-root {
   background-color: #f5f5f5;
-  font-family: Roboto, sans-serif;
+  font-family: Inter, sans-serif;
   padding: 0;
   margin: 0;
   min-height: 100vh;
@@ -12,7 +12,7 @@ body.base-root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 12px;
   height: 56px;
   background-color: #fff;
   border-bottom: 1px solid #e0e0e0;
@@ -47,7 +47,7 @@ body.base-root {
 .btn-logout {
   font-size: 0.875rem;
   font-weight: 500;
-  color: #1976d2;
+  color: #1c7cc7;
   text-decoration: none;
 }
 
@@ -58,21 +58,23 @@ body.base-root {
 .header-nav {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 8px;
   flex: 1;
-  padding-left: 32px;
+  padding-left: 16px;
 }
 
 .header-nav-link {
   font-size: 0.875rem;
   font-weight: 500;
-  color: #444;
+  color: rgb(33, 43, 54);
   text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 4px;
 }
 
 .header-nav-link:hover,
 .header-nav-link--active {
-  color: #1976d2;
+  background-color: #f6f6f7;
 }
 
 /* ── Page content ───────────────────────────────────────── */
@@ -123,7 +125,7 @@ body.base-root {
   font-size: 0.875rem;
   font-weight: 500;
   color: #fff;
-  background-color: #1976d2;
+  background-color: #1c7cc7;
   border: none;
   border-radius: 4px;
   cursor: pointer;
