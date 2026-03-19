@@ -178,7 +178,7 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
   function formatEst(seconds) {
     if (seconds == null) return '<br><span class="status-est">estimating\u2026</span>';
     const mins = Math.round(seconds / 60);
-    const text = mins <= 0 ? 'finishing\u2026' : '~' + mins + ' min';
+    const text = '~' + mins + ' min';
     return '<br><span class="status-est">' + text + '</span>';
   }
 

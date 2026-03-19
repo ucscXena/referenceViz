@@ -136,11 +136,7 @@ def _estimate_uce_remaining(job):
     cell_count = job.cell_count()
     if not cell_count:
         # Cell count not yet reported — count down through startup window.
-        # Once startup time has elapsed and we still have no cell count, return
-        # None ("estimating…") rather than 0 ("finishing…"), since we genuinely
-        # don't know where we are until the container reports progress.
-        remaining = settings.UCE_STARTUP_SECONDS - elapsed
-        return max(0, int(remaining)) if remaining > 0 else None
+        return max(0, int(settings.UCE_STARTUP_SECONDS - elapsed))
     gpu_count = (job.result.get('num_gpus') if job.result else None) or 4
     total = settings.UCE_STARTUP_SECONDS + cell_count * settings.UCE_SECONDS_PER_CELL_PER_GPU / gpu_count + settings.PROJ_STARTUP_SECONDS + cell_count * settings.PROJ_SECONDS_PER_CELL
     return max(0, int(total - elapsed))
