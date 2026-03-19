@@ -4,7 +4,12 @@
 
   <div class="list-toolbar">
     <h1 class="list-title">Cell Mappings</h1>
-    <a href="{% url 'reference_list' %}" class="base-button">Map new cells</a>
+    <div class="toolbar-actions">
+      <button class="btn-notify" id="btn-notify" title="Notify me when a job completes">
+        <span class="material-icons" id="notify-icon">notifications_none</span>
+      </button>
+      <a href="{% url 'reference_list' %}" class="base-button">Map new cells</a>
+    </div>
   </div>
 
   <form method="post" action="{% url 'delete_selected_jobs' %}" id="job-list-form">
@@ -149,6 +154,53 @@ document.getElementById('job-list-form').onsubmit = function(e) {
   if (!confirm('Delete the selected mappings?')) e.preventDefault();
 };
 
+// Notifications
+(function() {
+  const PREF_KEY = 'notifyOnComplete';
+  const btn = document.getElementById('btn-notify');
+  const icon = document.getElementById('notify-icon');
+
+  function isEnabled() {
+    return Notification.permission === 'granted' && localStorage.getItem(PREF_KEY) === '1';
+  }
+
+  function updateButton() {
+    const denied = Notification.permission === 'denied';
+    icon.textContent = isEnabled() ? 'notifications' : 'notifications_none';
+    btn.classList.toggle('btn-notify--active', isEnabled());
+    btn.title = denied
+      ? 'Notifications blocked — check browser settings'
+      : isEnabled() ? 'Notifications on — click to turn off' : 'Notify me when a job completes';
+    btn.disabled = denied;
+  }
+
+  btn.addEventListener('click', function() {
+    if (Notification.permission === 'denied') return;
+    if (isEnabled()) {
+      localStorage.removeItem(PREF_KEY);
+      updateButton();
+    } else if (Notification.permission === 'granted') {
+      localStorage.setItem(PREF_KEY, '1');
+      updateButton();
+    } else {
+      Notification.requestPermission().then(function(result) {
+        if (result === 'granted') localStorage.setItem(PREF_KEY, '1');
+        updateButton();
+      });
+    }
+  });
+
+  updateButton();
+
+  window.notifyJobComplete = function(filename) {
+    if (!isEnabled()) return;
+    new Notification('Cell mapping complete', {
+      body: filename || 'Your job has finished.',
+      icon: '/static/favicons/favicon-32x32.png',
+    });
+  };
+})();
+
 // Public toggle
 const csrfToken = '{{ csrf_token }}';
 document.querySelectorAll('.public-checkbox').forEach(cb => {
@@ -173,6 +225,8 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
 // Status polling
 (function() {
   const TERMINAL = new Set(['complete', 'error']);
+  // Track last-known projection statuses for transition detection
+  const projLastStatus = new Map();
   const LABELS = {pending: 'Pending', running: 'Running', complete: 'Complete', error: 'Error'};
 
   function formatEst(seconds) {
@@ -277,9 +331,18 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
           // If UCE just completed, reload so projection rows appear.
           if (data.status === 'complete' && prevStatus !== 'complete' &&
               (data.projections || []).length > 0) {
-			console.log('reloading', data.status);
             window.location.reload();
           }
+
+          // Notify when a projection completes.
+          (data.projections || []).forEach(proj => {
+            const prev = projLastStatus.get(proj.id);
+            if (proj.status === 'complete' && prev !== undefined && prev !== 'complete') {
+              const filename = row.querySelector('.job-file-cell')?.firstChild?.textContent?.trim();
+              window.notifyJobComplete?.(filename);
+            }
+            projLastStatus.set(proj.id, proj.status);
+          });
         }).catch(() => {});
     });
 
@@ -357,5 +420,17 @@ tr.job-row-alt td {
 }
 .btn-delete:disabled { background: #bdbdbd; cursor: default; }
 .empty-row { color: #888; text-align: center; padding: 2rem; }
+
+.toolbar-actions { display: flex; align-items: center; gap: 0.5rem; }
+.btn-notify {
+  background: none; border: none; cursor: pointer;
+  padding: 6px; border-radius: 4px; color: #888;
+  display: flex; align-items: center;
+  transition: color 0.15s, background 0.15s;
+}
+.btn-notify:hover { background: #f0f0f0; color: #555; }
+.btn-notify--active { color: #1565c0; }
+.btn-notify--active:hover { background: #e3eefa; color: #1565c0; }
+.btn-notify:disabled { opacity: 0.4; cursor: default; }
 </style>
 {% endblock %}
