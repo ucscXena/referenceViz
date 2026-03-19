@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import django_rq
 from django.conf import settings
+from django.utils import timezone
 from django_rq import job
 
 from .aws import delete_s3_key, delete_s3_uri
@@ -126,7 +127,11 @@ def _submit_projection(projection, uce_s3_uri):
         )
         projection.batch_job_id = batch_job_id
         projection.status = 'running'
-        projection.result = {'output_s3_uri': output_s3_uri, 'predictions_s3_uri': predictions_s3_uri}
+        projection.result = {
+            'output_s3_uri': output_s3_uri,
+            'predictions_s3_uri': predictions_s3_uri,
+            'submitted_at': timezone.now().isoformat(),
+        }
         projection.save()
 
         django_rq.get_queue('default').enqueue_in(

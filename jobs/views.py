@@ -2,6 +2,8 @@ import json
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.db import transaction
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -126,6 +128,42 @@ def job_detail(request, pk):
     return render(request, 'jobs/detail.html', {'job': job, 'projections': projections})
 
 
+def _estimate_uce_remaining(job):
+    """Estimated seconds until UCE embedding completes, or None if terminal."""
+    if job.status not in ('pending', 'running'):
+        return None
+    elapsed = (timezone.now() - job.created_at).total_seconds()
+    cell_count = job.cell_count()
+    if not cell_count:
+        # Cell count not yet reported — count down through startup window.
+        # Once startup time has elapsed and we still have no cell count, return
+        # None ("estimating…") rather than 0 ("finishing…"), since we genuinely
+        # don't know where we are until the container reports progress.
+        remaining = settings.UCE_STARTUP_SECONDS - elapsed
+        return max(0, int(remaining)) if remaining > 0 else None
+    gpu_count = (job.result.get('num_gpus') if job.result else None) or 4
+    total = settings.UCE_STARTUP_SECONDS + cell_count * settings.UCE_SECONDS_PER_CELL_PER_GPU / gpu_count + settings.PROJ_STARTUP_SECONDS + cell_count * settings.PROJ_SECONDS_PER_CELL
+    return max(0, int(total - elapsed))
+
+
+def _estimate_projection_remaining(proj, job):
+    """Estimated seconds until this projection completes, or None if unknown/irrelevant."""
+    if proj.status not in ('pending', 'running'):
+        return None
+    if job.status != 'complete':
+        # UCE still running — client shows UCE status, skip projection estimate
+        return None
+    cell_count = job.cell_count() or 0
+    total = settings.PROJ_STARTUP_SECONDS + cell_count * settings.PROJ_SECONDS_PER_CELL
+    if proj.status == 'running':
+        submitted_at_str = proj.result.get('submitted_at') if proj.result else None
+        submitted_at = parse_datetime(submitted_at_str) if submitted_at_str else timezone.now()
+        elapsed = (timezone.now() - submitted_at).total_seconds()
+        return max(0, int(total - elapsed))
+    # pending + job complete: transient hand-off state, elapsed ≈ 0
+    return int(total)
+
+
 @login_required
 def job_status(request, pk):
     """JSON endpoint for client-side polling. Returns UCE status and all projections."""
@@ -133,6 +171,9 @@ def job_status(request, pk):
     data = {'status': job.status}
     if job.status == 'error' and job.result:
         data['error'] = job.result.get('error', '')
+    if job.status in ('pending', 'running'):
+        data['estimated_remaining_seconds'] = _estimate_uce_remaining(job)
+        data['cell_count'] = job.cell_count()
 
     projections = []
     for proj in Projection.objects.select_related('reference').filter(job_id=str(job.pk)):
@@ -147,6 +188,8 @@ def job_status(request, pk):
             p['s3_uri'] = proj.result['s3_uri']
         if proj.status == 'error' and proj.result:
             p['error'] = proj.result.get('error', '')
+        if proj.status in ('pending', 'running'):
+            p['estimated_remaining_seconds'] = _estimate_projection_remaining(proj, job)
         projections.append(p)
 
     data['projections'] = projections
@@ -263,10 +306,10 @@ def uce_callback(request):
         return JsonResponse({'status': 'not_found'}, status=404)
 
     if status == 'running':
-        cell_count = data.get('cell_count')
+        updates = {k: data[k] for k in ('cell_count', 'num_gpus') if k in data}
         with transaction.atomic():
             job = Job.objects.select_for_update().get(pk=job.pk)
-            job.result = {**job.result, 'cell_count': cell_count}
+            job.result = {**job.result, **updates}
             job.save()
         return JsonResponse({'status': 'ok'})
 

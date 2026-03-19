@@ -37,5 +37,13 @@ BATCH_JOB_DEFINITION = ''
 AWS_ACCESS_KEY_ID = ''
 AWS_SECRET_ACCESS_KEY = ''
 
+# Time estimates for the job list
+# UCE embedding (g5.12xlarge, 4 GPUs)
+UCE_STARTUP_SECONDS = 351        # fixed overhead before cell processing begins
+UCE_SECONDS_PER_CELL_PER_GPU = 526 / 10000 / 4   # per cell, normalised to 1 GPU
+# Cell-type projection (r7i.4xlarge)
+PROJ_STARTUP_SECONDS = 216       # fixed overhead
+PROJ_SECONDS_PER_CELL = 169 / 10000  # per cell
+
 # uncomment to test allauth
 #from .site_settings_private import *

@@ -32,7 +32,7 @@
         <td rowspan="{{ pcount }}" class="col-check">
           <input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
         </td>
-        <td rowspan="{{ pcount }}">{{ job.short_uploaded_file }}{% if job.cell_count %}<br><span class="cell-count">{{ job.cell_count }} cells</span>{% endif %}</td>
+        <td rowspan="{{ pcount }}" class="job-file-cell">{{ job.short_uploaded_file }}{% if job.cell_count %}<br><span class="cell-count">{{ job.cell_count }} cells</span>{% endif %}</td>
         <td rowspan="{{ pcount }}" class="col-date">
           <time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time>
         </td>
@@ -40,6 +40,7 @@
       <tr data-proj-row="{{ proj.id }}">
       {% endif %}
         <td>{{ proj.reference.name }}</td>
+        {% if job.status == 'complete' %}
         <td class="proj-status-cell" data-proj-id="{{ proj.id }}">
           {% if proj.status == 'error' %}
             <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
@@ -63,6 +64,21 @@
           <input type="checkbox" class="public-checkbox" data-proj-id="{{ proj.id }}"{% if proj.public %} checked{% endif %} title="Allow URL sharing">
           <span class="public-dash">—</span>
         </td>
+        {% else %}
+        {% if forloop.first %}
+        <td rowspan="{{ pcount }}" class="uce-status-cell">
+          {% if job.status == 'error' %}
+            <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
+          {% elif job.status == 'running' %}
+            <span class="status-running">{% if job.cell_count %}Running{% else %}Starting{% endif %}</span>
+          {% else %}
+            <span class="status-pending">Pending</span>
+          {% endif %}
+        </td>
+        <td rowspan="{{ pcount }}">—</td>
+        <td rowspan="{{ pcount }}">—</td>
+        {% endif %}
+        {% endif %}
       </tr>
       {% empty %}
       <tr data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
@@ -78,7 +94,7 @@
           {% if job.status == 'error' %}
             <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
           {% elif job.status == 'running' %}
-            <span class="status-running">Running</span>
+            <span class="status-running">{% if job.cell_count %}Running{% else %}Starting{% endif %}</span>
           {% else %}
             <span class="status-pending">Pending</span>
           {% endif %}
@@ -159,6 +175,13 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
   const TERMINAL = new Set(['complete', 'error']);
   const LABELS = {pending: 'Pending', running: 'Running', complete: 'Complete', error: 'Error'};
 
+  function formatEst(seconds) {
+    if (seconds == null) return '<br><span class="status-est">estimating\u2026</span>';
+    const mins = Math.round(seconds / 60);
+    const text = mins <= 0 ? 'finishing\u2026' : '~' + mins + ' min';
+    return '<br><span class="status-est">' + text + '</span>';
+  }
+
   function activeJobRows() {
     return [...document.querySelectorAll('tr[data-job-id]')]
       .filter(r => !TERMINAL.has(r.dataset.jobStatus));
@@ -201,13 +224,30 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
           const prevStatus = row.dataset.jobStatus;
           row.dataset.jobStatus = data.status;
 
+          // Update cell count display
+          if (data.cell_count) {
+            const fileCell = row.querySelector('.job-file-cell');
+            if (fileCell) {
+              let cc = fileCell.querySelector('.cell-count');
+              if (!cc) {
+                cc = document.createElement('span');
+                cc.className = 'cell-count';
+                fileCell.appendChild(document.createElement('br'));
+                fileCell.appendChild(cc);
+              }
+              cc.textContent = data.cell_count + ' cells';
+            }
+          }
+
           // Update UCE status cell (present when job has no projections yet)
           const uceCell = row.querySelector('.uce-status-cell');
           if (uceCell) {
             if (data.status === 'error') {
               uceCell.innerHTML = `<a href="/jobs/${jobId}/" class="status-error">Error</a>`;
             } else {
-              uceCell.innerHTML = `<span class="status-${data.status}">${LABELS[data.status] || data.status}</span>`;
+              const label = (data.status === 'running' && !data.cell_count) ? 'Starting' : (LABELS[data.status] || data.status);
+              const est = TERMINAL.has(data.status) ? '' : formatEst(data.estimated_remaining_seconds);
+              uceCell.innerHTML = `<span class="status-${data.status}">${label}${est}</span>`;
             }
           }
 
@@ -219,7 +259,9 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
               if (proj.status === 'error') {
                 statusCell.innerHTML = `<a href="/jobs/${jobId}/" class="status-error">Error</a>`;
               } else {
-                statusCell.innerHTML = `<span class="status-${proj.status}">${LABELS[proj.status] || proj.status}</span>`;
+                const label = LABELS[proj.status] || proj.status;
+                const est = TERMINAL.has(proj.status) ? '' : formatEst(proj.estimated_remaining_seconds);
+                statusCell.innerHTML = `<span class="status-${proj.status}">${label}${est}</span>`;
               }
             }
             if (downloadCell && proj.status === 'complete' && proj.has_download) {
@@ -235,6 +277,7 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
           // If UCE just completed, reload so projection rows appear.
           if (data.status === 'complete' && prevStatus !== 'complete' &&
               (data.projections || []).length > 0) {
+			console.log('reloading', data.status);
             window.location.reload();
           }
         }).catch(() => {});
@@ -243,7 +286,7 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
     if (jobRowsWithActiveProjRows().length) setTimeout(pollAll, 30000);
   }
 
-  if (jobRowsWithActiveProjRows().length) setTimeout(pollAll, 30000);
+  if (jobRowsWithActiveProjRows().length) pollAll();
 })();
 </script>
 
@@ -300,6 +343,7 @@ tr.job-row-alt td {
 .status-complete { color: #2e7d32; font-weight: 500; }
 .status-running  { color: #1565c0; font-weight: 500; }
 .status-pending  { color: #888; }
+.status-est      { font-size: 0.8rem; font-weight: 400; opacity: 0.85; }
 .status-error    { color: #c62828; font-weight: 500; text-decoration: none; }
 .status-error:hover { text-decoration: underline; }
 .link-download, .link-viz { color: #1976d2; text-decoration: none; font-weight: 500; }
