@@ -305,6 +305,8 @@ def uce_callback(request):
         updates = {k: data[k] for k in ('cell_count', 'num_gpus') if k in data}
         with transaction.atomic():
             job = Job.objects.select_for_update().get(pk=job.pk)
+            if job.status != 'running':
+                return JsonResponse({'status': 'ignored'})
             job.result = {**job.result, **updates}
             job.save()
         return JsonResponse({'status': 'ok'})
