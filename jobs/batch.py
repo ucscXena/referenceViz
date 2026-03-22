@@ -21,7 +21,7 @@ def submit_uce_batch_job(input_s3_uri, output_s3_uri, callback_url, job_name='uc
             'input_s3': input_s3_uri,
             'output_s3': output_s3_uri,
             'model_s3': settings.UCE_MODEL_S3,
-            'species': 'human',
+            'species': 'auto',
             'batch_size': '40',
             'nlayers': '33',
             'callback_url': callback_url,
