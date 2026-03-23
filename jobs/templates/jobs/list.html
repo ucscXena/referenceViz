@@ -192,12 +192,31 @@ document.getElementById('job-list-form').onsubmit = function(e) {
 
   updateButton();
 
-  window.notifyJobComplete = function(filename) {
-    if (!isEnabled()) return;
-    new Notification('Cell mapping complete', {
+  function logNotify(event, label) {
+    const log = JSON.parse(sessionStorage.getItem('notifyLog') || '[]');
+    log.push({t: new Date().toISOString(), event, label: label || null});
+    sessionStorage.setItem('notifyLog', JSON.stringify(log));
+  }
+
+  function fireNotification(title, filename) {
+    const n = new Notification(title, {
       body: filename || 'Your job has finished.',
       icon: '/static/favicons/favicon-32x32.png',
     });
+    n.addEventListener('show', () => logNotify('show', filename));
+    n.addEventListener('error', () => logNotify('error', filename));
+  }
+
+  window.notifyJobComplete = function(filename) {
+    logNotify('attempt:complete', filename);
+    if (!isEnabled()) { logNotify('skipped', filename); return; }
+    fireNotification('Cell mapping complete', filename);
+  };
+
+  window.notifyJobError = function(filename) {
+    logNotify('attempt:error', filename);
+    if (!isEnabled()) { logNotify('skipped', filename); return; }
+    fireNotification('Cell mapping failed', filename);
   };
 })();
 
@@ -328,21 +347,28 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
             }
           });
 
+          // Notify on UCE error.
+          if (data.status === 'error' && prevStatus !== 'error') {
+            const filename = row.querySelector('.job-file-cell')?.firstChild?.textContent?.trim();
+            window.notifyJobError?.(filename);
+          }
+
+          // Notify when a projection completes or errors.
+          (data.projections || []).forEach(proj => {
+            const prev = projLastStatus.get(proj.id);
+            if (prev !== undefined && prev !== proj.status) {
+              const filename = row.querySelector('.job-file-cell')?.firstChild?.textContent?.trim();
+              if (proj.status === 'complete') window.notifyJobComplete?.(filename);
+              if (proj.status === 'error') window.notifyJobError?.(filename);
+            }
+            projLastStatus.set(proj.id, proj.status);
+          });
+
           // If UCE just completed, reload so projection rows appear.
           if (data.status === 'complete' && prevStatus !== 'complete' &&
               (data.projections || []).length > 0) {
             window.location.reload();
           }
-
-          // Notify when a projection completes.
-          (data.projections || []).forEach(proj => {
-            const prev = projLastStatus.get(proj.id);
-            if (proj.status === 'complete' && prev !== undefined && prev !== 'complete') {
-              const filename = row.querySelector('.job-file-cell')?.firstChild?.textContent?.trim();
-              window.notifyJobComplete?.(filename);
-            }
-            projLastStatus.set(proj.id, proj.status);
-          });
         }).catch(() => {});
     });
 
