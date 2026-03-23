@@ -140,7 +140,7 @@ var tileLayer = ({fileformat, index, levels, name, filterLayer, opacity, path,
 		},
 		updateTriggers: {
 			filterLayer,
-			renderSubLayers: [colorfn, filterColors, radius]
+			renderSubLayers: [colorfn, filterColors, radius, highlight]
 		}
 	});
 
