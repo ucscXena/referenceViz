@@ -81,9 +81,10 @@ module.exports = /*env => */({
 			"Content-Security-Policy-Report-Only": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; connect-src *; img-src * data:; frame-src 'self' ucscxena: https://www.youtube.com https://xenageneset.berkeleybop.io/xena/"
 		},
 		proxy: {
-			'/api/**': {
+			'/jobs/**': {
 				changeOrigin: true,
-				target: 'https://dev.xenabrowser.net/api',
+				secure: false,
+				target: 'https://dev.brainexplorer.ucsc.edu',
 				// For local django dev, use this instead & remove changeOrigin.
 //				target: 'http://localhost:8000/',
 				pathRewrite: {'^/api': ''}
