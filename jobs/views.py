@@ -137,9 +137,15 @@ def _estimate_uce_remaining(job):
     if not cell_count:
         # Cell count not yet reported — count down through startup window.
         return max(0, int(settings.UCE_STARTUP_SECONDS - elapsed))
-    gpu_count = (job.result.get('num_gpus') if job.result else None) or 4
-    total = settings.UCE_STARTUP_SECONDS + cell_count * settings.UCE_SECONDS_PER_CELL_PER_GPU / gpu_count + settings.PROJ_STARTUP_SECONDS + cell_count * settings.PROJ_SECONDS_PER_CELL
-    return max(0, int(total - elapsed))
+    result = job.result or {}
+    cells_per_second = result.get('cells_per_second')
+    if cells_per_second:
+        uce_total = settings.UCE_STARTUP_SECONDS + cell_count / cells_per_second
+    else:
+        gpu_count = result.get('num_gpus') or 4
+        uce_total = settings.UCE_STARTUP_SECONDS + cell_count * settings.UCE_SECONDS_PER_CELL_PER_GPU / gpu_count
+    proj_total = settings.PROJ_STARTUP_SECONDS + cell_count * settings.PROJ_SECONDS_PER_CELL
+    return max(0, int(uce_total - elapsed)) + int(proj_total)
 
 
 def _estimate_projection_remaining(proj, job):
@@ -302,7 +308,7 @@ def uce_callback(request):
         return JsonResponse({'status': 'not_found'}, status=404)
 
     if status == 'running':
-        updates = {k: data[k] for k in ('cell_count', 'num_gpus') if k in data}
+        updates = {k: data[k] for k in ('cell_count', 'num_gpus', 'cells_per_second') if k in data}
         with transaction.atomic():
             job = Job.objects.select_for_update().get(pk=job.pk)
             if job.status != 'running':
