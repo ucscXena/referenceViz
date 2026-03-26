@@ -99,6 +99,7 @@ submitBtn.addEventListener('click', async () => {
     progressMsg.textContent = msg;
   }
 
+  let jobId = null;
   try {
     setProgress(10, 'Requesting upload URL…');
     const urlResp = await fetch('{% url "upload_url" %}', {
@@ -108,6 +109,7 @@ submitBtn.addEventListener('click', async () => {
     });
     if (!urlResp.ok) throw new Error('Failed to get upload URL');
     const {job_id, presigned} = await urlResp.json();
+    jobId = job_id;
 
     setProgress(30, 'Uploading to S3…');
     const formData = new FormData();
@@ -115,12 +117,18 @@ submitBtn.addEventListener('click', async () => {
     formData.append('file', file);
 
     const s3Resp = await fetch(presigned.url, {method: 'POST', body: formData});
-    if (s3Resp.status !== 204 && s3Resp.status !== 201)
-      throw new Error(`S3 upload failed (${s3Resp.status})`);
+    if (s3Resp.status !== 204 && s3Resp.status !== 201) {
+      const text = await s3Resp.text().catch(() => '');
+      throw new Error(text.includes('EntityTooLarge')
+        ? 'File exceeds the 5 GB limit — please choose a smaller file'
+        : `S3 upload failed (${s3Resp.status})`);
+    }
 
+    const confirmedId = jobId;
+    jobId = null; // upload succeeded, no longer need to abort on error
     setProgress(80, 'Queuing analysis…');
     const body = refId ? JSON.stringify({ref_id: refId}) : '{}';
-    const confirmResp = await fetch(`/jobs/${job_id}/confirm/`, {
+    const confirmResp = await fetch(`/jobs/${confirmedId}/confirm/`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
       body,
@@ -130,6 +138,12 @@ submitBtn.addEventListener('click', async () => {
     setProgress(100, 'Queued! Redirecting…');
     window.location.href = '{% url "job_list" %}';
   } catch (err) {
+    if (jobId) {
+      fetch(`/jobs/${jobId}/abort/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken},
+      }).catch(() => {});
+    }
     progressMsg.textContent = 'Error: ' + err.message;
     progressBar.style.background = '#d32f2f';
     submitBtn.disabled = false;

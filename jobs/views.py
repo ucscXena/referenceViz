@@ -77,6 +77,18 @@ def get_upload_url(request):
 
 @login_required
 @require_POST
+def abort_upload(request, job_id):
+    """Delete a pending job whose S3 upload failed before confirmation."""
+    job = get_object_or_404(Job, pk=str(job_id), user=request.user)
+    if job.status != 'pending':
+        return JsonResponse({'error': 'job is not pending'}, status=400)
+    _delete_job_s3_files(job)
+    job.delete()
+    return JsonResponse({'status': 'ok'})
+
+
+@login_required
+@require_POST
 def confirm_upload(request, job_id):
     job = get_object_or_404(Job, pk=str(job_id), user=request.user)
     data = json.loads(request.body) if request.body else {}

@@ -11,6 +11,7 @@ urlpatterns = [
     path('<uuid:pk>/', views.job_detail, name='job_detail'),
     path('<uuid:pk>/status/', views.job_status, name='job_status'),
     path('<uuid:pk>/download/', views.download_result, name='download_result'),
+    path('<uuid:job_id>/abort/', views.abort_upload, name='abort_upload'),
     path('<uuid:job_id>/confirm/', views.confirm_upload, name='confirm_upload'),
     path('<uuid:job_id>/project/', views.project_existing, name='project_existing'),
     path('projections/<uuid:pk>/download/', views.download_projection, name='download_projection'),
