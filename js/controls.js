@@ -55,7 +55,7 @@ var overlaySelect = (vars, value, onChange) =>
 		id: 'overlay-select',
 		label: 'Filter mapped data by',
 		value,
-		onChange}, menuItem({value: 'None'}, 'None'),
+		onChange},
 		...vars.map(l => menuItem({value: l}, l)));
 
 var shButtonStyle = {
