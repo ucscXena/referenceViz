@@ -49,11 +49,11 @@ var filterCount = state =>
 		filtered = get(state, 'filtered', [])) =>
 		filtered.length ? `${codes.length - filtered.length} / ${codes.length}` : '');
 
-var overlaySelect = (vars, value, onChange) =>
+var overlaySelect = (vars, value, onChange, title) =>
 	select({
 		style: {minWidth: 200},
 		id: 'overlay-select',
-		label: 'Filter mapped data by',
+		label: title ? `Filter mapped data by (${title})` : 'Filter mapped data by',
 		value,
 		onChange},
 		...vars.map(l => menuItem({value: l}, l)));
@@ -129,7 +129,7 @@ export default el(class extends PureComponent {
 				onOverlayVar, onOverlayHideAll, onOverlayShowAll,
 				props: {onState, state}} = this,
 			{tab: value} = this.state,
-			{imageState, layer, filterLayer, overlayVar = 'None', overlay, hideOverlay} = state,
+			{imageState, layer, filterLayer, overlayVar = 'None', overlay, hideOverlay, overlayTitle} = state,
 			layers = get(imageState, 'phenotypes', []),
 			layerSelector = layerSelect(layers, layer, onLayer),
 			filterSelector = filterLayerSelect(layers, filterLayer, onFilterLayer),
@@ -157,7 +157,7 @@ export default el(class extends PureComponent {
 					] : [])),
 				...(overlayTab ?
 					[tabPanel({value, index: 2},
-						overlaySelect(oVars, overlayVar, onOverlayVar),
+						overlaySelect(oVars, overlayVar, onOverlayVar, overlayTitle),
 						...(overlayVar !== 'None' ? [
 							div(
 								shButton(onOverlayHideAll, 'Hide all'),

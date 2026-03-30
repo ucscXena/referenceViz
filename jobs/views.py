@@ -225,7 +225,7 @@ def presign_overlay(request):
         Params={'Bucket': bucket, 'Key': key},
         ExpiresIn=3600,
     )
-    return JsonResponse({'url': url})
+    return JsonResponse({'url': url, 'original_filename': projection.job.original_filename})
 
 
 @login_required

@@ -95,12 +95,13 @@ var fetchOverlay = url => ajax({
 var presignOverlay = uri => ajax({
 		url: `/jobs/presign/?uri=${encodeURIComponent(uri)}`,
 		responseType: 'text', method: 'GET'
-	}).map(r => JSON.parse(r.response).url);
+	}).map(r => JSON.parse(r.response));
 
 var getOverlay = path =>
 	path.startsWith('s3://') ?
-		presignOverlay(path).flatMap(fetchOverlay) :
-		fetchOverlay(path);
+		presignOverlay(path).flatMap(({url, original_filename: originalFilename}) =>
+			fetchOverlay(url).map(ipc => ({ipc, originalFilename}))) :
+		fetchOverlay(path).map(ipc => ({ipc}));
 
 function forceRedraw(deck) {
 	if (deck) {
@@ -128,7 +129,7 @@ export default el(class SinglecellView extends PureComponent {
 		);
 		this.props.overlay &&
 			getOverlay(this.props.overlay).subscribe(
-				ipc => {
+				({ipc, originalFilename}) => {
 					var table = tableFromIPC(ipc);
 					var names = pluck(table.schema.fields, 'name');
 					var dicts = table.batches[0].data.children.map(f =>
@@ -138,7 +139,8 @@ export default el(class SinglecellView extends PureComponent {
 						object(names, dicts));
 					var overlayVars = without(names, 'x', 'y');
 					var overlayVar = overlayVars.length ? overlayVars[0] : 'None';
-					this.props.onState(state => merge(state, {overlay, overlayVar}));
+					this.props.onState(state => merge(state, {overlay, overlayVar,
+						...(originalFilename ? {overlayTitle: originalFilename} : {})}));
 				},
 				() => this.setState({error: true}));
 		this.intervalId =  Let((lastPixelRatio = window.devicePixelRatio) =>

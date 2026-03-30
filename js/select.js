@@ -8,5 +8,5 @@ var inputLabel = el(InputLabel);
 
 export default ({label, id, ...props}, ...children) =>
 	formControl(
-		label && inputLabel({id}, label),
+		label && inputLabel({id, style: {whiteSpace: 'nowrap'}}, label),
 		select({labelId: label && id, variant: 'standard', ...props}, ...children));
