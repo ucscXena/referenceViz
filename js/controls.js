@@ -53,7 +53,7 @@ var overlaySelect = (vars, value, onChange, title) =>
 	select({
 		style: {minWidth: 200},
 		id: 'overlay-select',
-		label: title ? `Filter mapped data by (${title})` : 'Filter mapped data by',
+		label: title ? `Filter mapped data by ${title}` : 'Filter mapped data by',
 		value,
 		onChange},
 		...vars.map(l => menuItem({value: l}, l)));
