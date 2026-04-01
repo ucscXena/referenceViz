@@ -18,6 +18,10 @@ import {tableFromIPC} from 'apache-arrow';
 var {ajax} = Rx.Observable;
 
 // XXX currently ignoring radiusBase param
+// power law anchored at n=1000->3, n=100000->0.5, clamped to [0.5, 3]
+var defaultOverlayRadius = n =>
+	Math.min(3, Math.max(0.5, 3 * Math.pow(n / 1000, -0.389)));
+
 var dotRange = () => Let((min = 0.5, max = 4) =>
 	({min, max, step: (max - min) / 200}));
 
@@ -139,6 +143,7 @@ export default el(class SinglecellView extends PureComponent {
 						object(names, dicts));
 					var overlayVars = without(names, 'x', 'y');
 					var overlayVar = overlayVars.length ? overlayVars[0] : 'None';
+					this.setState({overlayRadius: defaultOverlayRadius(overlay.x.length)});
 					this.props.onState(state => merge(state, {overlay, overlayVar,
 						...(originalFilename ? {overlayTitle: originalFilename} : {})}));
 				},
