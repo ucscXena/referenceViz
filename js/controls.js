@@ -55,7 +55,6 @@ var overlaySelect = (vars, value, onChange, title) =>
 		id: 'overlay-select',
 		label: title ? `Filter mapped data by (${title})` : 'Filter mapped data by',
 		value,
-<<<<<<< HEAD
 		onChange}, menuItem({value: 'None'}, 'None'),
 		...vars.map(l => menuItem({value: l}, l.replace(/[()]/g, ''))));
 
