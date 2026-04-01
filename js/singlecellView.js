@@ -18,7 +18,7 @@ import {tableFromIPC} from 'apache-arrow';
 var {ajax} = Rx.Observable;
 
 // XXX currently ignoring radiusBase param
-var dotRange = () => Let((min = 0.5, max = 6) =>
+var dotRange = () => Let((min = 0.5, max = 4) =>
 	({min, max, step: (max - min) / 200}));
 
 var iconButton = el(IconButton);
