@@ -64,7 +64,7 @@ const scatterplotTile = ({data, id, highlight, modelMatrix, colorfn, hideColors,
 		getRadius: highlight.length ?
 			Let((fn = highlightFn(highlight)) => d => fn(d) ? radius : radius + 3) :
 			radius,
-		radiusMinPixels: 1,
+		radiusMinPixels: 0.5,
 		getFillColor: ([, , c]) =>  colorfn.rgb(c), // XXX switch to passing buffers?
 		getFilterValue: filterFn(hideColors), // XXX switch to passing buffers?
 		filterRange: [1, 1],
@@ -167,7 +167,7 @@ var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayVar,
 		getPosition: (_, {index, data}) =>  [data.x[index], data.y[index]],
 		radiusUnits: 'pixels',
 		getRadius: overlayRadius,
-		radiusMinPixels: 1,
+		radiusMinPixels: 0.5,
 		getFillColor: [0, 0, 0],
 		updateTriggers: {
 			getRadius: [overlayRadius],
