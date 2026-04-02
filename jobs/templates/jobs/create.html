@@ -127,11 +127,12 @@ submitBtn.addEventListener('click', async () => {
     const confirmedId = jobId;
     jobId = null; // upload succeeded, no longer need to abort on error
     setProgress(80, 'Queuing analysis…');
-    const body = refId ? JSON.stringify({ref_id: refId}) : '{}';
+    const confirmBody = {mixed_precision: 'bf16'};
+    if (refId) confirmBody.ref_id = refId;
     const confirmResp = await fetch(`/jobs/${confirmedId}/confirm/`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-      body,
+      body: JSON.stringify(confirmBody),
     });
     if (!confirmResp.ok) throw new Error('Failed to confirm upload');
 

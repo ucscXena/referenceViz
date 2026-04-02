@@ -18,7 +18,7 @@ MAX_PROJECTION_ATTEMPTS = 60
 
 
 @job('default')
-def run_analysis(job_id):
+def run_analysis(job_id, mixed_precision='bf16'):
     """
     RQ task: submit UCE embedding job to Batch and exit immediately.
     A follow-up check_job_result task polls for completion.
@@ -35,6 +35,7 @@ def run_analysis(job_id):
             input_s3_uri=input_s3_uri,
             output_s3_uri=uce_s3_uri,
             callback_url=callback_url,
+            mixed_precision=mixed_precision,
             job_name=f'uce-{str(job_id)[:8]}',
         )
         job_instance.result = {'batch_job_id': batch_job_id, 'uce_s3_uri': uce_s3_uri}

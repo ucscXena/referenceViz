@@ -7,7 +7,8 @@ from .aws import boto_client
 logger = logging.getLogger(__name__)
 
 
-def submit_uce_batch_job(input_s3_uri, output_s3_uri, callback_url, job_name='uce-inference'):
+def submit_uce_batch_job(input_s3_uri, output_s3_uri, callback_url,
+                         mixed_precision='bf16', job_name='uce-inference'):
     """
     Submit a UCE embedding job to AWS Batch.
     Returns the Batch job ID.
@@ -25,6 +26,7 @@ def submit_uce_batch_job(input_s3_uri, output_s3_uri, callback_url, job_name='uc
             'batch_size': '40',
             'nlayers': '33',
             'callback_url': callback_url,
+            'mixed_precision': mixed_precision,
         },
     )
     return response['jobId']

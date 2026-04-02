@@ -93,12 +93,13 @@ def confirm_upload(request, job_id):
     job = get_object_or_404(Job, pk=str(job_id), user=request.user)
     data = json.loads(request.body) if request.body else {}
     ref_id = data.get('ref_id')
+    mixed_precision = data.get('mixed_precision', 'bf16')
 
     if ref_id:
         reference = get_object_or_404(Reference, pk=ref_id)
         Projection.objects.get_or_create(job=job, reference=reference)
 
-    run_analysis.delay(str(job.id))
+    run_analysis.delay(str(job.id), mixed_precision)
     return JsonResponse({'status': 'queued'})
 
 
