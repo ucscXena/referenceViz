@@ -154,8 +154,7 @@ var initialZoom = props => {
 
 var currentScale = (levels, zoom, scale) => Math.pow(2, levels - zoom - 1) / scale;
 
-var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayVar,
-		overlayFiltered}) =>
+var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters = []}) =>
 	new ScatterplotLayer({
 		id: 'scatterplot-overlay',
 		data: {...data, length: data.x.length},
@@ -171,14 +170,14 @@ var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayVar,
 		getFillColor: [0, 0, 0],
 		updateTriggers: {
 			getRadius: [overlayRadius],
-			getFilterValue: [overlayVar, overlayFiltered],
+			getFilterValue: [overlayFilters],
 		},
-		filterRange: [1, 1],
-		filterEnabled: overlayVar !== 'None',
-		getFilterValue: overlayVar === 'None' ? 1 :
-		Let((hidden = new Set([-1, ...overlayFiltered])) =>
-			(_, {index, data}) => hidden.has(data[overlayVar][index]) ? 0 : 1),
-		extensions: [new DataFilterExtension({filterSize: 1})],
+		filterRange: [[1, 1], [1, 1], [1, 1], [1, 1]],
+		filterEnabled: overlayFilters.length > 0,
+		getFilterValue: Let((hiddenSets = overlayFilters.map(f => new Set([-1, ...f.filtered]))) =>
+			(_, {index, data}) => [0, 1, 2, 3].map(i =>
+				i < hiddenSets.length && hiddenSets[i].has(data[overlayFilters[i].var][index]) ? 0 : 1)),
+		extensions: [new DataFilterExtension({filterSize: 4})],
 	});
 
 class TiledScatterplot extends PureComponent {
@@ -204,7 +203,7 @@ class TiledScatterplot extends PureComponent {
 		var {props} = this,
 			{layer, filterLayer, onTileData} = props,
 			// XXX color0? Probably should be cut
-			{image, imageState, overlay, overlayVar, overlayFiltered,
+			{image, imageState, overlay, overlayFilters = [],
 				hideOverlay, radius, overlayRadius, hidden = [], filtered: filterColors = []} = props,
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
@@ -247,7 +246,7 @@ class TiledScatterplot extends PureComponent {
 					onTileData
 				}),
 				...(overlay ? [overlayLayer({data: overlay, visible: !hideOverlay,
-					radius, overlayRadius, modelMatrix, overlayVar, overlayFiltered})] : [])
+					overlayRadius, modelMatrix, overlayFilters})] : [])
 			],
 			views,
 			controller: true,

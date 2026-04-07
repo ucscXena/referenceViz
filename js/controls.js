@@ -49,11 +49,11 @@ var filterCount = state =>
 		filtered = get(state, 'filtered', [])) =>
 		filtered.length ? `${codes.length - filtered.length} / ${codes.length}` : '');
 
-var overlaySelect = (vars, value, onChange, title) =>
+var overlaySelect = (vars, value, onChange, label) =>
 	select({
 		style: {minWidth: 200},
 		id: 'overlay-select',
-		label: title ? `Filter mapped data by ${title}` : 'Filter mapped data by',
+		label: label || 'Filter mapped data by',
 		value,
 		onChange},
 		...vars.map(l => menuItem({value: l}, l)));
@@ -77,6 +77,7 @@ var overlayButton = (onClick, checked) =>
 			'Mapped data'));
 
 var overlayVariables = overlay => keys(omit(overlay, 'x', 'y', '_dicts'));
+
 
 export default el(class extends PureComponent {
 	state = {tab: 0};
@@ -109,32 +110,78 @@ export default el(class extends PureComponent {
 		this.props.onState(state => merge(state, {hideOverlay: !state.hideOverlay}));
 	};
 
-	onOverlayVar = ev => {
-		var overlayVar = ev.target.value;
-		this.props.onState(state => merge(state, {overlayVar, overlayFiltered: []}));
+	onOverlayVar = (i, value) => {
+		this.props.onState(state => merge(state, {
+			overlayFilters: state.overlayFilters.map((f, j) =>
+				j === i ? {var: value, filtered: []} : f)
+		}));
 	};
 
-	onOverlayHideAll = () => {
-		var {overlay, overlayVar} = this.props.state;
-		var codes = overlay._dicts[overlayVar];
-		this.props.onState(state => merge(state, {overlayFiltered: range(codes.length)}));
+	onOverlayHideAll = i => {
+		var {overlay, overlayFilters} = this.props.state;
+		var codes = overlay._dicts[overlayFilters[i].var];
+		this.props.onState(state => merge(state, {
+			overlayFilters: state.overlayFilters.map((f, j) =>
+				j === i ? {var: f.var, filtered: range(codes.length)} : f)
+		}));
 	};
 
-	onOverlayShowAll = () => {
-		this.props.onState(state => merge(state, {overlayFiltered: []}));
+	onOverlayShowAll = i => {
+		this.props.onState(state => merge(state, {
+			overlayFilters: state.overlayFilters.map((f, j) =>
+				j === i ? {var: f.var, filtered: []} : f)
+		}));
+	};
+
+	onAddRefinement = () => {
+		var {overlay, overlayFilters} = this.props.state;
+		var oVars = overlayVariables(overlay);
+		var usedVars = new Set(overlayFilters.map(f => f.var));
+		var nextVar = oVars.find(v => !usedVars.has(v)) || oVars[0];
+		this.props.onState(state => merge(state, {
+			overlayFilters: [...state.overlayFilters, {var: nextVar, filtered: []}]
+		}));
+	};
+
+	onRemoveRefinement = i => {
+		this.props.onState(state => merge(state, {
+			overlayFilters: state.overlayFilters.filter((_, j) => j !== i)
+		}));
 	};
 
 	render() {
 		var {onChange, onLayer, onFilterLayer, onHideAll, onShowAll, onOverlay,
-				onOverlayVar, onOverlayHideAll, onOverlayShowAll,
 				props: {onState, state}} = this,
 			{tab: value} = this.state,
-			{imageState, layer, filterLayer, overlayVar = 'None', overlay, hideOverlay, overlayTitle} = state,
+			{imageState, layer, filterLayer, overlayFilters = [], overlay,
+				hideOverlay, overlayTitle} = state,
 			layers = get(imageState, 'phenotypes', []),
 			layerSelector = layerSelect(layers, layer, onLayer),
 			filterSelector = filterLayerSelect(layers, filterLayer, onFilterLayer),
 			oVars = overlayVariables(overlay),
 			overlayTab = !!oVars.length;
+
+		var filterRow = (i) => {
+			var f = overlayFilters[i],
+				usedVars = new Set(overlayFilters.map((g, j) => j !== i ? g.var : null)),
+				availableVars = oVars.filter(v => !usedVars.has(v) || v === f.var),
+				label = i === 0 ?
+					(overlayTitle ? `Filter mapped data by ${overlayTitle}` : 'Filter mapped data by') :
+					'Refine by';
+			return [
+				div({style: {display: 'flex', alignItems: 'center'}},
+					overlaySelect(availableVars, f.var,
+						ev => this.onOverlayVar(i, ev.target.value), label),
+					i > 0 ? button({
+						style: {minWidth: 'unset', padding: 4},
+						onClick: () => this.onRemoveRefinement(i),
+						size: 'small'}, icon('close')) : null),
+				div(
+					shButton(() => this.onOverlayHideAll(i), 'Hide all'),
+					shButton(() => this.onOverlayShowAll(i), 'Show all')),
+				overlayLegend(state, onState, i)
+			];
+		};
 
 		return (
 			div(
@@ -157,12 +204,10 @@ export default el(class extends PureComponent {
 					] : [])),
 				...(overlayTab ?
 					[tabPanel({value, index: 2},
-						overlaySelect(oVars, overlayVar, onOverlayVar, overlayTitle),
-						...(overlayVar !== 'None' ? [
-							div(
-								shButton(onOverlayHideAll, 'Hide all'),
-								shButton(onOverlayShowAll, 'Show all'))] : []),
-						overlayLegend(state, onState))]
-						: [])));
+						...overlayFilters.flatMap((_, i) => filterRow(i)),
+						overlayFilters.length > 0 && overlayFilters.length < 4 &&
+							oVars.some(v => !new Set(overlayFilters.map(f => f.var)).has(v)) ?
+							shButton(this.onAddRefinement, 'Refine by') : null
+					)] : [])));
 	}
 });

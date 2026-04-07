@@ -30,31 +30,58 @@ var firstMatch = (el, selector) =>
 		el.parentElement ? firstMatch(el.parentElement, selector) :
 		null;
 
-var onCode = (state, onState) => ev => {
+var onCode = (state, onState, filterIndex) => ev => {
 	var iStr = getIn(firstMatch(ev.target, '.' + item), ['dataset', 'code']);
 
 	if (iStr != null) {
 		var i = parseInt(iStr, 10),
-			filtered = state.overlayFiltered || [],
+			filtered = state.overlayFilters[filterIndex].filtered || [],
 			next = (contains(filtered, i) ? without : conj)(filtered, i);
-		onState(state => merge(state, {overlayFiltered: next}));
+		onState(state => merge(state, {
+			overlayFilters: state.overlayFilters.map((f, j) =>
+				j === filterIndex ? {var: f.var, filtered: next} : f)
+		}));
 	}
 };
 
 var groupLengths = memoize1(data => mapObject(groupBy(data, x => x), v => v.length));
 
-export default function(state, onState) {
-	if (!state || state.overlayVar === 'None') {
+// Count cells per code for filter at filterIndex, considering only cells that
+// pass all other active filters.
+var filteredGroupLengths = memoize1((overlay, overlayFilters, filterIndex) => {
+	var {var: varName} = overlayFilters[filterIndex],
+		otherFilters = overlayFilters.filter((_, j) => j !== filterIndex),
+		hiddenSets = otherFilters.map(f => new Set(f.filtered)),
+		codes = overlay._dicts[varName],
+		counts = {};
+	for (var c = 0; c < codes.length; c++) {
+		counts[c] = 0;
+	}
+	for (var i = 0; i < overlay.x.length; i++) {
+		if (hiddenSets.every((hidden, fi) => !hidden.has(overlay[otherFilters[fi].var][i]))) {
+			var code = overlay[varName][i];
+			counts[code] = (counts[code] || 0) + 1;
+		}
+	}
+	return counts;
+});
+
+export default function(state, onState, filterIndex = 0) {
+	if (!state || !state.overlayFilters || !state.overlayFilters[filterIndex]) {
 		return null;
 	}
-	var {overlay, overlayVar, overlayFiltered} = state;
-	var codes = overlay._dicts[overlayVar];
+	var {overlay, overlayFilters} = state;
+	var {var: overlayVar, filtered: overlayFiltered} = overlayFilters[filterIndex];
+	var codes = overlay._dicts[overlayVar],
+		lengths = overlayFilters.length > 1 ?
+			filteredGroupLengths(overlay, overlayFilters, filterIndex) :
+			groupLengths(overlay[overlayVar]);
 
 	return codedLegend({
-			onClick: onCode(state, onState),
+			onClick: onCode(state, onState, filterIndex),
 			column: {
 				codes,
-				lengths: groupLengths(overlay[overlayVar]),
+				lengths,
 				codesInView: range(codes.length),
 				filtered: overlayFiltered
 			}});
