@@ -22,31 +22,36 @@ var firstMatch = (el, selector) =>
 		el.parentElement ? firstMatch(el.parentElement, selector) :
 		null;
 
-var onCode = (state, onState) => ev => {
+var onCode = (state, onState, filterIndex) => ev => {
 	var iStr = getIn(firstMatch(ev.target, '.' + item), ['dataset', 'code']);
 
 	if (iStr != null) {
 		var i = parseInt(iStr, 10),
-			filtered = state.filtered || [],
+			filtered = state.referenceFilters[filterIndex].filtered || [],
 			next = (contains(filtered, i) ? without : conj)(filtered, i);
-		onState(state => merge(state, {filtered: next}));
+		onState(state => merge(state, {
+			referenceFilters: state.referenceFilters.map((f, j) =>
+				j === filterIndex ? {layer: f.layer, filtered: next} : f)
+		}));
 	}
 };
 
-export default function(state, onState) {
-	if (!state || !state.imageState) {
+export default function(state, onState, filterIndex = 0) {
+	if (!state || !state.imageState || !state.referenceFilters) {
 		return null;
 	}
-	var {imageState, filterLayer, filtered} = state;
-	var codes = getIn(imageState, ['phenotypes', filterLayer, 'int_to_category'], [])
+	var {imageState, referenceFilters} = state;
+	var f = referenceFilters[filterIndex];
+	if (!f) { return null; }
+	var codes = getIn(imageState, ['phenotypes', f.layer, 'int_to_category'], [])
 		.slice(1);
 
 	return !codes.length ? null :
 		codedLegend({
-			onClick: onCode(state, onState),
+			onClick: onCode(state, onState, filterIndex),
 			column: {
 				codes,
 				codesInView: range(codes.length),
-				filtered
+				filtered: f.filtered
 			}});
 }
