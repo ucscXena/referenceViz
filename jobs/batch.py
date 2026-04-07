@@ -7,7 +7,7 @@ from .aws import boto_client
 logger = logging.getLogger(__name__)
 
 
-def submit_uce_batch_job(input_s3_uri, output_s3_uri, callback_url,
+def submit_uce_batch_job(input_s3_uri, output_s3_uri, callback_url, model_s3,
                          mixed_precision='bf16', job_name='uce-inference'):
     """
     Submit a UCE embedding job to AWS Batch.
@@ -21,7 +21,7 @@ def submit_uce_batch_job(input_s3_uri, output_s3_uri, callback_url,
         parameters={
             'input_s3': input_s3_uri,
             'output_s3': output_s3_uri,
-            'model_s3': settings.UCE_MODEL_S3,
+            'model_s3': model_s3,
             'species': 'auto',
             'batch_size': '40',
             'nlayers': '33',

@@ -29,7 +29,8 @@ AWS_S3_BUCKET = ''
 # UCE embedding pipeline (Batch)
 UCE_BATCH_JOB_QUEUE = ''
 UCE_BATCH_JOB_DEFINITION = ''
-UCE_MODEL_S3 = ''
+UCE_MODEL_NAME = ''   # display name for the initial UCEModel row, e.g. 'UCE 1.0'
+UCE_MODEL_S3 = ''     # model_url stored on UCEModel; passed as model_s3 to Batch
 # Cell-type projection pipeline (Batch)
 BATCH_JOB_QUEUE = ''
 BATCH_JOB_DEFINITION = ''

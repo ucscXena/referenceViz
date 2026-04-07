@@ -11,7 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .aws import boto_client, delete_s3_key, delete_s3_uri
-from .models import Job, Projection, Reference
+from .models import Job, Projection, Reference, UCEModel
 from .tasks import run_analysis, _submit_projection
 
 
@@ -96,9 +96,15 @@ def confirm_upload(request, job_id):
     mixed_precision = data.get('mixed_precision', 'bf16')
 
     if ref_id:
-        reference = get_object_or_404(Reference, pk=ref_id)
+        reference = get_object_or_404(
+            Reference.objects.select_related('uce_model'), pk=ref_id)
         Projection.objects.get_or_create(job=job, reference=reference)
+        uce_model = reference.uce_model
+    else:
+        uce_model = UCEModel.objects.get(is_default=True)
 
+    job.uce_model = uce_model
+    job.save()
     run_analysis.delay(str(job.id), mixed_precision)
     return JsonResponse({'status': 'queued'})
 
@@ -128,7 +134,7 @@ def project_existing(request, job_id):
 def job_list(request):
     jobs = (
         Job.objects.filter(user=request.user)
-        .prefetch_related('projections__reference')
+        .prefetch_related('projections__reference__group')
         .order_by('-created_at')
     )
     return render(request, 'jobs/list.html', {'jobs': jobs})
@@ -137,7 +143,7 @@ def job_list(request):
 @login_required
 def job_detail(request, pk):
     job = get_object_or_404(Job, pk=str(pk), user=request.user)
-    projections = job.projections.select_related('reference').all()
+    projections = job.projections.select_related('reference__group').all()
     return render(request, 'jobs/detail.html', {'job': job, 'projections': projections})
 
 
@@ -191,7 +197,7 @@ def job_status(request, pk):
         data['cell_count'] = job.cell_count()
 
     projections = []
-    for proj in Projection.objects.select_related('reference').filter(job_id=str(job.pk)):
+    for proj in Projection.objects.select_related('reference__group').filter(job_id=str(job.pk)):
         p = {
             'id': str(proj.id),
             'reference_name': proj.reference.name,

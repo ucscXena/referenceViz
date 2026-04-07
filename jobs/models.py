@@ -3,18 +3,56 @@ from django.contrib.auth.models import User
 import uuid
 
 
-class Reference(models.Model):
-    """A reference dataset for cell-type projection. Admin-managed."""
-    id = models.CharField(max_length=100, primary_key=True)  # URL-safe, e.g. 'Siletti_MSN'
-    name = models.CharField(max_length=255)
-    s3_uri = models.CharField(max_length=500)  # s3://bucket/references/<id>
+class UCEModel(models.Model):
+    """A UCE embedding model version. Admin-managed; one row should have is_default=True."""
+    name = models.CharField(max_length=100, unique=True)
+    model_url = models.CharField(max_length=500)  # passed as model_s3 to Batch
+    is_default = models.BooleanField(default=False)
+    notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['name']
+        verbose_name = 'UCE Model'
 
     def __str__(self):
         return self.name
+
+
+class ReferenceGroup(models.Model):
+    """A conceptual reference dataset, grouping one or more versioned Reference builds."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=255)
+    default_version = models.ForeignKey(
+        'Reference', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['title']
+
+    def __str__(self):
+        return self.title
+
+
+class Reference(models.Model):
+    """A specific build of a reference dataset. Admin-managed."""
+    id = models.CharField(max_length=100, primary_key=True)  # URL-safe, e.g. 'Siletti_MSN'
+    group = models.ForeignKey(ReferenceGroup, on_delete=models.PROTECT, related_name='versions')
+    uce_model = models.ForeignKey(UCEModel, on_delete=models.PROTECT, related_name='references')
+    s3_uri = models.CharField(max_length=500)  # s3://bucket/references/<id>
+    version_label = models.CharField(max_length=50, blank=True)  # e.g. 'v2', '2025-09'
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['group__title']
+
+    @property
+    def name(self):
+        return self.group.title
+
+    def __str__(self):
+        return f'{self.id}' + (f' ({self.version_label})' if self.version_label else '')
 
 
 class Job(models.Model):
@@ -27,6 +65,8 @@ class Job(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='jobs')
+    uce_model = models.ForeignKey(UCEModel, null=True, on_delete=models.PROTECT,
+                                  related_name='jobs')
     original_filename = models.CharField(max_length=255, blank=True)
     s3_input_key = models.CharField(max_length=500, blank=True)
     s3_output_key = models.CharField(max_length=500, blank=True)
@@ -74,7 +114,7 @@ class Projection(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['reference__name']
+        ordering = ['reference__group__title']
         unique_together = [('job', 'reference')]
 
     def __str__(self):

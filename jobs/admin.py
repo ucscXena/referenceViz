@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from .aws import boto_client
-from .models import Job, Projection, Reference
+from .models import Job, Projection, Reference, ReferenceGroup, UCEModel
 
 
 def _presigned_link(s3_uri, label):
@@ -50,9 +50,32 @@ class JobAdmin(admin.ModelAdmin):
     uce_download_link.short_description = 'UCE Embedding'
 
 
+@admin.register(UCEModel)
+class UCEModelAdmin(admin.ModelAdmin):
+    list_display = ('name', 'model_url', 'is_default', 'created_at')
+    readonly_fields = ('created_at',)
+
+
+@admin.register(ReferenceGroup)
+class ReferenceGroupAdmin(admin.ModelAdmin):
+    list_display = ('title', 'default_version', 'created_at')
+    readonly_fields = ('id', 'created_at')
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if obj is not None:
+            form.base_fields['default_version'].queryset = (
+                Reference.objects.filter(group=obj)
+            )
+        return form
+
+
 @admin.register(Reference)
 class ReferenceAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 's3_uri', 'created_at')
+    list_display = ('id', 'name', 'group', 'uce_model', 'version_label', 'is_active', 's3_uri', 'created_at')
+    list_filter = ('is_active', 'uce_model')
+    search_fields = ('id', 'group__title')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(Projection)

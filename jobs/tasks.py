@@ -23,7 +23,7 @@ def run_analysis(job_id, mixed_precision='bf16'):
     RQ task: submit UCE embedding job to Batch and exit immediately.
     A follow-up check_job_result task polls for completion.
     """
-    job_instance = Job.objects.get(id=job_id)
+    job_instance = Job.objects.select_related('uce_model').get(id=job_id)
     job_instance.status = 'running'
     job_instance.save()
 
@@ -35,6 +35,7 @@ def run_analysis(job_id, mixed_precision='bf16'):
             input_s3_uri=input_s3_uri,
             output_s3_uri=uce_s3_uri,
             callback_url=callback_url,
+            model_s3=job_instance.uce_model.model_url,
             mixed_precision=mixed_precision,
             job_name=f'uce-{str(job_id)[:8]}',
         )
