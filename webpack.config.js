@@ -19,7 +19,7 @@ process.argv.indexOf('--disable-html-plugin') === -1 &&
 	plugins.push(
 		new HtmlWebpackPlugin({
 			title: "UCSC Xena",
-			filename: "index.html",
+			filename: "pyramid.html",
 			inject: false,
 			template: "page.template",
 			templateParameters: ({entrypoints}) => ({
