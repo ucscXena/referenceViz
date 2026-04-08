@@ -112,7 +112,9 @@ class ProjectionAdmin(admin.ModelAdmin):
     short_id.admin_order_field = 'id'
 
     def short_job(self, obj):
-        return f'{str(obj.job_id)[:8]} · {obj.job.user.username} · {obj.job.status}'
+        label = f'{str(obj.job_id)[:8]} · {obj.job.user.username}'
+        url = reverse('admin:jobs_job_change', args=[obj.job_id])
+        return format_html('<a href="{}">{}</a>', url, label)
     short_job.short_description = 'Job'
     short_job.admin_order_field = 'job'
 
