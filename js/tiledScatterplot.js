@@ -173,12 +173,12 @@ var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters =
 			getRadius: [overlayRadius],
 			getFilterValue: [overlayFilters],
 		},
-		filterRange: [[1, 1], [1, 1], [1, 1], [1, 1]],
+		filterRange: [[1, 1], [1, 1], [1, 1]],
 		filterEnabled: overlayFilters.length > 0,
 		getFilterValue: Let((hiddenSets = overlayFilters.map(f => new Set([-1, ...f.filtered]))) =>
-			(_, {index, data}) => [0, 1, 2, 3].map(i =>
+			(_, {index, data}) => [0, 1, 2].map(i =>
 				i < hiddenSets.length && hiddenSets[i].has(data[overlayFilters[i].var][index]) ? 0 : 1)),
-		extensions: [new DataFilterExtension({filterSize: 4})],
+		extensions: [new DataFilterExtension({filterSize: 3})],
 	});
 
 class TiledScatterplot extends PureComponent {

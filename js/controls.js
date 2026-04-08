@@ -264,7 +264,7 @@ export default el(class extends PureComponent {
 				...(overlayTab ?
 					[tabPanel({value, index: 2},
 						...overlayFilters.flatMap((_, i) => filterRow(i)),
-						overlayFilters.length > 0 && overlayFilters.length < 4 &&
+						overlayFilters.length > 0 && overlayFilters.length < 3 &&
 							oVars.some(v => !new Set(overlayFilters.map(f => f.var)).has(v)) ?
 							shButton(this.onAddRefinement, 'Refine by') : null
 					)] : [])));
