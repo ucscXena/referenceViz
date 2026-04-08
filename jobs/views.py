@@ -256,14 +256,13 @@ def download_projection(request, pk):
         raise Http404
 
     bucket, key = s3_uri.replace('s3://', '').split('/', 1)
-    filename = key.rsplit('/', 1)[-1]
     s3 = boto_client('s3')
     url = s3.generate_presigned_url(
         'get_object',
         Params={
             'Bucket': bucket,
             'Key': key,
-            'ResponseContentDisposition': f'attachment; filename="{filename}"',
+            'ResponseContentDisposition': 'attachment; filename="cell_label_prediction.tsv"',
         },
         ExpiresIn=300,
     )
