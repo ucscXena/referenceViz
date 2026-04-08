@@ -67,6 +67,7 @@ class Job(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='jobs')
     uce_model = models.ForeignKey(UCEModel, null=True, on_delete=models.PROTECT,
                                   related_name='jobs')
+    batch_job_id = models.CharField(max_length=255, blank=True)
     original_filename = models.CharField(max_length=255, blank=True)
     s3_input_key = models.CharField(max_length=500, blank=True)
     s3_output_key = models.CharField(max_length=500, blank=True)

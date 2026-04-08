@@ -342,7 +342,6 @@ def uce_callback(request):
             if job.status != 'running':
                 return JsonResponse({'status': 'ignored'})
             job.status = 'complete'
-            job.result = {k: v for k, v in job.result.items() if k != 'batch_job_id'}
             job.save()
             s3_input_key = job.s3_input_key
             pending_projections = list(job.projections.filter(status='pending'))
@@ -359,8 +358,7 @@ def uce_callback(request):
             if job.status != 'running':
                 return JsonResponse({'status': 'ignored'})
             job.status = 'error'
-            job.result = {**{k: v for k, v in job.result.items() if k != 'batch_job_id'},
-                          'error': error_msg}
+            job.result = {**job.result, 'error': error_msg}
             job.save()
         return JsonResponse({'status': 'ok'})
 

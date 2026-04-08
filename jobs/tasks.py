@@ -39,7 +39,8 @@ def run_analysis(job_id, mixed_precision='bf16'):
             mixed_precision=mixed_precision,
             job_name=f'uce-{str(job_id)[:8]}',
         )
-        job_instance.result = {'batch_job_id': batch_job_id, 'uce_s3_uri': uce_s3_uri}
+        job_instance.batch_job_id = batch_job_id
+        job_instance.result = {'uce_s3_uri': uce_s3_uri}
         job_instance.save()
 
         django_rq.get_queue('default').enqueue_in(
@@ -65,13 +66,11 @@ def check_job_result(job_id, attempt=0):
             return  # already resolved — callback beat us here
 
         try:
-            batch_job_id = job_instance.result.get('batch_job_id')
+            batch_job_id = job_instance.batch_job_id
             uce_s3_uri = job_instance.result.get('uce_s3_uri')
             status, detail = check_batch_job(batch_job_id)
 
             if status == 'complete':
-                job_instance.result = {k: v for k, v in job_instance.result.items()
-                                       if k != 'batch_job_id'}
                 job_instance.status = 'complete'
                 job_instance.save()
                 s3_input_key = job_instance.s3_input_key

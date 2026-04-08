@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
@@ -22,11 +23,24 @@ def _presigned_link(s3_uri, label):
         return s3_uri
 
 
+def _batch_link(batch_job_id):
+    """Return a linked short batch job ID, or '—'."""
+    if not batch_job_id:
+        return '—'
+    label = str(batch_job_id)[:8]
+    url = settings.AWS_BATCH_CONSOLE_URL.format(batch_job_id)
+    return format_html('<a href="{}" target="_blank">{}</a>', url, label)
+
+
 class ProjectionInline(admin.TabularInline):
     model = Projection
     extra = 0
-    fields = ('reference', 'status', 'batch_job_id', 'download_link', 'created_at', 'updated_at')
-    readonly_fields = ('reference', 'status', 'batch_job_id', 'download_link', 'created_at', 'updated_at')
+    fields = ('reference', 'status', 'batch_job_link', 'download_link', 'created_at', 'updated_at')
+    readonly_fields = ('reference', 'status', 'batch_job_link', 'download_link', 'created_at', 'updated_at')
+
+    def batch_job_link(self, obj):
+        return _batch_link(obj.batch_job_id)
+    batch_job_link.short_description = 'Batch Job'
 
     def download_link(self, obj):
         s3_uri = obj.result.get('s3_uri') if obj.result else None
@@ -36,15 +50,20 @@ class ProjectionInline(admin.TabularInline):
 
 @admin.register(Job)
 class JobAdmin(admin.ModelAdmin):
-    list_display = ('short_id', 'user', 'original_filename', 'status', 'created_at', 'uce_download_link')
+    list_display = ('short_id', 'user', 'original_filename', 'status', 'batch_job_link', 'created_at', 'uce_download_link')
     list_filter = ('status',)
-    readonly_fields = ('id', 'created_at', 'updated_at', 'uce_download_link')
+    readonly_fields = ('id', 'batch_job_link', 'created_at', 'updated_at', 'uce_download_link')
     inlines = [ProjectionInline]
 
     def short_id(self, obj):
         return str(obj.id)[:8]
     short_id.short_description = 'ID'
     short_id.admin_order_field = 'id'
+
+    def batch_job_link(self, obj):
+        return _batch_link(obj.batch_job_id)
+    batch_job_link.short_description = 'Batch Job'
+    batch_job_link.admin_order_field = 'batch_job_id'
 
     def uce_download_link(self, obj):
         return _presigned_link(obj.uce_s3_uri(), 'Download UCE')
@@ -92,19 +111,9 @@ class ReferenceAdmin(admin.ModelAdmin):
 
 @admin.register(Projection)
 class ProjectionAdmin(admin.ModelAdmin):
-    list_display = ('short_id', 'short_job', 'reference_link', 'status', 'short_batch_job_id', 'download_link', 'created_at')
+    list_display = ('short_id', 'short_job', 'reference_link', 'status', 'batch_job_link', 'download_link', 'created_at')
     list_filter = ('status', 'reference')
-    readonly_fields = ('id', 'job', 'reference', 'status', 'batch_job_id', 'result', 'download_link', 'created_at', 'updated_at')
-
-    def reference_link(self, obj):
-        ref = obj.reference
-        label = str(ref.id).split('-')[0]
-        if ref.version_label:
-            label += f' ({ref.version_label})'
-        url = reverse('admin:jobs_reference_change', args=[ref.pk])
-        return format_html('<a href="{}">{}</a>', url, label)
-    reference_link.short_description = 'Reference'
-    reference_link.admin_order_field = 'reference'
+    readonly_fields = ('id', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'created_at', 'updated_at')
 
     def short_id(self, obj):
         return str(obj.id)[:8]
@@ -118,10 +127,20 @@ class ProjectionAdmin(admin.ModelAdmin):
     short_job.short_description = 'Job'
     short_job.admin_order_field = 'job'
 
-    def short_batch_job_id(self, obj):
-        return str(obj.batch_job_id)[:8] if obj.batch_job_id else '—'
-    short_batch_job_id.short_description = 'Batch Job'
-    short_batch_job_id.admin_order_field = 'batch_job_id'
+    def reference_link(self, obj):
+        ref = obj.reference
+        label = str(ref.id).split('-')[0]
+        if ref.version_label:
+            label += f' ({ref.version_label})'
+        url = reverse('admin:jobs_reference_change', args=[ref.pk])
+        return format_html('<a href="{}">{}</a>', url, label)
+    reference_link.short_description = 'Reference'
+    reference_link.admin_order_field = 'reference'
+
+    def batch_job_link(self, obj):
+        return _batch_link(obj.batch_job_id)
+    batch_job_link.short_description = 'Batch Job'
+    batch_job_link.admin_order_field = 'batch_job_id'
 
     def download_link(self, obj):
         s3_uri = obj.result.get('s3_uri') if obj.result else None

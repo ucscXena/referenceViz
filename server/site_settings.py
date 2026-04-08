@@ -25,6 +25,7 @@ SERVER_BASE_URL = ''
 
 # AWS / Batch — override these in site_settings_private.py
 AWS_REGION = 'us-east-1'
+AWS_BATCH_CONSOLE_URL = 'http://placeholder/detail/{}'
 AWS_S3_BUCKET = ''
 # UCE embedding pipeline (Batch)
 UCE_BATCH_JOB_QUEUE = ''
