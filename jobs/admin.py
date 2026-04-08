@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.urls import reverse
 from django.utils.html import format_html
 
 from .aws import boto_client
@@ -58,8 +59,19 @@ class UCEModelAdmin(admin.ModelAdmin):
 
 @admin.register(ReferenceGroup)
 class ReferenceGroupAdmin(admin.ModelAdmin):
-    list_display = ('title', 'default_version', 'created_at')
+    list_display = ('title', 'default_version_link', 'created_at')
     readonly_fields = ('id', 'created_at')
+
+    def default_version_link(self, obj):
+        ref = obj.default_version
+        if not ref:
+            return '—'
+        label = str(ref.id).split('-')[0]
+        if ref.version_label:
+            label += f' ({ref.version_label})'
+        url = reverse('admin:jobs_reference_change', args=[ref.pk])
+        return format_html('<a href="{}">{}</a>', url, label)
+    default_version_link.short_description = 'Default Version'
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
@@ -80,9 +92,19 @@ class ReferenceAdmin(admin.ModelAdmin):
 
 @admin.register(Projection)
 class ProjectionAdmin(admin.ModelAdmin):
-    list_display = ('short_id', 'short_job', 'reference', 'status', 'short_batch_job_id', 'download_link', 'created_at')
+    list_display = ('short_id', 'short_job', 'reference_link', 'status', 'short_batch_job_id', 'download_link', 'created_at')
     list_filter = ('status', 'reference')
     readonly_fields = ('id', 'job', 'reference', 'status', 'batch_job_id', 'result', 'download_link', 'created_at', 'updated_at')
+
+    def reference_link(self, obj):
+        ref = obj.reference
+        label = str(ref.id).split('-')[0]
+        if ref.version_label:
+            label += f' ({ref.version_label})'
+        url = reverse('admin:jobs_reference_change', args=[ref.pk])
+        return format_html('<a href="{}">{}</a>', url, label)
+    reference_link.short_description = 'Reference'
+    reference_link.admin_order_field = 'reference'
 
     def short_id(self, obj):
         return str(obj.id)[:8]
