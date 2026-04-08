@@ -37,6 +37,9 @@ var layerSelect = (layers, layer, onChange) =>
 var isFiltered = state =>
 	getIn(state, ['referenceFilters'], []).some(f => f.filtered.length > 0);
 
+var isMappedFiltered = state =>
+	getIn(state, ['overlayFilters'], []).some(f => f.filtered.length > 0);
+
 var overlaySelect = (vars, value, onChange, label) =>
 	select({
 		style: {minWidth: 200},
@@ -232,7 +235,7 @@ export default el(class extends PureComponent {
 				tabs({value, onChange, variant: 'fullWidth'},
 					tab({label: 'Color'}),
 					tab({label: isFiltered(state) ? 'Filter \u25cf' : 'Filter'}),
-					...(overlayTab ? [tab({label: 'Mapped Data'})] : [])),
+					...(overlayTab ? [tab({label: isMappedFiltered(state) ? 'Mapped Data \u25cf' : 'Mapped Data'})] : [])),
 				tabPanel({value, index: 0},
 					overlay && !overlayTab ? overlayButton(onOverlay, !hideOverlay)
 						: null,
