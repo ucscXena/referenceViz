@@ -23,36 +23,37 @@ var get16Value = ({data, width}) =>
 
 var getValue = png => png.depth > 8 ? get16Value(png) : get8Value(png);
 
-function getCoords(png0, png1) {
-	const {width, height} = png0,
-		getColorValue = getValue(png0),
-		getFilterValue = getValue(png1),
+function getCoords(colorPng, filterPngs) {
+	const {width, height} = colorPng,
+		getColorValue = getValue(colorPng),
+		getFilterValues = filterPngs.map(getValue),
 		pts = [];
 
 	for (let j = 0; j < height; j++)  {
 		for (let i = 0; i < width; ++i) {
-			var c = getColorValue(i, j),
-				f = getFilterValue(i, j);
-			if (c && f) {
-				// 0 is "no data". Decrement to get ordinal scale.
-				pts.push([i, j, c - 1, f - 1]);
+			var c = getColorValue(i, j);
+			if (!c) { continue; }
+			// 0 is "no data". Decrement to get ordinal scale.
+			var fs = getFilterValues.map(fn => fn(i, j));
+			if (fs.every(f => f)) {
+				pts.push([i, j, c - 1, ...fs.map(f => f - 1)]);
 			}
 		}
 	}
 	return pts;
 }
 
-var filterFn = hideColors =>
-	!hideColors ? () => 1 :
-		Let((hidden = new Set(hideColors)) =>
-			([, , , c]) => hidden.has(c) ? 0 : 1);
+var filterFn = referenceFilters =>
+	Let((hiddenSets = referenceFilters.map(f => new Set(f.filtered))) =>
+		d => [0, 1, 2].map(i =>
+			i < hiddenSets.length && hiddenSets[i].has(d[3 + i]) ? 0 : 1));
 
 var highlightFn = hideColors =>
 	!hideColors || !hideColors.length ? () => 1 :
 		Let((hidden = new Set(hideColors)) =>
 			([, , c]) => hidden.has(c) ? 0 : 1);
 
-const scatterplotTile = ({data, id, highlight, modelMatrix, colorfn, hideColors, radius}) =>
+const scatterplotTile = ({data, id, highlight, modelMatrix, colorfn, referenceFilters, radius}) =>
 	scatterplotLayer({
 		id: `scatter-plot-${id}`,
 		data,
@@ -66,11 +67,12 @@ const scatterplotTile = ({data, id, highlight, modelMatrix, colorfn, hideColors,
 			radius,
 		radiusMinPixels: 0.5,
 		getFillColor: ([, , c]) =>  colorfn.rgb(c), // XXX switch to passing buffers?
-		getFilterValue: filterFn(hideColors), // XXX switch to passing buffers?
-		filterRange: [1, 1],
-		updateTriggers: {getFilterValue: [hideColors], getFillColor: [colorfn],
+		getFilterValue: filterFn(referenceFilters), // XXX switch to passing buffers?
+		filterRange: [[1, 1], [1, 1], [1, 1]],
+		filterEnabled: referenceFilters.length > 0,
+		updateTriggers: {getFilterValue: [referenceFilters], getFillColor: [colorfn],
 			getRadius: [highlight, radius]},
-		extensions: [new DataFilterExtension({filterSize: 1})]
+		extensions: [new DataFilterExtension({filterSize: 3})]
 	});
 
 // scale and offset
@@ -81,18 +83,18 @@ var getM = (s, [x, y, z = 0]) => [
 	x, y, z, 1
 ];
 
-var filterUrl = ({path,  index: {x, y, z}, filterLayer, fileformat}) =>
+var filterUrl = ({path, index: {x, y, z}, filterLayer, fileformat}) =>
 	`${path}/${filterLayer}-${z}-${y}-${x}.${fileformat}`;
 
 var imgPromise = (url, signal) =>
 	fetch(url, {signal}).then(r => r.blob()).then(b => b.arrayBuffer())
 		.then(b => upng.decode(b));
 
-var tileLayer = ({fileformat, index, levels, name, filterLayer, opacity, path,
-	highlight, colorfn, size, tileSize, visible, filterColors, radius,
+var tileLayer = ({fileformat, index, levels, name, referenceFilters, opacity, path,
+	highlight, colorfn, size, tileSize, visible, radius,
 	onTileData}) =>
 	new TileLayer({
-		id: `tile-layer-${index}-${filterLayer || name}`,
+		id: `tile-layer-${index}-${referenceFilters.map(f => f.layer).join('-') || name}`,
 		data: `${path}/${name}-{z}-{y}-{x}.${fileformat}`,
 		loadOptions: {
 			fetch: {
@@ -107,15 +109,15 @@ var tileLayer = ({fileformat, index, levels, name, filterLayer, opacity, path,
 		},
 		getTileData: ({url, signal, index}) => {
 			var colorPromise = imgPromise(url, signal),
-				filterPromise = filterLayer && filterLayer !== name ?
-					imgPromise(filterUrl({filterLayer, index, fileformat, path}),
-						signal) :
-					colorPromise;
-			return Promise.all([colorPromise, filterPromise])
-					.then(([colorImg, filterImg]) => {
+				filterPromises = referenceFilters.map(f =>
+					`p${f.layer}` === name ? colorPromise :
+						imgPromise(filterUrl({filterLayer: `p${f.layer}`, index, fileformat, path}),
+							signal));
+			return Promise.all([colorPromise, ...filterPromises])
+					.then(([colorImg, ...filterImgs]) => {
 				if (signal.aborted) {return null;}
-				// Combine color and filter values: [x, y, colorValue, filterValue]
-				return getCoords(colorImg, filterImg);
+				// Combine color and filter values: [x, y, colorValue, f1, f2, ...]
+				return getCoords(colorImg, filterImgs);
 			});
 		},
 		minZoom: 0,
@@ -136,11 +138,10 @@ var tileLayer = ({fileformat, index, levels, name, filterLayer, opacity, path,
 			var modelMatrix = getM(1 / (1 << z),
 				[x * tileSize >> z, y * tileSize >> z]);
 			return scatterplotTile(
-				{data, id: `${z}-${y}-${x}`, modelMatrix, colorfn, highlight, hideColors: filterColors, radius});
+				{data, id: `${z}-${y}-${x}`, modelMatrix, colorfn, highlight, referenceFilters, radius});
 		},
 		updateTriggers: {
-			filterLayer,
-			renderSubLayers: [colorfn, filterColors, radius, highlight]
+			renderSubLayers: [colorfn, referenceFilters, radius, highlight]
 		}
 	});
 
@@ -154,8 +155,7 @@ var initialZoom = props => {
 
 var currentScale = (levels, zoom, scale) => Math.pow(2, levels - zoom - 1) / scale;
 
-var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayVar,
-		overlayFiltered}) =>
+var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters = []}) =>
 	new ScatterplotLayer({
 		id: 'scatterplot-overlay',
 		data: {...data, length: data.x.length},
@@ -171,14 +171,14 @@ var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayVar,
 		getFillColor: [0, 0, 0],
 		updateTriggers: {
 			getRadius: [overlayRadius],
-			getFilterValue: [overlayVar, overlayFiltered],
+			getFilterValue: [overlayFilters],
 		},
-		filterRange: [1, 1],
-		filterEnabled: overlayVar !== 'None',
-		getFilterValue: overlayVar === 'None' ? 1 :
-		Let((hidden = new Set([-1, ...overlayFiltered])) =>
-			(_, {index, data}) => hidden.has(data[overlayVar][index]) ? 0 : 1),
-		extensions: [new DataFilterExtension({filterSize: 1})],
+		filterRange: [[1, 1], [1, 1], [1, 1]],
+		filterEnabled: overlayFilters.length > 0,
+		getFilterValue: Let((hiddenSets = overlayFilters.map(f => new Set([-1, ...f.filtered]))) =>
+			(_, {index, data}) => [0, 1, 2].map(i =>
+				i < hiddenSets.length && hiddenSets[i].has(data[overlayFilters[i].var][index]) ? 0 : 1)),
+		extensions: [new DataFilterExtension({filterSize: 3})],
 	});
 
 class TiledScatterplot extends PureComponent {
@@ -202,10 +202,10 @@ class TiledScatterplot extends PureComponent {
 	}
 	render() {
 		var {props} = this,
-			{layer, filterLayer, onTileData} = props,
+			{layer, onTileData} = props,
 			// XXX color0? Probably should be cut
-			{image, imageState, overlay, overlayVar, overlayFiltered,
-				hideOverlay, radius, overlayRadius, hidden = [], filtered: filterColors = []} = props,
+			{image, imageState, overlay, overlayFilters = [],
+				hideOverlay, radius, overlayRadius, hidden = [], referenceFilters = []} = props,
 			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
 				.slice(1),
 			colorfn = this.getScale(codes),
@@ -233,7 +233,7 @@ class TiledScatterplot extends PureComponent {
 			layers: [ // XXX expand to multiple channels?
 				tileLayer({
 					name: `p${layer}`, path: image,
-					filterLayer: filterLayer >= 0 && `p${filterLayer}`,
+					referenceFilters,
 					fileformat,
 					highlight: hidden,
 					index: 'phenotype', // XXX review this
@@ -242,12 +242,11 @@ class TiledScatterplot extends PureComponent {
 					tileSize: imageState.tileSize,
 					visible: true,
 					colorfn,
-					filterColors,
 					radius,
 					onTileData
 				}),
 				...(overlay ? [overlayLayer({data: overlay, visible: !hideOverlay,
-					radius, overlayRadius, modelMatrix, overlayVar, overlayFiltered})] : [])
+					overlayRadius, modelMatrix, overlayFilters})] : [])
 			],
 			views,
 			controller: true,

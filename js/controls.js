@@ -10,7 +10,7 @@ import MenuItem from '@material-ui/core/MenuItem';
 import {el, div} from './react-hyper';
 import PureComponent from './PureComponent';
 import select from './select';
-import {get, getIn, keys, Let, merge, omit, range} from './underscore_ext';
+import {get, getIn, keys, merge, omit, range} from './underscore_ext';
 import legendStyles from './legend.module.css';
 
 var button = el(Button);
@@ -34,26 +34,17 @@ var layerSelect = (layers, layer, onChange) =>
 		value: layer,
 		onChange}, ...layers.map((l, i) => menuItem({value: i}, l.name)));
 
-var filterLayerSelect = (layers, layer, onChange) =>
-	select({
-		id: 'filterLayer-select',
-		label: 'Filter by',
-		value: layer,
-		onChange}, menuItem({value: -1}, 'None'),
-		...layers.map((l, i) => menuItem({value: i}, l.name)));
+var isFiltered = state =>
+	getIn(state, ['referenceFilters'], []).some(f => f.filtered.length > 0);
 
-var filterCount = state =>
-	Let((codes = getIn(state,
-		['imageState', 'phenotypes', state.filterLayer, 'int_to_category'], [])
-			.slice(1),
-		filtered = get(state, 'filtered', [])) =>
-		filtered.length ? `${codes.length - filtered.length} / ${codes.length}` : '');
+var isMappedFiltered = state =>
+	getIn(state, ['overlayFilters'], []).some(f => f.filtered.length > 0);
 
-var overlaySelect = (vars, value, onChange, title) =>
+var overlaySelect = (vars, value, onChange, label) =>
 	select({
 		style: {minWidth: 200},
 		id: 'overlay-select',
-		label: title ? `Filter mapped data by ${title}` : 'Filter mapped data by',
+		label: label || 'Filter mapped data by',
 		value,
 		onChange},
 		...vars.map(l => menuItem({value: l}, l)));
@@ -78,6 +69,7 @@ var overlayButton = (onClick, checked) =>
 
 var overlayVariables = overlay => keys(omit(overlay, 'x', 'y', '_dicts'));
 
+
 export default el(class extends PureComponent {
 	state = {tab: 0};
 	onChange = (ev, value) => {
@@ -89,80 +81,192 @@ export default el(class extends PureComponent {
 		this.props.onState(state => merge(state, {layer, hidden: []}));
 	};
 
-	onFilterLayer = ev => {
-		var filterLayer = ev.target.value;
-		this.props.onState(state => merge(state, {filterLayer, filtered: []}));
+	onRefFilterVar = (i, value) => {
+		if (i === 0 && value === -1) {
+			this.props.onState(state => merge(state, {referenceFilters: []}));
+		} else {
+			this.props.onState(state => merge(state, {
+				referenceFilters: state.referenceFilters.map((f, j) =>
+					j === i ? {layer: value, filtered: []} : f)
+			}));
+		}
 	};
 
-	onHideAll = () => {
-		var {imageState, filterLayer} = this.props.state;
-		var codes = getIn(imageState, ['phenotypes', filterLayer, 'int_to_category'],
-			[]).slice(1);
-		this.props.onState(state => merge(state, {filtered: range(codes.length)}));
+	onRefHideAll = i => {
+		var {imageState, referenceFilters} = this.props.state;
+		var codes = getIn(imageState,
+			['phenotypes', referenceFilters[i].layer, 'int_to_category'], []).slice(1);
+		this.props.onState(state => merge(state, {
+			referenceFilters: state.referenceFilters.map((f, j) =>
+				j === i ? {layer: f.layer, filtered: range(codes.length)} : f)
+		}));
 	};
 
-	onShowAll = () => {
-		this.props.onState(state => merge(state, {filtered: []}));
+	onRefShowAll = i => {
+		this.props.onState(state => merge(state, {
+			referenceFilters: state.referenceFilters.map((f, j) =>
+				j === i ? {layer: f.layer, filtered: []} : f)
+		}));
+	};
+
+	onAddRefRefinement = () => {
+		var {imageState, referenceFilters} = this.props.state;
+		var layers = get(imageState, 'phenotypes', []);
+		var usedLayers = new Set(referenceFilters.map(f => f.layer));
+		var nextLayer = layers.findIndex((_, i) => !usedLayers.has(i));
+		if (nextLayer >= 0) {
+			this.props.onState(state => merge(state, {
+				referenceFilters: [...state.referenceFilters, {layer: nextLayer, filtered: []}]
+			}));
+		}
+	};
+
+	onRemoveRefRefinement = i => {
+		this.props.onState(state => merge(state, {
+			referenceFilters: state.referenceFilters.filter((_, j) => j !== i)
+		}));
 	};
 
 	onOverlay = () => {
 		this.props.onState(state => merge(state, {hideOverlay: !state.hideOverlay}));
 	};
 
-	onOverlayVar = ev => {
-		var overlayVar = ev.target.value;
-		this.props.onState(state => merge(state, {overlayVar, overlayFiltered: []}));
+	onOverlayVar = (i, value) => {
+		this.props.onState(state => merge(state, {
+			overlayFilters: state.overlayFilters.map((f, j) =>
+				j === i ? {var: value, filtered: []} : f)
+		}));
 	};
 
-	onOverlayHideAll = () => {
-		var {overlay, overlayVar} = this.props.state;
-		var codes = overlay._dicts[overlayVar];
-		this.props.onState(state => merge(state, {overlayFiltered: range(codes.length)}));
+	onOverlayHideAll = i => {
+		var {overlay, overlayFilters} = this.props.state;
+		var codes = overlay._dicts[overlayFilters[i].var];
+		this.props.onState(state => merge(state, {
+			overlayFilters: state.overlayFilters.map((f, j) =>
+				j === i ? {var: f.var, filtered: range(codes.length)} : f)
+		}));
 	};
 
-	onOverlayShowAll = () => {
-		this.props.onState(state => merge(state, {overlayFiltered: []}));
+	onOverlayShowAll = i => {
+		this.props.onState(state => merge(state, {
+			overlayFilters: state.overlayFilters.map((f, j) =>
+				j === i ? {var: f.var, filtered: []} : f)
+		}));
+	};
+
+	onAddRefinement = () => {
+		var {overlay, overlayFilters} = this.props.state;
+		var oVars = overlayVariables(overlay);
+		var usedVars = new Set(overlayFilters.map(f => f.var));
+		var nextVar = oVars.find(v => !usedVars.has(v)) || oVars[0];
+		this.props.onState(state => merge(state, {
+			overlayFilters: [...state.overlayFilters, {var: nextVar, filtered: []}]
+		}));
+	};
+
+	onRemoveRefinement = i => {
+		this.props.onState(state => merge(state, {
+			overlayFilters: state.overlayFilters.filter((_, j) => j !== i)
+		}));
 	};
 
 	render() {
-		var {onChange, onLayer, onFilterLayer, onHideAll, onShowAll, onOverlay,
-				onOverlayVar, onOverlayHideAll, onOverlayShowAll,
+		var {onChange, onLayer, onOverlay,
 				props: {onState, state}} = this,
 			{tab: value} = this.state,
-			{imageState, layer, filterLayer, overlayVar = 'None', overlay, hideOverlay, overlayTitle} = state,
+			{imageState, layer, referenceFilters = [], overlayFilters = [], overlay,
+				hideOverlay, overlayTitle} = state,
 			layers = get(imageState, 'phenotypes', []),
 			layerSelector = layerSelect(layers, layer, onLayer),
-			filterSelector = filterLayerSelect(layers, filterLayer, onFilterLayer),
 			oVars = overlayVariables(overlay),
 			overlayTab = !!oVars.length;
+
+		var refFilterRow = i => {
+			var f = referenceFilters[i],
+				usedLayers = new Set(referenceFilters.map((g, j) => j !== i ? g.layer : null)),
+				availableLayers = layers
+					.map((l, idx) => idx)
+					.filter(idx => !usedLayers.has(idx) || idx === f.layer),
+				label = i === 0 ? 'Filter by' : 'Refine by';
+			return [
+				div({style: {display: 'flex', alignItems: 'center'}},
+					select({
+						id: `ref-filter-select-${i}`,
+						label,
+						value: f.layer,
+						onChange: ev => this.onRefFilterVar(i, ev.target.value)},
+						...(i === 0 ? [menuItem({value: -1}, 'None')] : []),
+						...availableLayers.map(idx => menuItem({value: idx}, layers[idx].name))),
+					i > 0 ? button({
+						style: {minWidth: 'unset', padding: 4},
+						onClick: () => this.onRemoveRefRefinement(i),
+						size: 'small'}, icon('close')) : null),
+				div(
+					shButton(() => this.onRefHideAll(i), 'Hide all'),
+					shButton(() => this.onRefShowAll(i), 'Show all')),
+				filterLegend(state, onState, i)
+			];
+		};
+
+		var filterRow = (i) => {
+			var f = overlayFilters[i],
+				usedVars = new Set(overlayFilters.map((g, j) => j !== i ? g.var : null)),
+				availableVars = oVars.filter(v => !usedVars.has(v) || v === f.var),
+				label = i === 0 ?
+					(overlayTitle ? `Filter mapped data by ${overlayTitle}` : 'Filter mapped data by') :
+					'Refine by';
+			return [
+				div({style: {display: 'flex', alignItems: 'center'}},
+					overlaySelect(availableVars, f.var,
+						ev => this.onOverlayVar(i, ev.target.value), label),
+					i > 0 ? button({
+						style: {minWidth: 'unset', padding: 4},
+						onClick: () => this.onRemoveRefinement(i),
+						size: 'small'}, icon('close')) : null),
+				div(
+					shButton(() => this.onOverlayHideAll(i), 'Hide all'),
+					shButton(() => this.onOverlayShowAll(i), 'Show all')),
+				overlayLegend(state, onState, i)
+			];
+		};
 
 		return (
 			div(
 				tabs({value, onChange, variant: 'fullWidth'},
 					tab({label: 'Color'}),
-					tab({label: `Filter ${filterCount(state)}`}),
-					...(overlayTab ? [tab({label: 'Mapped Data'})] : [])),
+					tab({label: isFiltered(state) ? 'Filter \u25cf' : 'Filter'}),
+					...(overlayTab ? [tab({label: isMappedFiltered(state) ? 'Mapped Data \u25cf' : 'Mapped Data'})] : [])),
 				tabPanel({value, index: 0},
 					overlay && !overlayTab ? overlayButton(onOverlay, !hideOverlay)
 						: null,
 					layerSelector,
 					singlecellLegend(state, onState)),
 				tabPanel({value, index: 1},
-					filterSelector,
-					...(filterLayer >= 0 ? [
+					referenceFilters.length === 0 ?
+						select({
+							id: 'ref-filter-select-0',
+							label: 'Filter by',
+							value: -1,
+							onChange: ev => {
+								var layer = ev.target.value;
+								if (layer >= 0) {
+									this.props.onState(state => merge(state,
+										{referenceFilters: [{layer, filtered: []}]}));
+								}
+							}},
+							menuItem({value: -1}, 'None'),
+							...layers.map((l, i) => menuItem({value: i}, l.name))) :
 						div(
-							shButton(onHideAll, 'Hide all'),
-							shButton(onShowAll, 'Show all')),
-						filterLegend(state, onState)
-					] : [])),
+							...referenceFilters.flatMap((_, i) => refFilterRow(i)),
+							referenceFilters.length < 3 &&
+								layers.some((_, i) => !new Set(referenceFilters.map(f => f.layer)).has(i)) ?
+								shButton(this.onAddRefRefinement, 'Refine by') : null)),
 				...(overlayTab ?
 					[tabPanel({value, index: 2},
-						overlaySelect(oVars, overlayVar, onOverlayVar, overlayTitle),
-						...(overlayVar !== 'None' ? [
-							div(
-								shButton(onOverlayHideAll, 'Hide all'),
-								shButton(onOverlayShowAll, 'Show all'))] : []),
-						overlayLegend(state, onState))]
-						: [])));
+						...overlayFilters.flatMap((_, i) => filterRow(i)),
+						overlayFilters.length > 0 && overlayFilters.length < 3 &&
+							oVars.some(v => !new Set(overlayFilters.map(f => f.var)).has(v)) ?
+							shButton(this.onAddRefinement, 'Refine by') : null
+					)] : [])));
 	}
 });

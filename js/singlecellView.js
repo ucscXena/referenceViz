@@ -142,9 +142,10 @@ export default el(class SinglecellView extends PureComponent {
 					var overlay = assoc(object(names, data), '_dicts',
 						object(names, dicts));
 					var overlayVars = without(names, 'x', 'y');
-					var overlayVar = overlayVars.length ? overlayVars[0] : 'None';
+					var overlayFilters = overlayVars.length ?
+						[{var: overlayVars[0], filtered: []}] : [];
 					this.setState({overlayRadius: defaultOverlayRadius(overlay.x.length)});
-					this.props.onState(state => merge(state, {overlay, overlayVar,
+					this.props.onState(state => merge(state, {overlay, overlayFilters,
 						...(originalFilename ? {overlayTitle: originalFilename} : {})}));
 				},
 				() => this.setState({error: true}));
@@ -219,8 +220,8 @@ export default el(class SinglecellView extends PureComponent {
 		var {onViewState, onTooltip, onClose, onControls, onDeck, /*onLayer, */onRadius,
 			onOverlayRadius, onReload, onTileData} = this,
 			{image, state, onState, onShadow} = this.props,
-			{hidden, filtered, layer, filterLayer, imageState, overlay,
-				hideOverlay, overlayVar, overlayFiltered = []} = state || {},
+			{hidden, referenceFilters = [], layer, imageState, overlay,
+				hideOverlay, overlayFilters = []} = state || {},
 			error = this.state.error,
 			unit = false,
 			{container, tooltipValue, showControls, radius, overlayRadius,
@@ -250,8 +251,8 @@ export default el(class SinglecellView extends PureComponent {
 					: []),
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
-					onTooltip, radius, overlayRadius, viewState, hidden, filtered, image,
-					imageState, overlay, overlayVar, overlayFiltered, hideOverlay, layer, filterLayer, container,
+					onTooltip, radius, overlayRadius, viewState, hidden, referenceFilters, image,
+					imageState, overlay, overlayFilters, hideOverlay, layer, container,
 					key: 'drawing'})));
 	}
 });
