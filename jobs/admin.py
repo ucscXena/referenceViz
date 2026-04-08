@@ -113,7 +113,7 @@ class ReferenceAdmin(admin.ModelAdmin):
 class ProjectionAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'short_job', 'reference_link', 'status', 'batch_job_link', 'download_link', 'created_at')
     list_filter = ('status', 'reference')
-    readonly_fields = ('id', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'created_at', 'updated_at')
+    readonly_fields = ('id', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'predictions_download_link', 'created_at', 'updated_at')
 
     def short_id(self, obj):
         return str(obj.id)[:8]
@@ -145,4 +145,9 @@ class ProjectionAdmin(admin.ModelAdmin):
     def download_link(self, obj):
         s3_uri = obj.result.get('s3_uri') if obj.result else None
         return _presigned_link(s3_uri, 'Download')
-    download_link.short_description = 'Result'
+    download_link.short_description = 'Result (arrow)'
+
+    def predictions_download_link(self, obj):
+        s3_uri = obj.result.get('predictions_s3_uri') if obj.result else None
+        return _presigned_link(s3_uri, 'Download')
+    predictions_download_link.short_description = 'Predictions (tsv)'
