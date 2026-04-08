@@ -224,7 +224,9 @@ def presign_overlay(request):
     s3_uri = request.GET.get('uri', '')
     projection = get_object_or_404(Projection, result__s3_uri=s3_uri)
     if not projection.public:
-        if not request.user.is_authenticated or projection.job.user != request.user:
+        if not request.user.is_authenticated:
+            return HttpResponseForbidden()
+        if not (projection.job.user == request.user or request.user.is_staff):
             return HttpResponseForbidden()
     bucket, key = s3_uri.replace('s3://', '').split('/', 1)
     url = boto_client('s3').generate_presigned_url(

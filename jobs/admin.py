@@ -113,7 +113,7 @@ class ReferenceAdmin(admin.ModelAdmin):
 class ProjectionAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'short_job', 'reference_link', 'status', 'batch_job_link', 'download_link', 'created_at')
     list_filter = ('status', 'reference')
-    readonly_fields = ('id', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'predictions_download_link', 'created_at', 'updated_at')
+    readonly_fields = ('id', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'predictions_download_link', 'viz_link', 'created_at', 'updated_at')
 
     def short_id(self, obj):
         return str(obj.id)[:8]
@@ -151,3 +151,12 @@ class ProjectionAdmin(admin.ModelAdmin):
         s3_uri = obj.result.get('predictions_s3_uri') if obj.result else None
         return _presigned_link(s3_uri, 'Download')
     predictions_download_link.short_description = 'Predictions (tsv)'
+
+    def viz_link(self, obj):
+        s3_uri = obj.result.get('s3_uri') if obj.result else None
+        if not s3_uri:
+            return '—'
+        from urllib.parse import quote
+        url = f'/visualization/{obj.reference_id}/?overlay={quote(s3_uri, safe="")}'
+        return format_html('<a href="{}" target="_blank">Open visualization</a>', url)
+    viz_link.short_description = 'Visualization'
