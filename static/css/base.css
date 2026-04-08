@@ -160,6 +160,22 @@ body.base-root {
   color: #842029;
 }
 
+/* ── Provider (social login) button ─────────────────────── */
+.btn-provider {
+  display: inline-block;
+  padding: 10px 20px;
+  background-color: #1c7cc7;
+  color: #fff;
+  border-radius: 4px;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.btn-provider:hover {
+  background-color: #1668a8;
+  color: #fff;
+}
+
 /* ── Cards ──────────────────────────────────────────────── */
 .base-card {
   border: 1px solid #e0e0e0;
