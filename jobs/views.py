@@ -11,7 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .aws import boto_client, delete_s3_key, delete_s3_uri
-from .models import Job, Projection, Reference, UCEModel
+from .models import Job, Projection, Reference, ReferenceGroup, UCEModel
 from .tasks import run_analysis, _submit_projection
 
 
@@ -30,7 +30,10 @@ def user_status(request):
 @require_GET
 def reference_list(request):
     """Dev listing of all references — links to the create page with ?ref=<id>."""
-    references = Reference.objects.all()
+    references = Reference.objects.filter(
+        id__in=ReferenceGroup.objects.exclude(default_version=None)
+                                     .values('default_version_id')
+    ).select_related('group').order_by('group__title')
     return render(request, 'jobs/references.html', {'references': references})
 
 
