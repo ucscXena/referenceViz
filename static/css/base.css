@@ -241,6 +241,84 @@ body.base-root {
   gap: 8px;
 }
 
+/* ── Stats page ─────────────────────────────────────────── */
+.stats-grid {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.stats-card {
+  flex: 1;
+  min-width: 200px;
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.stats-table th,
+.stats-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  text-align: left;
+}
+
+.stats-table th {
+  color: #666;
+  font-weight: 400;
+  width: 60%;
+}
+
+.stats-table thead th {
+  color: #333;
+  font-weight: 500;
+  width: auto;
+}
+
+.stats-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 160px;
+  margin-bottom: 24px;
+  padding-bottom: 36px;
+  position: relative;
+}
+
+.stats-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+  height: 100%;
+  position: relative;
+}
+
+.stats-bar {
+  width: 100%;
+  background-color: #1c7cc7;
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+}
+
+.stats-bar-count {
+  font-size: 0.7rem;
+  color: #666;
+  margin-top: 3px;
+}
+
+.stats-bar-label {
+  font-size: 0.65rem;
+  color: #999;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
 /* ── Cards ──────────────────────────────────────────────── */
 .base-card {
   border: 1px solid #e0e0e0;

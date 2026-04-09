@@ -1,0 +1,76 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+  .stats-grid { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 24px; }
+  .stats-card { flex: 1; min-width: 200px; }
+  .stats-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; margin-bottom: 24px; }
+  .stats-table th, .stats-table td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; text-align: left; }
+  .stats-table th { color: #666; font-weight: 400; width: 60%; }
+  .stats-table thead th { color: #333; font-weight: 600; width: auto; }
+  .stats-bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 140px; margin-bottom: 40px; }
+  .stats-bar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; flex: 1; height: 100%; }
+  .stats-bar { width: 100%; background-color: #417690; border-radius: 3px 3px 0 0; min-height: 2px; }
+  .stats-bar-count { font-size: 0.7rem; color: #666; margin-top: 3px; }
+  .stats-bar-label { font-size: 0.65rem; color: #999; margin-top: 2px; white-space: nowrap; }
+</style>
+
+<h2>Users</h2>
+<div class="stats-grid">
+  <div class="stats-card">
+    <table class="stats-table">
+      <tr><th>Total users (ever)</th><td>{{ total_users }}</td></tr>
+      <tr><th>Active last 30 days</th><td>{{ active_month }}</td></tr>
+      <tr><th>Active last 7 days</th><td>{{ active_week }}</td></tr>
+    </table>
+  </div>
+  <div class="stats-card">
+    <table class="stats-table">
+      <tr><th>Total jobs</th><td>{{ job_totals.total }}</td></tr>
+      <tr><th>Complete</th><td>{{ job_totals.complete }}</td></tr>
+      <tr><th>Error</th><td>{{ job_totals.error }}</td></tr>
+      <tr><th>Running</th><td>{{ job_totals.running }}</td></tr>
+      <tr><th>Pending</th><td>{{ job_totals.pending }}</td></tr>
+    </table>
+  </div>
+</div>
+
+<h2>Jobs per week (last 16 weeks)</h2>
+<div class="stats-bar-chart">
+  {% with max_week=weeks|dictsort:"count"|last %}
+  {% for week in weeks %}
+    {% if max_week.count > 0 %}
+    <div class="stats-bar-col">
+      <div class="stats-bar" style="height: {% widthratio week.count max_week.count 120 %}px" title="{{ week.count }} jobs"></div>
+      <div class="stats-bar-count">{{ week.count }}</div>
+      <div class="stats-bar-label">{{ week.label }}</div>
+    </div>
+    {% endif %}
+  {% endfor %}
+  {% endwith %}
+</div>
+
+<h2>Cell count distribution (complete jobs)</h2>
+<table class="stats-table" style="max-width:400px">
+  <thead><tr><th>Range</th><th>Jobs</th></tr></thead>
+  <tbody>
+  {% for bucket in cell_counts %}
+    <tr><td>{{ bucket.label }}</td><td>{{ bucket.count }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Projections by reference</h2>
+<table class="stats-table" style="max-width:600px">
+  <thead><tr><th>Reference</th><th>Version</th><th>Total</th><th>Complete</th></tr></thead>
+  <tbody>
+  {% for row in proj_by_ref %}
+    <tr>
+      <td>{{ row.reference__group__title }}</td>
+      <td>{{ row.reference_id }}</td>
+      <td>{{ row.total }}</td>
+      <td>{{ row.complete }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

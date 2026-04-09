@@ -1,6 +1,12 @@
+from collections import defaultdict
+from datetime import timedelta
+
 from django.conf import settings
 from django.contrib import admin
-from django.urls import reverse
+from django.db.models import Count, Q
+from django.shortcuts import render
+from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.html import format_html
 
 from .aws import boto_client
@@ -54,6 +60,79 @@ class JobAdmin(admin.ModelAdmin):
     list_filter = ('status',)
     readonly_fields = ('id', 'batch_job_link', 'created_at', 'updated_at', 'uce_download_link')
     inlines = [ProjectionInline]
+    change_list_template = 'admin/jobs/job/change_list.html'
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path('stats/', self.admin_site.admin_view(self.stats_view), name='jobs_job_stats'),
+        ]
+        return custom + urls
+
+    def stats_view(self, request):
+        now = timezone.now()
+        week_ago = now - timedelta(days=7)
+        month_ago = now - timedelta(days=30)
+
+        job_totals = Job.objects.aggregate(
+            total=Count('id'),
+            complete=Count('id', filter=Q(status='complete')),
+            error=Count('id', filter=Q(status='error')),
+            running=Count('id', filter=Q(status='running')),
+            pending=Count('id', filter=Q(status='pending')),
+        )
+
+        weeks = []
+        for i in range(15, -1, -1):
+            start = now - timedelta(weeks=i + 1)
+            end = now - timedelta(weeks=i)
+            count = Job.objects.filter(created_at__gte=start, created_at__lt=end).count()
+            weeks.append({'label': start.strftime('%-m/%-d'), 'count': count})
+
+        active_week = Job.objects.filter(created_at__gte=week_ago).values('user').distinct().count()
+        active_month = Job.objects.filter(created_at__gte=month_ago).values('user').distinct().count()
+        total_users = Job.objects.values('user').distinct().count()
+
+        cell_buckets = defaultdict(int)
+        bucket_labels = ['<10k', '10k–50k', '50k–100k', '100k–250k', '250k–500k', '>500k']
+        for job in Job.objects.filter(status='complete').only('result'):
+            n = job.cell_count()
+            if n is None:
+                continue
+            if n < 10_000:
+                cell_buckets['<10k'] += 1
+            elif n < 50_000:
+                cell_buckets['10k–50k'] += 1
+            elif n < 100_000:
+                cell_buckets['50k–100k'] += 1
+            elif n < 250_000:
+                cell_buckets['100k–250k'] += 1
+            elif n < 500_000:
+                cell_buckets['250k–500k'] += 1
+            else:
+                cell_buckets['>500k'] += 1
+        cell_counts = [{'label': l, 'count': cell_buckets[l]} for l in bucket_labels]
+
+        proj_by_ref = (
+            Projection.objects
+            .select_related('reference__group')
+            .values('reference__group__title', 'reference_id')
+            .annotate(total=Count('id'), complete=Count('id', filter=Q(status='complete')))
+            .order_by('-total')
+        )
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Site Stats',
+            'job_totals': job_totals,
+            'weeks': weeks,
+            'active_week': active_week,
+            'active_month': active_month,
+            'total_users': total_users,
+            'cell_counts': cell_counts,
+            'proj_by_ref': proj_by_ref,
+        }
+        return render(request, 'admin/jobs/job/stats.html', context)
 
     def short_id(self, obj):
         return str(obj.id)[:8]
