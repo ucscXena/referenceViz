@@ -23,6 +23,7 @@
       <nav class="header-nav">
         <a href="/references/" class="header-nav-link">References</a>
         <a href="/jobs/" class="header-nav-link header-nav-link--active">My Dashboard</a>
+        <a href="/contact/" class="header-nav-link">Contact us</a>
       </nav>
       {% if user.email %}
       <div class="header-user">
@@ -35,6 +36,18 @@
     <div class="base-content">
     {% block base_content %}{% endblock %}
     </div>
+    <button class="feedback-fab" onclick="document.getElementById('feedback-dialog').showModal()">Give feedback</button>
+    <dialog id="feedback-dialog" class="feedback-dialog">
+      <h2 class="feedback-dialog-title">Give feedback</h2>
+      <p class="feedback-dialog-body">
+        We'd love to hear what you think.<br>
+        Email us at <strong><a href="mailto:ucsc-brain-explorer-group@ucsc.edu?subject=UCSC Brain Explorer Feedback">ucsc-brain-explorer-group@ucsc.edu</a></strong>.
+      </p>
+      <div class="feedback-dialog-actions">
+        <button class="base-button secondary" onclick="document.getElementById('feedback-dialog').close()">Close</button>
+        <a class="base-button" href="mailto:ucsc-brain-explorer-group@ucsc.edu?subject=UCSC Brain Explorer Feedback">Open in email client</a>
+      </div>
+    </dialog>
     {% block extra_body %}{% endblock %}
   </body>
 </html>
