@@ -6,7 +6,7 @@ from django.conf import settings
 from django.utils import timezone
 from django_rq import job
 
-from .aws import delete_s3_key, delete_s3_uri
+from .aws import delete_s3_key, delete_s3_uri, notify_staff
 from .batch import check_batch_job, submit_batch_job, submit_uce_batch_job
 from .models import Job, Projection
 
@@ -50,6 +50,10 @@ def run_analysis(job_id, mixed_precision='bf16'):
         job_instance.result = {'error': str(e), 'traceback': traceback.format_exc()}
         job_instance.status = 'error'
         job_instance.save()
+        notify_staff(
+            subject=f'UCE job failed to submit: {str(job_id)[:8]}',
+            message=f'UCE job {job_id} failed to submit to Batch.\nUser: {job_instance.user}\nError: {e}',
+        )
 
 
 @job('default')
@@ -79,6 +83,10 @@ def check_job_result(job_id, attempt=0):
                 job_instance.result = {'error': detail}
                 job_instance.status = 'error'
                 job_instance.save()
+                notify_staff(
+                    subject=f'UCE job failed: {str(job_id)[:8]}',
+                    message=f'UCE Batch job {job_id} failed.\nUser: {job_instance.user}\nReason: {detail}',
+                )
                 pending_projections = []
                 s3_input_key = None
             else:
@@ -97,6 +105,10 @@ def check_job_result(job_id, attempt=0):
             job_instance.result = {'error': f"UCE Batch job not finished after {MAX_CHECK_ATTEMPTS * 5} minutes"}
             job_instance.status = 'error'
             job_instance.save()
+            notify_staff(
+                subject=f'UCE job timed out: {str(job_id)[:8]}',
+                message=f'UCE Batch job {job_id} did not finish within {MAX_CHECK_ATTEMPTS * 5} minutes.\nUser: {job_instance.user}',
+            )
             return
         django_rq.get_queue('default').enqueue_in(
             timedelta(minutes=5), check_job_result, str(job_id), attempt + 1
@@ -144,6 +156,10 @@ def _submit_projection(projection, uce_s3_uri):
         projection.result = {'error': str(e), 'traceback': traceback.format_exc()}
         projection.status = 'error'
         projection.save()
+        notify_staff(
+            subject=f'Projection job failed to submit: {str(projection.id)[:8]}',
+            message=f'Projection {projection.id} failed to submit to Batch.\nUser: {projection.job.user}\nReference: {projection.reference.name}\nError: {e}',
+        )
 
 
 @job('default')
@@ -173,10 +189,18 @@ def check_projection_result(projection_id, attempt=0):
             projection.result = {'error': detail}
             projection.status = 'error'
             projection.save()
+            notify_staff(
+                subject=f'Projection job failed: {str(projection_id)[:8]}',
+                message=f'Projection {projection_id} failed.\nUser: {projection.job.user}\nReference: {projection.reference.name}\nReason: {detail}',
+            )
             return
 
         # Still running
         if attempt >= MAX_PROJECTION_ATTEMPTS:
+            notify_staff(
+                subject=f'Projection job timed out: {str(projection_id)[:8]}',
+                message=f'Projection {projection_id} did not finish within {MAX_PROJECTION_ATTEMPTS * 2} minutes.\nUser: {projection.job.user}\nReference: {projection.reference.name}',
+            )
             raise TimeoutError(
                 f"Batch job not finished after {MAX_PROJECTION_ATTEMPTS * 2} minutes"
             )

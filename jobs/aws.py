@@ -17,6 +17,18 @@ def boto_client(service):
     return boto3.client(service, **kwargs)
 
 
+def notify_staff(subject, message):
+    """Publish an alert to the SNS staff notification topic. Non-fatal on failure."""
+    topic_arn = getattr(settings, 'SNS_ALERT_TOPIC_ARN', '')
+    if not topic_arn:
+        logger.warning("SNS_ALERT_TOPIC_ARN not configured — skipping staff notification")
+        return
+    try:
+        boto_client('sns').publish(TopicArn=topic_arn, Subject=subject, Message=message)
+    except Exception:
+        logger.warning("Failed to publish SNS alert", exc_info=True)
+
+
 def delete_s3_key(key):
     """Delete an object by key from AWS_S3_BUCKET. No-op if key is empty."""
     if not key:
