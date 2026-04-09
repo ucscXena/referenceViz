@@ -70,4 +70,5 @@ ssh -l${USER} ${HOST} <<-ENDSSH
     python manage.py collectstatic
     sudo apache2ctl restart
     sudo systemctl start rqworker
+    python manage.py recover_pending_projections
 ENDSSH
