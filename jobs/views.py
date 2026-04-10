@@ -1,11 +1,12 @@
 import json
+import os
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.db import transaction
-from django.http import HttpResponseForbidden, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -438,3 +439,36 @@ def _delete_job_s3_files(job):
         proj_result = projection.result or {}
         delete_s3_uri(proj_result.get('s3_uri') or proj_result.get('output_s3_uri'))
         delete_s3_uri(proj_result.get('predictions_s3_uri'))
+
+
+_GOACCESS_REPORT = '/var/www/goaccess/report.html'
+_GOACCESS_STATUS = '/var/www/goaccess/status.txt'
+
+@login_required
+@require_GET
+def usage_report(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden()
+
+    warning = None
+    try:
+        status = open(_GOACCESS_STATUS).read().strip()
+        if not status.startswith('OK:'):
+            warning = status
+    except FileNotFoundError:
+        warning = "GoAccess status file not found — report may never have been generated."
+
+    try:
+        report_html = open(_GOACCESS_REPORT, 'rb').read()
+    except FileNotFoundError:
+        raise Http404("Usage report not yet generated.")
+
+    if warning:
+        # Inject a warning banner just after <body>
+        banner = (
+            f'<div style="background:#fff3cd;border:1px solid #ffc107;padding:12px 16px;'
+            f'font-family:sans-serif;font-size:14px;"><strong>Warning:</strong> {warning}</div>'
+        ).encode()
+        report_html = report_html.replace(b'<body>', b'<body>' + banner, 1)
+
+    return HttpResponse(report_html, content_type='text/html')
