@@ -95,6 +95,36 @@ class Job(models.Model):
         return self.result.get('cell_count') if self.result else None
 
 
+class JobEvent(models.Model):
+    """Permanent record of job lifecycle events, surviving job deletion."""
+    EVENT_CHOICES = [('created', 'Created'), ('complete', 'Complete'), ('error', 'Error')]
+
+    job_id = models.UUIDField(db_index=True)  # not a FK — survives job deletion
+    user = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name='+')
+    event = models.CharField(max_length=20, choices=EVENT_CHOICES)
+    cell_count = models.IntegerField(null=True, blank=True)
+    timestamp = models.DateTimeField()
+
+    class Meta:
+        ordering = ['timestamp']
+
+
+class ProjectionEvent(models.Model):
+    """Permanent record of projection lifecycle events, surviving job/projection deletion."""
+    EVENT_CHOICES = [('created', 'Created'), ('complete', 'Complete'), ('error', 'Error')]
+
+    projection_id = models.UUIDField(db_index=True)  # not a FK — survives deletion
+    job_id = models.UUIDField(db_index=True)
+    user = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name='+')
+    reference_id = models.CharField(max_length=100)      # denormalized — survives reference changes
+    reference_title = models.CharField(max_length=255)
+    event = models.CharField(max_length=20, choices=EVENT_CHOICES)
+    timestamp = models.DateTimeField()
+
+    class Meta:
+        ordering = ['timestamp']
+
+
 class Projection(models.Model):
     """One projection of a Job's UCE embedding into a Reference space."""
     STATUS_CHOICES = [

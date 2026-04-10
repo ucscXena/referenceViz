@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from .aws import boto_client
-from .models import Job, Projection, Reference, ReferenceGroup, UCEModel
+from .models import Job, JobEvent, Projection, ProjectionEvent, Reference, ReferenceGroup, UCEModel
 
 
 def _presigned_link(s3_uri, label):
@@ -74,31 +74,37 @@ class JobAdmin(admin.ModelAdmin):
         week_ago = now - timedelta(days=7)
         month_ago = now - timedelta(days=30)
 
-        job_totals = Job.objects.aggregate(
-            total=Count('id'),
-            complete=Count('id', filter=Q(status='complete')),
-            error=Count('id', filter=Q(status='error')),
+        # Live counts for currently active jobs
+        job_live = Job.objects.aggregate(
             running=Count('id', filter=Q(status='running')),
             pending=Count('id', filter=Q(status='pending')),
         )
 
+        # Historical counts from event log (survives job deletion)
+        job_totals = JobEvent.objects.aggregate(
+            total=Count('id', filter=Q(event='created')),
+            complete=Count('id', filter=Q(event='complete')),
+            error=Count('id', filter=Q(event='error')),
+        )
+        job_totals.update(job_live)
+
+        # Jobs created per week (last 16 weeks) — from event log
         weeks = []
         for i in range(15, -1, -1):
             start = now - timedelta(weeks=i + 1)
             end = now - timedelta(weeks=i)
-            count = Job.objects.filter(created_at__gte=start, created_at__lt=end).count()
+            count = JobEvent.objects.filter(event='created', timestamp__gte=start, timestamp__lt=end).count()
             weeks.append({'label': start.strftime('%-m/%-d'), 'count': count})
 
-        active_week = Job.objects.filter(created_at__gte=week_ago).values('user').distinct().count()
-        active_month = Job.objects.filter(created_at__gte=month_ago).values('user').distinct().count()
-        total_users = Job.objects.values('user').distinct().count()
+        # Active users from event log
+        active_week = JobEvent.objects.filter(event='created', timestamp__gte=week_ago).values('user').distinct().count()
+        active_month = JobEvent.objects.filter(event='created', timestamp__gte=month_ago).values('user').distinct().count()
+        total_users = JobEvent.objects.filter(event='created').values('user').distinct().count()
 
+        # Cell count distribution from event log
         cell_buckets = defaultdict(int)
         bucket_labels = ['<10k', '10k–50k', '50k–100k', '100k–250k', '250k–500k', '>500k']
-        for job in Job.objects.filter(status='complete').only('result'):
-            n = job.cell_count()
-            if n is None:
-                continue
+        for n in JobEvent.objects.filter(event='complete').exclude(cell_count=None).values_list('cell_count', flat=True):
             if n < 10_000:
                 cell_buckets['<10k'] += 1
             elif n < 50_000:
@@ -113,11 +119,13 @@ class JobAdmin(admin.ModelAdmin):
                 cell_buckets['>500k'] += 1
         cell_counts = [{'label': l, 'count': cell_buckets[l]} for l in bucket_labels]
 
+        # Projections by reference from event log
         proj_by_ref = (
-            Projection.objects
-            .select_related('reference__group')
-            .values('reference__group__title', 'reference_id')
-            .annotate(total=Count('id'), complete=Count('id', filter=Q(status='complete')))
+            ProjectionEvent.objects
+            .values('reference_title', 'reference_id')
+            .annotate(total=Count('id', filter=Q(event='created')),
+                      complete=Count('id', filter=Q(event='complete')))
+            .filter(total__gt=0)
             .order_by('-total')
         )
 
