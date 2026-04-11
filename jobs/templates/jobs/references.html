@@ -8,23 +8,56 @@
     <a href="{% url 'job_list' %}" class="back-link">&#8592; Back to mappings</a>
   </div>
 
-  {% if references %}
-  <table class="job-table">
+  {% if groups %}
+  <table class="job-table ref-table">
     <thead>
       <tr>
-        <th>ID</th>
         <th>Name</th>
-        <th>S3 URI</th>
+        <th>Version</th>
+        <th class="col-warning"></th>
         <th></th>
       </tr>
     </thead>
     <tbody>
-      {% for ref in references %}
+      {% for group in groups %}
       <tr>
-        <td class="col-id" style="font-family:monospace;">{{ ref.id }}</td>
-        <td>{{ ref.name }}</td>
-        <td style="font-family:monospace; font-size:0.8rem; color:#555;">{{ ref.s3_uri }}</td>
-        <td><a href="{% url 'job_create' %}?ref={{ ref.id }}" class="base-button" style="padding:5px 12px; font-size:0.85rem;">Map cells</a></td>
+        <td>{{ group.title }}</td>
+        <td class="ref-version-cell">
+          {% if group.active_versions|length > 1 %}
+          <select class="ref-version-select"
+                  id="ver-{{ group.id }}"
+                  data-default="{{ group.default_version_id }}"
+                  onchange="onVersionChange(this)">
+            <optgroup label="Latest">
+              <option value="{{ group.default_version_id }}" data-is-default="true" selected>
+                {{ group.default_version.version_label|default:group.default_version_id }}
+              </option>
+            </optgroup>
+            <optgroup label="Older versions">
+              {% for ref in group.active_versions %}
+              {% if ref.id != group.default_version_id %}
+              <option value="{{ ref.id }}" data-is-default="false">
+                {{ ref.version_label|default:ref.id }}
+              </option>
+              {% endif %}
+              {% endfor %}
+            </optgroup>
+          </select>
+          {% else %}
+          <span class="ref-version-single">{{ group.default_version.version_label|default:"—" }}</span>
+          {% endif %}
+        </td>
+        <td class="col-warning">
+          <span class="ref-old-warning" id="warn-{{ group.id }}">
+            Older reference — latest is recommended.
+          </span>
+        </td>
+        <td>
+          <a href="{% url 'job_create' %}?ref={{ group.default_version_id }}"
+             class="base-button ref-map-btn"
+             id="btn-{{ group.id }}"
+             style="padding:5px 12px; font-size:0.85rem; white-space:nowrap;">Map cells</a>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -69,9 +102,42 @@
 .job-table tbody tr:hover { background: #fafafa; }
 .back-link {
   font-size: 0.875rem;
-  color: #1976d2;
+  color: #1c7cc7;
   text-decoration: none;
 }
 .back-link:hover { text-decoration: underline; }
+.ref-version-cell { width: 160px; }
+.ref-version-select {
+  font-size: 0.875rem;
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  width: 100%;
+}
+.col-warning { width: 220px; }
+.ref-old-warning {
+  font-size: 0.8rem;
+  color: #b45309;
+  visibility: hidden;
+}
+.ref-old-warning.visible {
+  visibility: visible;
+}
+.ref-version-single {
+  font-size: 0.875rem;
+  color: #666;
+}
 </style>
+
+<script>
+function onVersionChange(select) {
+  var groupId = select.id.replace('ver-', '');
+  var selectedOption = select.options[select.selectedIndex];
+  var isDefault = selectedOption.dataset.isDefault === 'true';
+
+  document.getElementById('btn-' + groupId).href = '{% url "job_create" %}?ref=' + select.value;
+  document.getElementById('warn-' + groupId).classList.toggle('visible', !isDefault);
+}
+
+</script>
 {% endblock %}

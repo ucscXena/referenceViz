@@ -9,7 +9,7 @@
     <div class="create-panel">
       <h2 class="panel-title">Map new cells</h2>
       {% if reference %}
-      <p class="ref-badge">Projecting to: <strong>{{ reference.name }}</strong></p>
+      <p class="ref-badge">Projecting to: <strong>{{ reference.name }}{% if reference.version_label %} ({{ reference.version_label }}){% endif %}</strong></p>
       {% endif %}
       <p class="panel-hint">Select an <code>.h5ad</code> file to upload. The file will be uploaded directly to S3 and queued for analysis.</p>
 
@@ -35,7 +35,7 @@
     <!-- ── Right: remap existing embedding ── -->
     <div class="create-panel">
       <h2 class="panel-title">Remap cells to new reference</h2>
-      <p class="ref-badge">Projecting to: <strong>{{ reference.name }}</strong></p>
+      <p class="ref-badge">Projecting to: <strong>{{ reference.name }}{% if reference.version_label %} ({{ reference.version_label }}){% endif %}</strong></p>
       <p class="panel-hint">Remap cells previously uploaded to a new reference.</p>
 
       <div class="recent-scroll">

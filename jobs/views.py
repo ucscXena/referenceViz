@@ -5,7 +5,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from django.db import transaction
+from django.db import models, transaction
 from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import csrf_exempt
@@ -30,12 +30,20 @@ def user_status(request):
 @login_required
 @require_GET
 def reference_list(request):
-    """Dev listing of all references — links to the create page with ?ref=<id>."""
-    references = Reference.objects.filter(
-        id__in=ReferenceGroup.objects.exclude(default_version=None)
-                                     .values('default_version_id')
-    ).select_related('group').order_by('group__title')
-    return render(request, 'jobs/references.html', {'references': references})
+    """Listing of references with version selectors."""
+    groups = (
+        ReferenceGroup.objects
+        .exclude(default_version=None)
+        .prefetch_related(
+            models.Prefetch(
+                'versions',
+                queryset=Reference.objects.filter(is_active=True).order_by('-created_at'),
+                to_attr='active_versions',
+            )
+        )
+        .order_by('title')
+    )
+    return render(request, 'jobs/references.html', {'groups': groups})
 
 
 @login_required
