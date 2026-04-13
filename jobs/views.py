@@ -27,6 +27,41 @@ def user_status(request):
     return JsonResponse({'email': None})
 
 
+@require_GET
+def reference_groups_api(request):
+    """Public JSON API: reference groups with their active versions, for data-explorer."""
+    groups = (
+        ReferenceGroup.objects
+        .exclude(default_version=None)
+        .select_related('default_version')
+        .prefetch_related(
+            models.Prefetch(
+                'versions',
+                queryset=Reference.objects.filter(is_active=True).order_by('-created_at'),
+                to_attr='active_versions',
+            )
+        )
+        .order_by('title')
+    )
+    data = [
+        {
+            'id': str(group.id),
+            'title': group.title,
+            'default_version_id': group.default_version_id,
+            'versions': [
+                {
+                    'id': ref.id,
+                    'version_label': ref.version_label,
+                    'is_default': ref.id == group.default_version_id,
+                }
+                for ref in group.active_versions
+            ],
+        }
+        for group in groups
+    ]
+    return JsonResponse(data, safe=False)
+
+
 @login_required
 @require_GET
 def reference_list(request):

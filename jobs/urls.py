@@ -21,4 +21,5 @@ urlpatterns = [
     path('uce-callback/', views.uce_callback, name='uce_callback'),
     path('projection-callback/', views.projection_callback, name='projection_callback'),
     path('user-status/', views.user_status, name='user_status'),
+    path('api/reference-groups/', views.reference_groups_api, name='reference_groups_api'),
 ]
