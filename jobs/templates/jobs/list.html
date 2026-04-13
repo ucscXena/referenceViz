@@ -44,7 +44,7 @@
       {% else %}
       <tr data-proj-row="{{ proj.id }}">
       {% endif %}
-        <td>{{ proj.reference.name }}</td>
+        <td>{{ proj.reference.name }}{% if proj.reference.version_label %}<br><span class="ref-version-label">{{ proj.reference.version_label }}</span>{% endif %}</td>
         {% if job.status == 'complete' %}
         <td class="proj-status-cell" data-proj-id="{{ proj.id }}">
           {% if proj.status == 'error' %}
@@ -426,6 +426,7 @@ tr.job-row-alt td {
 .proj-public-cell.is-complete .public-checkbox { display: inline-block; }
 .proj-public-cell.is-complete .public-dash { display: none; }
 .cell-count  { font-size: 0.8rem; color: #888; }
+.ref-version-label { font-size: 0.8rem; color: #888; }
 .col-actions { width: 130px; white-space: nowrap; }
 .no-projections { color: #bbb; }
 
