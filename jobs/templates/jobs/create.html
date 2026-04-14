@@ -194,9 +194,18 @@ document.querySelectorAll('a[href]').forEach(a => {
     e.preventDefault();
     const dest = a.href;
     if (confirm('An upload is in progress and will be cancelled if you leave. Leave anyway?')) {
-      abortActiveJob();
+      const jobToAbort = activeJobId;
+      activeJobId = null;
       uploadInProgress = false;
-      window.location.href = dest;
+      if (jobToAbort) {
+        const abortData = new FormData();
+        abortData.append('csrfmiddlewaretoken', csrfToken);
+        fetch(`/jobs/${jobToAbort}/abort/`, {method: 'POST', body: abortData})
+          .catch(() => {})
+          .finally(() => { window.location.href = dest; });
+      } else {
+        window.location.href = dest;
+      }
     }
   });
 });
