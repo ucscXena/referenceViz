@@ -87,12 +87,16 @@ fileInput.addEventListener('change', () => {
   }
 });
 
+let uploadInProgress = false;
+let activeJobId = null;
+
 submitBtn.addEventListener('click', async () => {
   const file = fileInput.files[0];
   if (!file) return;
 
   submitBtn.disabled = true;
   progressDiv.style.display = 'block';
+  uploadInProgress = true;
 
   function setProgress(pct, msg) {
     progressBar.style.width = pct + '%';
@@ -110,6 +114,7 @@ submitBtn.addEventListener('click', async () => {
     if (!urlResp.ok) throw new Error('Failed to get upload URL');
     const {job_id, presigned} = await urlResp.json();
     jobId = job_id;
+    activeJobId = job_id;
 
     setProgress(30, 'Uploading to S3…');
     const formData = new FormData();
@@ -125,7 +130,8 @@ submitBtn.addEventListener('click', async () => {
     }
 
     const confirmedId = jobId;
-    jobId = null; // upload succeeded, no longer need to abort on error
+    jobId = null;      // upload succeeded, no longer need to abort on error
+    activeJobId = null; // no longer need to beacon-abort on exit
     setProgress(80, 'Queuing analysis…');
     const confirmBody = {mixed_precision: 'bf16'};
     if (refId) confirmBody.ref_id = refId;
@@ -136,19 +142,63 @@ submitBtn.addEventListener('click', async () => {
     });
     if (!confirmResp.ok) throw new Error('Failed to confirm upload');
 
+    uploadInProgress = false;
     setProgress(100, 'Queued! Redirecting…');
     window.location.href = '{% url "job_list" %}';
   } catch (err) {
     if (jobId) {
-      fetch(`/jobs/${jobId}/abort/`, {
-        method: 'POST',
-        headers: {'X-CSRFToken': csrfToken},
-      }).catch(() => {});
+      // Use sendBeacon so the abort fires even if this catch ran because the
+      // page is unloading (fetch() is dropped during unload; sendBeacon is not).
+      const abortData = new FormData();
+      abortData.append('csrfmiddlewaretoken', csrfToken);
+      navigator.sendBeacon(`/jobs/${jobId}/abort/`, abortData);
+      jobId = null;
+      activeJobId = null;
     }
+    uploadInProgress = false;
     progressMsg.textContent = 'Error: ' + err.message;
     progressBar.style.background = '#d32f2f';
     submitBtn.disabled = false;
   }
+});
+
+// ── Warn before leaving while an upload is in progress; clean up on exit ──
+
+function abortActiveJob() {
+  if (activeJobId) {
+    const data = new FormData();
+    data.append('csrfmiddlewaretoken', csrfToken);
+    navigator.sendBeacon(`/jobs/${activeJobId}/abort/`, data);
+    activeJobId = null;
+  }
+}
+
+// Back/forward/close-tab: native browser dialog, then beacon on exit.
+window.addEventListener('beforeunload', (e) => {
+  if (uploadInProgress) {
+    e.preventDefault();
+  }
+});
+
+window.addEventListener('pagehide', () => {
+  if (uploadInProgress) {
+    abortActiveJob();
+  }
+});
+
+// Link clicks: custom confirm dialog so we can also fire the beacon on confirm.
+document.querySelectorAll('a[href]').forEach(a => {
+  if (a.target === '_blank' || a.href.startsWith('mailto:')) return;
+  a.addEventListener('click', (e) => {
+    if (!uploadInProgress) return;
+    e.preventDefault();
+    const dest = a.href;
+    if (confirm('An upload is in progress and will be cancelled if you leave. Leave anyway?')) {
+      abortActiveJob();
+      uploadInProgress = false;
+      window.location.href = dest;
+    }
+  });
 });
 
 // ── Right panel: remap existing embedding ──
