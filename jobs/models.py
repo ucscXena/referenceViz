@@ -41,6 +41,7 @@ class Reference(models.Model):
     uce_model = models.ForeignKey(UCEModel, on_delete=models.PROTECT, related_name='references')
     s3_uri = models.CharField(max_length=500)  # s3://bucket/references/<id>
     version_label = models.CharField(max_length=50, blank=True)  # e.g. 'v2', '2025-09'
+    notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
