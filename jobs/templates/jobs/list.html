@@ -292,8 +292,22 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
     rows.forEach(row => {
       const jobId = row.dataset.jobId;
       fetch(`/jobs/${jobId}/status/`)
-        .then(r => r.json())
+        .then(r => {
+          if (r.status === 404) {
+            // Job no longer exists — remove its row(s) from the table.
+            let next = row.nextElementSibling;
+            while (next && next.hasAttribute('data-proj-row')) {
+              const toRemove = next;
+              next = next.nextElementSibling;
+              toRemove.remove();
+            }
+            row.remove();
+            return null;
+          }
+          return r.json();
+        })
         .then(data => {
+          if (data === null) return;
           const prevStatus = row.dataset.jobStatus;
           row.dataset.jobStatus = data.status;
 
