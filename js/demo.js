@@ -27,6 +27,7 @@ if (segments[0] === 'pyramid') {
 					singlecellView({
 						image: params.image,
 						overlay: params.overlay,
+						title: params.title,
 						state,
 						onState}),
 					controls({state, onState}))),

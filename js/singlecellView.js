@@ -219,7 +219,7 @@ export default el(class SinglecellView extends PureComponent {
 
 		var {onViewState, onTooltip, onClose, onControls, onDeck, /*onLayer, */onRadius,
 			onOverlayRadius, onReload, onTileData} = this,
-			{image, state, onState, onShadow} = this.props,
+			{image, state, onState, onShadow, title: titleProp} = this.props,
 			{hidden, referenceFilters = [], layer, imageState, overlay,
 				hideOverlay, overlayFilters = []} = state || {},
 			error = this.state.error,
@@ -231,7 +231,7 @@ export default el(class SinglecellView extends PureComponent {
 				.slice(1),
 			tooltipColor = this.getScale(codes)(tooltipValue),
 			count = get(imageState, 'count'),
-			name = get(imageState, 'reference_name');
+			name = titleProp || get(imageState, 'reference_name');
 
 		return div({className: styles.content},
 			div({className: styles.title},
