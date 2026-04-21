@@ -154,6 +154,7 @@ RQ_QUEUES = {
         'DEFAULT_TIMEOUT': 3600,  # 1 hour for long jobs
     },
 }
+RQ_SHOW_ADMIN_LINK = True
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
