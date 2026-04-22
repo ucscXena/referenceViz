@@ -27,6 +27,7 @@ SERVER_BASE_URL = ''
 AWS_REGION = 'us-east-1'
 AWS_BATCH_CONSOLE_URL = 'http://placeholder/detail/{}'
 AWS_S3_BUCKET = ''
+EXAMPLE_FILE_S3_KEY = ''   # e.g. 'example/example.h5ad'; leave empty to hide the example button
 # UCE embedding pipeline (Batch)
 UCE_BATCH_JOB_QUEUE = ''
 UCE_BATCH_JOB_DEFINITION = ''

@@ -93,6 +93,7 @@ def upload_page(request):
     return render(request, 'jobs/create.html', {
         'reference': reference,
         'recent_jobs': recent_jobs,
+        'example_available': bool(getattr(settings, 'EXAMPLE_FILE_S3_KEY', '')),
     })
 
 
@@ -120,6 +121,31 @@ def get_upload_url(request):
     job.save()
 
     return JsonResponse({'job_id': str(job.id), 'presigned': presigned})
+
+
+@login_required
+@require_POST
+def use_example(request):
+    """Copy the example file within S3 and create a pending job, ready for /confirm/."""
+    example_key = getattr(settings, 'EXAMPLE_FILE_S3_KEY', '')
+    if not example_key:
+        return JsonResponse({'error': 'No example file configured'}, status=404)
+
+    filename = example_key.split('/')[-1]
+    job = Job.objects.create(
+        user=request.user,
+        original_filename=filename,
+        status='pending',
+    )
+    dest_key = f'uploads/{job.id}/{filename}'
+    boto_client('s3').copy_object(
+        Bucket=settings.AWS_S3_BUCKET,
+        CopySource={'Bucket': settings.AWS_S3_BUCKET, 'Key': example_key},
+        Key=dest_key,
+    )
+    job.s3_input_key = dest_key
+    job.save()
+    return JsonResponse({'job_id': str(job.id)})
 
 
 @login_required
