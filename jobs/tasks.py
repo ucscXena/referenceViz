@@ -23,7 +23,11 @@ def run_analysis(job_id, mixed_precision='bf16'):
     RQ task: submit UCE embedding job to Batch and exit immediately.
     A follow-up check_job_result task polls for completion.
     """
-    job_instance = Job.objects.select_related('uce_model').get(id=job_id)
+    try:
+        job_instance = Job.objects.select_related('uce_model').get(id=job_id)
+    except Job.DoesNotExist:
+        return  # job was deleted before the task ran
+
     job_instance.status = 'running'
     job_instance.save()
 
