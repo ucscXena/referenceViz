@@ -1,6 +1,6 @@
 {
   "name": "ucsc-xena-referenceViz",
-  "version": "0.0.0-alpha.0",
+  "version": "0.0.0",
   "description": "UCSC Xena single cell reference visualization component",
   "homepage": "https://xena.ucsc.edu",
   "main": "index.js",
