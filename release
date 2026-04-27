@@ -1,0 +1,90 @@
+#!/bin/bash
+set -o errexit
+set -o nounset
+set -o xtrace
+
+EXPLORER_DIR="${EXPLORER_DIR:-../data-explorer}"
+USER=ubuntu
+
+die() { echo "Error: $*" >&2; exit 1; }
+
+if [ "${1:-}" != "bedev" ] && [ "${1:-}" != "beprod" ]; then
+    echo "Usage: $0 bedev|beprod"
+    exit 1
+fi
+
+case "$1" in
+  bedev)
+    # Require clean working trees in both repos before tagging
+    git diff --exit-code --quiet          || die "referenceViz has unstaged changes"
+    git diff --cached --exit-code --quiet || die "referenceViz has staged changes"
+    git -C "$EXPLORER_DIR" diff --exit-code --quiet          || die "data-explorer has unstaged changes"
+    git -C "$EXPLORER_DIR" diff --cached --exit-code --quiet || die "data-explorer has staged changes"
+
+    # Bump major in package.json/package-lock.json without a git commit or tag
+    # (patch reserved for fixes cut from a release tag)
+    npm version major --no-git-tag-version
+    NEXT="v$(node -e "console.log(require('./package.json').version)")"
+    { set +x; echo "Releasing $NEXT"; set -x; }
+
+    # Bump data-explorer to the same version, commit, and tag
+    npm --prefix "$EXPLORER_DIR" version "$NEXT" --no-git-tag-version
+    git -C "$EXPLORER_DIR" add package.json package-lock.json
+    git -C "$EXPLORER_DIR" commit -m "Release $NEXT"
+    git -C "$EXPLORER_DIR" tag "$NEXT"
+
+    # Commit the referenceViz version bump and tag
+    git add package.json package-lock.json
+    git commit -m "Release $NEXT"
+    git tag "$NEXT"
+
+    # Build data-explorer (output goes to ../data-explorer/out, read by ./deploy)
+    (cd "$EXPLORER_DIR" && npm run build:prod)
+
+    # Build referenceViz and deploy to dev
+    ./deploy bedev
+    ;;
+
+  beprod)
+    CURRENT="v$(node -e "console.log(require('./package.json').version)")"
+    DEV_HOST=$(ssh -G bedev | grep -oP '(?<=^hostname ).*')
+    PROD_HOST=$(ssh -G beprod | grep -oP '(?<=^hostname ).*')
+    { set +x; echo "Promoting $CURRENT: dev ($DEV_HOST) → prod ($PROD_HOST)"; set -x; }
+
+    # Rsync from dev to prod via SSH agent forwarding.
+    # -A forwards the local SSH agent so dev can authenticate to prod without
+    # a separate key pair. Excludes user media (per-env data).
+    ssh -A -l"$USER" "$DEV_HOST" bash <<-ENDSSH
+        set -o errexit
+        set -o xtrace
+        PROD=$PROD_HOST
+        RUSER=$USER
+        rsync -a --delete \
+            --exclude='media/' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            /var/www/html/ \${RUSER}@\${PROD}:/var/www/html/
+        rsync -a --delete \
+            --exclude='media/' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            /var/www/backend/ \${RUSER}@\${PROD}:/var/www/backend/
+ENDSSH
+
+    # Restore prod-specific settings and restart services
+    ssh -l"$USER" "$PROD_HOST" <<-ENDSSH
+        set -o errexit
+        set -o xtrace
+        cp ~/settings/site_settings.py /var/www/backend/django/server/site_settings.py
+        cp ~/settings/config.js /var/www/html/config.js
+        sudo systemctl stop rqworker
+        # Clear .pyc files compiled on dev — they may embed dev-specific paths
+        find /var/www/backend -name '*.pyc' -delete
+        . /var/www/backend/virtualenv/bin/activate
+        cd /var/www/backend/django
+        python manage.py migrate
+        sudo apache2ctl restart
+        sudo systemctl start rqworker
+        python manage.py recover_pending_projections
+ENDSSH
+    { set +x; echo "Production updated to $CURRENT"; }
+    ;;
+esac
