@@ -7,8 +7,8 @@ var {item} = legendStyles;
 import {conj, contains, getIn, merge, range, without} from './underscore_ext.js';
 import cmpCodes from './cmpCodes';
 
-function codedLegend({column: {filtered = [], codes, codesInView}, onClick}) {
-	var data = codesInView.sort(cmpCodes(codes)),
+function codedLegend({column: {filtered = [], codes, codesInView}, cmp, onClick}) {
+	var data = codesInView.sort(cmp),
 		labels = data.map(d => codes[d]),
 		f = new Set(filtered),
 		checked = data.map(d => !f.has(d));
@@ -43,12 +43,14 @@ export default function(state, onState, filterIndex = 0) {
 	var {imageState, referenceFilters} = state;
 	var f = referenceFilters[filterIndex];
 	if (!f) { return null; }
-	var codes = getIn(imageState, ['phenotypes', f.layer, 'int_to_category'], [])
-		.slice(1);
+	var phenotype = getIn(imageState, ['phenotypes', f.layer]) || {};
+	var codes = (phenotype.int_to_category || []).slice(1);
+	var type = phenotype.type || 'category';
 
 	return !codes.length ? null :
 		codedLegend({
 			onClick: onCode(state, onState, filterIndex),
+			cmp: type === 'ordinal' ? (i, j) => j - i : cmpCodes(codes),
 			column: {
 				codes,
 				codesInView: range(codes.length),

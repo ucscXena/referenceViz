@@ -2,7 +2,7 @@
 // color scale variants
 
 import * as _ from './underscore_ext.js';
-import { rgb } from './color_helper.js';
+import { rgb, HSVtoRGB, RGBToHex } from './color_helper.js';
 
 // d3_category20, replace #7f7f7f gray (that aliases with our N/A gray of #808080) with dark grey #434348
 var categoryMore = [
@@ -32,9 +32,9 @@ var categoryMoreRgb = categoryMore.map(rgb);
 
 var mapper = (obj, fn) => _.isArray(obj) ? obj.map(fn) : _.mapObject(obj, fn);
 
-//var ordinal = (count, custom) => d3.scaleOrdinal().range(custom || categoryMore).domain(_.range(count));
+// Categorical (unordered) scale: distinct perceptually unrelated colors.
 // d3 ordinal scales will de-dup the domain using an incredibly slow algorithm.
-var ordinal = (count, custom) => {
+var category = (count, custom) => {
 	// XXX why does this not handle nulls, like our other scales?
 	var customRgb = custom && mapper(custom, rgb),
 		fn = v => custom && custom[v] ? custom[v] :
@@ -46,6 +46,22 @@ var ordinal = (count, custom) => {
 	return fn;
 };
 
+// Ordinal (ordered) scale: hue sweeps from blue (low) to red (high) via purple
+// at constant saturation and value. Avoids white (background) and black (highlight).
+var ordinal = count => {
+	var s = 0.8, val = 0.85;
+	var rgbs = Array.from({length: count}, (_, i) => {
+		var t = count <= 1 ? 0.5 : i / (count - 1);
+		var {r, g, b} = HSVtoRGB(0.6 + t * 0.4, s, val);
+		return [r, g, b];
+	});
+	var hexes = rgbs.map(([r, g, b]) => RGBToHex(r, g, b));
+
+	var fn = i => hexes[i] || hexes[0];
+	fn.rgb = i => rgbs[i] || rgbs[0];
+	return fn;
+};
+
 // A scale for when we have no data. Implements the scale API
 // so we don't have to put a bunch of special cases in the drawing code.
 var noDataScale = () => "gray";
@@ -53,13 +69,19 @@ noDataScale.domain = () => [];
 
 var colorScaleByType = {
 	'no-data': () => noDataScale,
+	'category': category,
 	'ordinal': ordinal
 };
 
 var colorScale = ([type, ...args]) => colorScaleByType[type](...args);
 
+var phenotypeScale = phenotype =>
+	colorScale([phenotype.type || 'category',
+	            (phenotype.int_to_category || []).length - 1]);
+
 export {
 	colorScale,
+	phenotypeScale,
 	categoryMore,
 	categoryMoreRgb
 };

@@ -11,8 +11,7 @@ import {debounce} from './rx';
 import {get, getIn, Let, memoize1, pluck} from './underscore_ext.js';
 import '@luma.gl/debug';
 import upng from 'upng-js';
-import {colorScale} from './colorScales';
-import setScale from './setScale';
+import {phenotypeScale} from './colorScales';
 
 var deckGL = el(DeckGL);
 
@@ -183,8 +182,7 @@ var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters =
 
 class TiledScatterplot extends PureComponent {
 	static displayName = 'TiledScatterplot';
-	getScale = memoize1(codes =>
-		colorScale(setScale(['ordinal', codes.length])));
+	getScale = memoize1(phenotypeScale);
 
 	onTooltip = ev => {
 		if (ev.index >= 0 && ev.tile) {
@@ -206,9 +204,9 @@ class TiledScatterplot extends PureComponent {
 			// XXX color0? Probably should be cut
 			{image, imageState, overlay, overlayFilters = [],
 				hideOverlay, radius, overlayRadius, hidden = [], referenceFilters = []} = props,
-			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
-				.slice(1),
-			colorfn = this.getScale(codes),
+			phenotype = getIn(imageState, ['phenotypes', layer]) || {},
+			codes = (phenotype.int_to_category || []).slice(1),
+			colorfn = this.getScale(phenotype),
 			{image_scalef: scale = 1, offset = [0, 0]} = imageState,
 			adj = (1 << imageState.levels - 1),
 			modelMatrix = getM(scale / adj, offset.map(c => c / adj));

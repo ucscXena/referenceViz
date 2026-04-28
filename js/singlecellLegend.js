@@ -4,15 +4,14 @@ import legend from './legend.js';
 import legendStyles from './legend.module.css';
 var {item} = legendStyles;
 
-import {colorScale} from './colorScales';
+import {colorScale, phenotypeScale} from './colorScales';
 import {Let, concat, conj, contains, getIn, memoize1, merge, uniq, without} from
 	'./underscore_ext.js';
 import cmpCodes from './cmpCodes';
-import setScale from './setScale';
 
-function codedLegend({column: {color, codes, codesInView, hidden = []}, onClick}) {
-	var colorFn = colorScale(color),
-		data = codesInView.sort(cmpCodes(codes)),
+function codedLegend({column: {scale, codes, codesInView, hidden = []}, cmp, onClick}) {
+	var colorFn = scale,
+		data = codesInView.sort(cmp),
 		hiddenSet = new Set(hidden),
 		highlighted = data.map(d => hiddenSet.has(d)),
 		colors = data.map(colorFn),
@@ -49,16 +48,18 @@ export default function(state, onState) {
 		return null;
 	}
 	var {imageState, layer, customColor, hidden, tileData, referenceFilters = []} = state;
-	var codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
-		.slice(1);
+	var phenotype = getIn(imageState, ['phenotypes', layer]) || {};
+	var codes = (phenotype.int_to_category || []).slice(1);
+	var type = phenotype.type || 'category';
 
 	return !codes.length ? null :
 		codedLegend({
 			onClick: onCode(state, onState),
+			cmp: type === 'ordinal' ? (i, j) => j - i : cmpCodes(codes),
 			column: {
 				codes,
 				codesInView: codesInView(tileData, referenceFilters),
-				color: setScale(['ordinal', codes.length, customColor]),
-			hidden
+				scale: phenotypeScale(phenotype),
+				hidden
 			}});
 }

@@ -8,7 +8,6 @@ import {tableLayout} from './muiTable';
 import {colorScale, categoryMore as colors} from './colorScales';
 import {assoc, Let, merge, range} from './underscore_ext.js';
 import cmpCodes from './cmpCodes';
-import setScale from './setScale';
 
 var button = el(Button);
 var dialog = el(Dialog);
@@ -40,10 +39,10 @@ var onClose = (state, onState) => () =>
 
 export default ({onState, state, layer}) =>
   !state || !state.imageState ? null :
-  Let(({imageState, customColor, hidden} = state,
+  Let(({imageState, customColor} = state,
 		codes = imageState.phenotypes[layer].int_to_category.slice(1),
-	  	scale = setScale(['ordinal', codes.length, customColor], hidden)) =>
+		scale = colorScale(['category', codes.length, customColor])) =>
     dialog({open: true, fullWidth: true, maxWidth: 'md', className: styles.dialog},
            dialogTitle('Edit colors'),
-      dialogContent(colorTable({state, onState, codes, scale: colorScale(scale)})),
+      dialogContent(colorTable({state, onState, codes, scale})),
       dialogActions(button({onClick: onClose(state, onState)}, 'Close'))));

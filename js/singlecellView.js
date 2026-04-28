@@ -11,8 +11,7 @@ import tiledScatterplot from './tiledScatterplot';
 import '../fonts/index.css';
 import Rx from './rx';
 import colorPicker from './colorPicker';
-import {colorScale} from './colorScales';
-import setScale from './setScale';
+import {colorScale, phenotypeScale} from './colorScales';
 import legendStyles from './legend.module.css';
 import {tableFromIPC} from 'apache-arrow';
 var {ajax} = Rx.Observable;
@@ -192,8 +191,7 @@ export default el(class SinglecellView extends PureComponent {
 		}
 	};
 	findSample = memoize1((samples, id) => indexOf(samples, id, true));
-	getScale = memoize1(codes =>
-		colorScale(setScale(['ordinal', codes.length])));
+	getScale = memoize1(phenotypeScale);
 	onTooltip = i => {
 		this.setState({tooltipValue: i, tooltipID: undefined});
 	};
@@ -227,9 +225,9 @@ export default el(class SinglecellView extends PureComponent {
 			{container, tooltipValue, showControls, radius, overlayRadius,
 				viewState} = this.state,
 			loading = !imageState,
-			codes = getIn(imageState, ['phenotypes', layer, 'int_to_category'], [])
-				.slice(1),
-			tooltipColor = this.getScale(codes)(tooltipValue),
+			phenotype = getIn(imageState, ['phenotypes', layer]) || {},
+			codes = (phenotype.int_to_category || []).slice(1),
+			tooltipColor = this.getScale(phenotype)(tooltipValue),
 			count = get(imageState, 'count'),
 			name = titleProp || get(imageState, 'reference_name');
 
