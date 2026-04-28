@@ -27,9 +27,12 @@ case "$1" in
     NEXT="v$(node -e "console.log(require('./package.json').version)")"
     { set +x; echo "Releasing $NEXT"; set -x; }
 
+    # Refresh reference groups from dev so the build snapshot is current
+    (cd "$EXPLORER_DIR" && npm run fetch:reference-groups)
+
     # Bump data-explorer to the same version, commit, and tag
     npm --prefix "$EXPLORER_DIR" version "$NEXT" --no-git-tag-version
-    git -C "$EXPLORER_DIR" add package.json package-lock.json
+    git -C "$EXPLORER_DIR" add package.json package-lock.json public/reference-groups.json
     git -C "$EXPLORER_DIR" commit -m "Release $NEXT"
     git -C "$EXPLORER_DIR" tag "$NEXT"
 
