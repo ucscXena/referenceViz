@@ -22,12 +22,18 @@
 	display: inline-block;
 }
 
+.percentage {
+	float: left;
+	font-weight: normal;
+	padding: 4px 2px 4px 0;
+	white-space: nowrap;
+}
+
 .label {
-	display: block;
-	margin-left: 20px;
+	float: left;
 	font-weight: normal; /* BS override */
 	overflow: hidden;
-	padding: 4px;
+	padding: 4px 4px 4px 2px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }

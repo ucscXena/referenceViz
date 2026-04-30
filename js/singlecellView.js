@@ -11,7 +11,7 @@ import tiledScatterplot from './tiledScatterplot';
 import '../fonts/index.css';
 import Rx from './rx';
 import colorPicker from './colorPicker';
-import {colorScale, phenotypeScale} from './colorScales';
+import {phenotypeScale} from './colorScales';
 import legendStyles from './legend.module.css';
 import {tableFromIPC} from 'apache-arrow';
 var {ajax} = Rx.Observable;
