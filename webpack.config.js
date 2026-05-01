@@ -76,7 +76,7 @@ module.exports = /*env => */({
 			directory: path.join(__dirname, 'build'), // or appropriate path
 		},
 		allowedHosts: 'all',
-		historyApiFallback: true,
+		historyApiFallback: {index: '/pyramid.html'},
 		headers: {
 			"Content-Security-Policy-Report-Only": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; connect-src *; img-src * data:; frame-src 'self' ucscxena: https://www.youtube.com https://xenageneset.berkeleybop.io/xena/"
 		},
