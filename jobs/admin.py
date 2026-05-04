@@ -190,10 +190,14 @@ class ReferenceGroupAdmin(admin.ModelAdmin):
 
 @admin.register(Reference)
 class ReferenceAdmin(admin.ModelAdmin):
-    list_display = ('id', 'group', 'uce_model', 'version_label', 'is_active', 's3_uri', 'created_at')
+    list_display = ('id', 'group', 'uce_model', 'version_label', 'is_active', 's3_uri', 'created_at', 'map_link')
     list_filter = ('is_active', 'uce_model')
     search_fields = ('id', 'group__title')
     readonly_fields = ('created_at',)
+
+    @admin.display(description='')
+    def map_link(self, obj):
+        return format_html('<a href="/jobs/create/?ref={}">Map</a>', obj.pk)
 
 
 @admin.register(Projection)
