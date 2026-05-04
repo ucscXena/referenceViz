@@ -44,9 +44,22 @@ var onCode = (state, onState) => ev => {
 	}
 };
 
-var codesInView = memoize1((data = [], referenceFilters = []) =>
+var tilePoints = (viewBounds, tileSize) => viewBounds ?
+	({points, index: {x: tx, y: ty, z: tz}}) =>
+		Let(([minX, minY, maxX, maxY] = viewBounds,
+			scale = 1 << tz,
+			pxMin = minX * scale - tx * tileSize,
+			pxMax = maxX * scale - tx * tileSize,
+			pyMin = minY * scale - ty * tileSize,
+			pyMax = maxY * scale - ty * tileSize) =>
+			points.filter(([px, py]) =>
+				px >= pxMin && px <= pxMax && py >= pyMin && py <= pyMax)) :
+	({points}) => points;
+
+var codesInView = memoize1((data = [], referenceFilters = [], viewBounds, tileSize) =>
 	Let((hiddenSets = referenceFilters.map(f => new Set(f.filtered)),
-		visible = concat(...data)
+		getPoints = tilePoints(viewBounds, tileSize),
+		visible = concat(...data.map(t => t.points ? getPoints(t) : t))
 			.filter(pt => hiddenSets.every((hs, i) => !hs.has(pt[3 + i]))),
 		counts = visible.reduce((acc, [, , c]) => (acc[c] = (acc[c] || 0) + 1, acc), {}),
 		total = visible.length) =>
@@ -71,11 +84,12 @@ export default function(state, onState) {
 		return null;
 	}
 	var {imageState, layer, hidden, tileData, referenceFilters = [],
-		legendSort = 'default'} = state;
+		legendSort = 'default', viewBounds} = state;
 	var phenotype = getIn(imageState, ['phenotypes', layer]) || {};
 	var codes = (phenotype.int_to_category || []).slice(1);
 	var type = phenotype.type || 'category';
-	var civ = codesInView(tileData, referenceFilters);
+	var tileSize = getIn(imageState, ['tileSize']);
+	var civ = codesInView(tileData, referenceFilters, viewBounds, tileSize);
 	var cmp = legendSort === 'freq' ? cmpFreq(civ.counts) :
 		type === 'ordinal' ? (i, j) => j - i : cmpCodes(codes);
 
