@@ -90,7 +90,7 @@
         <td class="col-check">
           <input type="checkbox" name="job_ids" value="{{ job.id }}" class="job-checkbox">
         </td>
-        <td>{{ job.short_uploaded_file }}{% if job.cell_count %}<br><span class="cell-count">{{ job.cell_count }} cells</span>{% endif %}</td>
+        <td class="job-file-cell">{{ job.short_uploaded_file }}{% if job.cell_count %}<br><span class="cell-count">{{ job.cell_count }} cells</span>{% endif %}</td>
         <td class="col-date">
           <time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time>
         </td>
@@ -124,6 +124,16 @@
 </div>
 
 <script>
+// Insert word-break opportunities around _, -, . in filenames
+document.querySelectorAll('.job-file-cell').forEach(cell => {
+  const node = cell.firstChild;
+  if (node && node.nodeType === Node.TEXT_NODE) {
+    const span = document.createElement('span');
+    span.innerHTML = node.textContent.replace(/([_\-.])/g, '<wbr>$1<wbr>');
+    cell.replaceChild(span, node);
+  }
+});
+
 // Local time formatting
 document.querySelectorAll('time[datetime]').forEach(el => {
   el.textContent = new Date(el.getAttribute('datetime')).toLocaleString(undefined, {
@@ -434,7 +444,9 @@ tr.job-row-alt td {
   background-color: #f5f5f5;
 }
 .col-check   { width: 36px; }
-.col-date    { white-space: nowrap; color: #555; }
+.col-date    { white-space: nowrap; color: #555; width: 11rem; }
+.col-ref     { min-width: 8rem; }
+.col-pstatus { width: 6rem; }
 .col-public  { width: 56px; text-align: center; }
 .proj-public-cell .public-checkbox { display: none; }
 .proj-public-cell.is-complete .public-checkbox { display: inline-block; }

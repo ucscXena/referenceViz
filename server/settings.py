@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
 import os
+
+EXTRA_MIDDLEWARE = []
 from .site_settings import *
 
 # Quick-start development settings - unsuitable for production
@@ -44,7 +46,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
-]
+] + EXTRA_MIDDLEWARE
 
 ROOT_URLCONF = 'server.urls'
 
