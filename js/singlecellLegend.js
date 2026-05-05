@@ -67,34 +67,35 @@ var codesInView = memoize1((data = [], referenceFilters = [], viewBounds, tileSi
 
 var cmpFreq = counts => (a, b) => (counts[a] || 0) - (counts[b] || 0);
 
-var sortToggle = (legendSort, onState) =>
+var sortToggle = (effectiveSort, onState) =>
 	div({className: styles.sortToggle},
 		span('Sort: '),
 		span({
-			className: legendSort === 'default' ? styles.sortActive : styles.sortInactive,
-			onClick: () => onState(s => merge(s, {legendSort: 'default'}))},
-			'Default'),
-span({
-			className: legendSort === 'freq' ? styles.sortActive : styles.sortInactive,
+			className: effectiveSort === 'freq' ? styles.sortActive : styles.sortInactive,
 			onClick: () => onState(s => merge(s, {legendSort: 'freq'}))},
-			'Abundance'));
+			'Abundance'),
+		span({
+			className: effectiveSort !== 'freq' ? styles.sortActive : styles.sortInactive,
+			onClick: () => onState(s => merge(s, {legendSort: 'name'}))},
+			'Name'));
 
 export default function(state, onState) {
 	if (!state || !state.imageState) {
 		return null;
 	}
 	var {imageState, layer, hidden, tileData, referenceFilters = [],
-		legendSort = 'default', viewBounds} = state;
+		legendSort, viewBounds} = state;
 	var phenotype = getIn(imageState, ['phenotypes', layer]) || {};
 	var codes = (phenotype.int_to_category || []).slice(1);
 	var type = phenotype.type || 'category';
 	var tileSize = getIn(imageState, ['tileSize']);
 	var civ = codesInView(tileData, referenceFilters, viewBounds, tileSize);
-	var cmp = legendSort === 'freq' ? cmpFreq(civ.counts) :
+	var effectiveSort = legendSort || (type === 'ordinal' ? 'name' : 'freq');
+	var cmp = effectiveSort === 'freq' ? cmpFreq(civ.counts) :
 		type === 'ordinal' ? (i, j) => j - i : cmpCodes(codes);
 
 	return !codes.length ? null :
-		div(sortToggle(legendSort, onState),
+		div(sortToggle(effectiveSort, onState),
 			codedLegend({
 				onClick: onCode(state, onState),
 				cmp,
