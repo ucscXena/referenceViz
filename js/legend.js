@@ -22,7 +22,8 @@ class Legend extends PureComponent {
 
 	render() {
 		var {labels, colors, titles, max, labelheader, footnotes, addBreakend = 0,
-				codes, checked, highlighted, addNullNotation = 0, inline, onClick} = this.props,
+				codes, checked, highlighted, addNullNotation = 0, inline, onClick,
+				percentages} = this.props,
 			style = classNames(onClick && compStyles.clickable,
 				inline && compStyles.inline),
 			ellipsis = labels.length > max,
@@ -34,6 +35,9 @@ class Legend extends PureComponent {
 								highlighted && highlighted[i] && compStyles.colorBoxSelected),
 								style: colors ? {backgroundColor: colors[i]} : {}},
 							checked && checked[i] ? icon('check') : null),
+						percentages && percentages[i] ?
+							typography({component: 'label', className: compStyles.percentage,
+								variant: 'caption'}, percentages[i]) : null,
 						typography({component: 'label', className: compStyles.label,
 							variant: 'caption'}, l))).reverse(),
 			footnotesItems = footnotes ?

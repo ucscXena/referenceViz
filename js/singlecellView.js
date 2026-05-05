@@ -185,9 +185,17 @@ export default el(class SinglecellView extends PureComponent {
 			this.setState({scale: null});
 		}
 		if (viewState) {
+			var {container} = this.state,
+				{target: [cx, cy], zoom} = viewState,
+				{width, height} = container ? container.getBoundingClientRect() : {},
+				s = Math.pow(2, zoom),
+				viewBounds = width ?
+					[cx - width / (2 * s), cy - height / (2 * s),
+					 cx + width / (2 * s), cy + height / (2 * s)] : null;
 			this.props.onState(state =>
 				merge(state, {viewState:
-					omit(viewState, 'transitionDuration', 'transitionInterpolator')}));
+					omit(viewState, 'transitionDuration', 'transitionInterpolator'),
+					viewBounds}));
 		}
 	};
 	findSample = memoize1((samples, id) => indexOf(samples, id, true));

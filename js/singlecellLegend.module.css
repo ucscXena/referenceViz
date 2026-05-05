@@ -1,0 +1,29 @@
+.sortToggle {
+	padding: 4px 4px 2px 4px;
+	font-size: 14px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.sortActive {
+	background-color: #e0e0e0;
+	border-radius: 10px;
+	padding: 1px 7px;
+	font-weight: 500;
+	cursor: default;
+}
+
+.sortInactive {
+	padding: 1px 7px;
+	cursor: pointer;
+	opacity: 0.5;
+}
+
+.sortInactive:hover {
+	opacity: 0.8;
+}
+
+.sortDivider {
+	opacity: 0.3;
+}
