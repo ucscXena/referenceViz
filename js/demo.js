@@ -18,7 +18,7 @@ var segments = path.slice(1).replace(/\/$/, '').split(/\//);
 if (segments[0] === 'pyramid') {
 	var main = document.getElementById('main');
 	main.style.position = 'relative';
-	var state = {/*showColorPicker: true,*/ layer: 0, referenceFilters: [], overlayFilters: [], legendSort: 'default', viewBounds: null}, onState;
+	var state = {/*showColorPicker: true,*/ layer: 0, referenceFilters: [], overlayFilters: [], legendSort: null, viewBounds: null}, onState;
 	var render = () => {
 		ReactDOM.render(
 			muiThemeProvider({theme},
