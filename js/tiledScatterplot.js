@@ -205,7 +205,6 @@ class TiledScatterplot extends PureComponent {
 			{image, imageState, overlay, overlayFilters = [],
 				hideOverlay, radius, overlayRadius, hidden = [], referenceFilters = []} = props,
 			phenotype = getIn(imageState, ['phenotypes', layer]) || {},
-			codes = (phenotype.int_to_category || []).slice(1),
 			colorfn = this.getScale(phenotype),
 			{image_scalef: scale = 1, offset = [0, 0]} = imageState,
 			adj = (1 << imageState.levels - 1),

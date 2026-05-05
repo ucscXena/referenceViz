@@ -4,7 +4,7 @@ import legend from './legend.js';
 import legendStyles from './legend.module.css';
 var {item} = legendStyles;
 
-import {colorScale, phenotypeScale} from './colorScales';
+import {phenotypeScale} from './colorScales';
 import {Let, concat, conj, contains, getIn, memoize1, merge, uniq, without} from
 	'./underscore_ext.js';
 import cmpCodes from './cmpCodes';
@@ -47,7 +47,7 @@ export default function(state, onState) {
 	if (!state || !state.imageState) {
 		return null;
 	}
-	var {imageState, layer, customColor, hidden, tileData, referenceFilters = []} = state;
+	var {imageState, layer, hidden, tileData, referenceFilters = []} = state;
 	var phenotype = getIn(imageState, ['phenotypes', layer]) || {};
 	var codes = (phenotype.int_to_category || []).slice(1);
 	var type = phenotype.type || 'category';
