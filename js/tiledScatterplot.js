@@ -8,7 +8,7 @@ var scatterplotLayer = ({id, ...props}) => new ScatterplotLayer({id, ...props});
 import {COORDINATE_SYSTEM} from '@deck.gl/core';
 import {TileLayer} from '@deck.gl/geo-layers';
 import {debounce} from './rx';
-import {get, getIn, Let, memoize1, pluck} from './underscore_ext.js';
+import {get, getIn, Let, memoize1} from './underscore_ext.js';
 import '@luma.gl/debug';
 import upng from 'upng-js';
 import {phenotypeScale} from './colorScales';
@@ -104,7 +104,9 @@ var tileLayer = ({fileformat, index, levels, name, referenceFilters, opacity, pa
 			}
 		},
 		onViewportLoad: tiles => {
-			onTileData(pluck(tiles, 'content').filter(x => x));
+			onTileData(tiles
+				.filter(t => t.content)
+				.map(t => ({points: t.content, index: t.index})));
 		},
 		getTileData: ({url, signal, index}) => {
 			var colorPromise = imgPromise(url, signal),
@@ -205,7 +207,6 @@ class TiledScatterplot extends PureComponent {
 			{image, imageState, overlay, overlayFilters = [],
 				hideOverlay, radius, overlayRadius, hidden = [], referenceFilters = []} = props,
 			phenotype = getIn(imageState, ['phenotypes', layer]) || {},
-			codes = (phenotype.int_to_category || []).slice(1),
 			colorfn = this.getScale(phenotype),
 			{image_scalef: scale = 1, offset = [0, 0]} = imageState,
 			adj = (1 << imageState.levels - 1),

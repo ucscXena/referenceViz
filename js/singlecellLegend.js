@@ -2,23 +2,30 @@
 
 import legend from './legend.js';
 import legendStyles from './legend.module.css';
+import styles from './singlecellLegend.module.css';
 var {item} = legendStyles;
 
-import {colorScale, phenotypeScale} from './colorScales';
+import {phenotypeScale} from './colorScales';
 import {Let, concat, conj, contains, getIn, memoize1, merge, uniq, without} from
 	'./underscore_ext.js';
 import cmpCodes from './cmpCodes';
+import {div, span} from './react-hyper';
 
 function codedLegend({column: {scale, codes, codesInView, hidden = []}, cmp, onClick}) {
 	var colorFn = scale,
-		data = codesInView.sort(cmp),
+		{codes: visibleCodes, counts, total} = codesInView,
+		data = visibleCodes.sort(cmp),
 		hiddenSet = new Set(hidden),
 		highlighted = data.map(d => hiddenSet.has(d)),
 		colors = data.map(colorFn),
-		labels = data.map(d => codes[d]);
+		labels = data.map(d => codes[d]),
+		percentages = total > 0 ?
+			data.map(d => Let((pct = ((counts[d] || 0) / total * 100).toFixed(1)) =>
+			'(' + (pct === '0.0' ? '<0.1' : pct) + '%)')) :
+			data.map(() => '');
 
-	return legend({colors, codes: data, labels, titles: labels, onClick, max: Infinity,
-		inline: true, highlighted});
+	return legend({colors, codes: data, labels, titles: labels, percentages, onClick,
+		max: Infinity, inline: true, highlighted});
 }
 
 var firstMatch = (el, selector) =>
@@ -37,29 +44,64 @@ var onCode = (state, onState) => ev => {
 	}
 };
 
-var codesInView = memoize1((data = [], referenceFilters = []) =>
-	Let((hiddenSets = referenceFilters.map(f => new Set(f.filtered))) =>
-		uniq(concat(...data)
-			.filter(pt => hiddenSets.every((hs, i) => !hs.has(pt[3 + i])))
-			.map(([, , c]) => c))));
+var tilePoints = (viewBounds, tileSize) => viewBounds ?
+	({points, index: {x: tx, y: ty, z: tz}}) =>
+		Let(([minX, minY, maxX, maxY] = viewBounds,
+			scale = 1 << tz,
+			pxMin = minX * scale - tx * tileSize,
+			pxMax = maxX * scale - tx * tileSize,
+			pyMin = minY * scale - ty * tileSize,
+			pyMax = maxY * scale - ty * tileSize) =>
+			points.filter(([px, py]) =>
+				px >= pxMin && px <= pxMax && py >= pyMin && py <= pyMax)) :
+	({points}) => points;
+
+var codesInView = memoize1((data = [], referenceFilters = [], viewBounds, tileSize) =>
+	Let((hiddenSets = referenceFilters.map(f => new Set(f.filtered)),
+		getPoints = tilePoints(viewBounds, tileSize),
+		visible = concat(...data.map(t => t.points ? getPoints(t) : t))
+			.filter(pt => hiddenSets.every((hs, i) => !hs.has(pt[3 + i]))),
+		counts = visible.reduce((acc, [, , c]) => (acc[c] = (acc[c] || 0) + 1, acc), {}),
+		total = visible.length) =>
+		({codes: uniq(visible.map(([, , c]) => c)), counts, total})));
+
+var cmpFreq = counts => (a, b) => (counts[a] || 0) - (counts[b] || 0);
+
+var sortToggle = (legendSort, onState) =>
+	div({className: styles.sortToggle},
+		span('Sort: '),
+		span({
+			className: legendSort === 'default' ? styles.sortActive : styles.sortInactive,
+			onClick: () => onState(s => merge(s, {legendSort: 'default'}))},
+			'Default'),
+span({
+			className: legendSort === 'freq' ? styles.sortActive : styles.sortInactive,
+			onClick: () => onState(s => merge(s, {legendSort: 'freq'}))},
+			'Abundance'));
 
 export default function(state, onState) {
 	if (!state || !state.imageState) {
 		return null;
 	}
-	var {imageState, layer, customColor, hidden, tileData, referenceFilters = []} = state;
+	var {imageState, layer, hidden, tileData, referenceFilters = [],
+		legendSort = 'default', viewBounds} = state;
 	var phenotype = getIn(imageState, ['phenotypes', layer]) || {};
 	var codes = (phenotype.int_to_category || []).slice(1);
 	var type = phenotype.type || 'category';
+	var tileSize = getIn(imageState, ['tileSize']);
+	var civ = codesInView(tileData, referenceFilters, viewBounds, tileSize);
+	var cmp = legendSort === 'freq' ? cmpFreq(civ.counts) :
+		type === 'ordinal' ? (i, j) => j - i : cmpCodes(codes);
 
 	return !codes.length ? null :
-		codedLegend({
-			onClick: onCode(state, onState),
-			cmp: type === 'ordinal' ? (i, j) => j - i : cmpCodes(codes),
-			column: {
-				codes,
-				codesInView: codesInView(tileData, referenceFilters),
-				scale: phenotypeScale(phenotype),
-				hidden
-			}});
+		div(sortToggle(legendSort, onState),
+			codedLegend({
+				onClick: onCode(state, onState),
+				cmp,
+				column: {
+					codes,
+					codesInView: civ,
+					scale: phenotypeScale(phenotype),
+					hidden
+				}}));
 }
