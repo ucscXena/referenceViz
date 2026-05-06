@@ -7,8 +7,31 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_POST
+from pgvector.django import CosineDistance
 
-from .models import Job
+from .models import DocumentChunk, Job
+
+_embed_model = None
+
+
+def _get_embed_model():
+    global _embed_model
+    if _embed_model is None:
+        from sentence_transformers import SentenceTransformer
+        _embed_model = SentenceTransformer('all-MiniLM-L6-v2')
+    return _embed_model
+
+
+def retrieve_chunks(query, k=5):
+    """Return the k most relevant DocumentChunks for query, or [] if index is empty."""
+    if not DocumentChunk.objects.exists():
+        return []
+    embedding = _get_embed_model().encode(query).tolist()
+    return list(
+        DocumentChunk.objects
+        .annotate(distance=CosineDistance('embedding', embedding))
+        .order_by('distance')[:k]
+    )
 
 _metadata_cache = None
 
@@ -33,7 +56,7 @@ def _strip_html(text):
     return re.sub(r'<[^>]+>', '', text or '')
 
 
-def _build_system_prompt(job):
+def _build_system_prompt(job, chunks=None):
     metadata = _load_metadata()
     projections = list(job.projections.select_related('reference').all())
 
@@ -80,6 +103,15 @@ def _build_system_prompt(job):
             stages = ', '.join(s['label'] for s in meta['development_stage'][:6])
             lines.append(f"Developmental stages: {stages}.")
 
+    if chunks:
+        lines += ["", "## Relevant excerpts from source papers"]
+        for chunk in chunks:
+            lines += [
+                "",
+                f"Source: {chunk.source_label}",
+                chunk.text,
+            ]
+
     lines += [
         "",
         "Answer questions about this mapping job, the reference datasets, cell types, "
@@ -112,11 +144,16 @@ def chat(request, pk):
 
     client = anthropic.Anthropic(api_key=api_key)
 
+    last_user_message = next(
+        (m['content'] for m in reversed(messages) if m.get('role') == 'user'), ''
+    )
+    chunks = retrieve_chunks(last_user_message)
+
     try:
         response = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=1024,
-            system=_build_system_prompt(job),
+            system=_build_system_prompt(job, chunks),
             messages=messages,
         )
     except anthropic.APIError as e:

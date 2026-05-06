@@ -52,6 +52,8 @@ PROJ_SECONDS_PER_CELL = 169 / 10000  # per cell
 ANTHROPIC_API_KEY = ''
 # Absolute path to UCSC_Brain_Explorer_metadata.json; override in site_settings_private.py
 BRAIN_EXPLORER_METADATA_PATH = ''
+# Directory where fetched paper text files are stored; override in site_settings_private.py
+PAPERS_DIR = os.path.join(BASE_DIR, 'papers')
 
 # uncomment to test allauth
 from .site_settings_private import *

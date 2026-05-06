@@ -1,6 +1,8 @@
-from django.db import models
-from django.contrib.auth.models import User
 import uuid
+
+from django.contrib.auth.models import User
+from django.db import models
+from pgvector.django import VectorField
 
 
 class UCEModel(models.Model):
@@ -151,3 +153,19 @@ class Projection(models.Model):
 
     def __str__(self):
         return f"Projection {self.job_id} → {self.reference_id}"
+
+
+class DocumentChunk(models.Model):
+    """A chunk of text from a paper or reference metadata, with its embedding for RAG."""
+    source_type = models.CharField(max_length=20)   # 'paper' | 'metadata'
+    source_id = models.CharField(max_length=500)     # DOI or reference UUID
+    source_label = models.CharField(max_length=500)  # human-readable label
+    chunk_index = models.IntegerField()
+    text = models.TextField()
+    embedding = VectorField(dimensions=384)
+
+    class Meta:
+        ordering = ['source_id', 'chunk_index']
+
+    def __str__(self):
+        return f"{self.source_label} [{self.chunk_index}]"
