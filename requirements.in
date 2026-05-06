@@ -1,3 +1,4 @@
+anthropic
 boto3
 Django==4.2.26
 django-allauth[socialaccount]==65.13.0

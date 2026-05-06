@@ -48,5 +48,10 @@ UCE_SECONDS_PER_CELL_PER_GPU = 526 / 10000 / 4   # per cell, normalised to 1 GPU
 PROJ_STARTUP_SECONDS = 216       # fixed overhead
 PROJ_SECONDS_PER_CELL = 169 / 10000  # per cell
 
+# Chatbot
+ANTHROPIC_API_KEY = ''
+# Absolute path to UCSC_Brain_Explorer_metadata.json; override in site_settings_private.py
+BRAIN_EXPLORER_METADATA_PATH = ''
+
 # uncomment to test allauth
-#from .site_settings_private import *
+from .site_settings_private import *
