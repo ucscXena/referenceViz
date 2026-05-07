@@ -367,7 +367,7 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
             if (downloadCell && proj.status === 'complete' && proj.has_download) {
               const vizUrl = `/visualization/${proj.reference_id}/?overlay=${encodeURIComponent(proj.s3_uri)}`;
               downloadCell.innerHTML = `<div class="action-icons">` +
-                `<a href="/jobs/${jobId}/" class="icon-btn" title="View report"><span class="material-icons">topic</span></a>` +
+                //`<a href="/jobs/${jobId}/" class="icon-btn" title="View report"><span class="material-icons">topic</span></a>` +
                 `<a href="/jobs/projections/${proj.id}/download/" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>` +
                 `<a href="${vizUrl}" class="icon-btn" title="View in explorer"><span class="material-icons">scatter_plot</span></a>` +
                 `</div>`;
