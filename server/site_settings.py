@@ -56,4 +56,4 @@ BRAIN_EXPLORER_METADATA_PATH = ''
 PAPERS_DIR = os.path.join(BASE_DIR, 'papers')
 
 # uncomment to test allauth
-from .site_settings_private import *
+#from .site_settings_private import *
