@@ -59,8 +59,11 @@
         </td>
         <td class="proj-download-cell" data-proj-id="{{ proj.id }}">
           {% if proj.status == 'complete' and proj.result.s3_uri %}
-            <a href="{% url 'download_projection' proj.pk %}" class="link-download">Download</a>
-            <a href="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" class="link-viz">Viz</a>
+            <div class="action-icons">
+              <a href="{% url 'job_detail' job.pk %}" class="icon-btn" title="View report"><span class="material-icons">topic</span></a>
+              <a href="{% url 'download_projection' proj.pk %}" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>
+              <a href="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" class="icon-btn" title="View in explorer"><img src="/references/{{ proj.reference.id }}.webp" class="ref-thumb" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'material-icons',textContent:'scatter_plot'}))"></a>
+            </div>
           {% else %}
             —
           {% endif %}
@@ -363,7 +366,11 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
             }
             if (downloadCell && proj.status === 'complete' && proj.has_download) {
               const vizUrl = `/visualization/${proj.reference_id}/?overlay=${encodeURIComponent(proj.s3_uri)}`;
-              downloadCell.innerHTML = `<a href="/jobs/projections/${proj.id}/download/" class="link-download">Download</a> <a href="${vizUrl}" class="link-viz">Viz</a>`;
+              downloadCell.innerHTML = `<div class="action-icons">` +
+                `<a href="/jobs/${jobId}/" class="icon-btn" title="View report"><span class="material-icons">topic</span></a>` +
+                `<a href="/jobs/projections/${proj.id}/download/" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>` +
+                `<a href="${vizUrl}" class="icon-btn" title="View in explorer"><img src="/references/${proj.reference_id}.webp" class="ref-thumb" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'material-icons',textContent:'scatter_plot'}))"></a>` +
+                `</div>`;
             }
             if (proj.status === 'complete') {
               document.querySelector(`.proj-public-cell[data-proj-id="${proj.id}"]`)
@@ -453,7 +460,7 @@ tr.job-row-alt td {
 .proj-public-cell.is-complete .public-dash { display: none; }
 .cell-count  { font-size: 0.8rem; color: #888; }
 .ref-version-label { font-size: 0.8rem; color: #888; }
-.col-actions { width: 130px; white-space: nowrap; }
+.col-actions { width: 96px; }
 .no-projections { color: #bbb; }
 
 .status-complete { color: #2e7d32; font-weight: 500; }
@@ -462,8 +469,22 @@ tr.job-row-alt td {
 .status-est      { font-size: 0.8rem; font-weight: 400; opacity: 0.85; }
 .status-error    { color: #c62828; font-weight: 500; text-decoration: none; }
 .status-error:hover { text-decoration: underline; }
-.link-download, .link-viz { color: #1976d2; text-decoration: none; font-weight: 500; }
-.link-download:hover, .link-viz:hover { text-decoration: underline; }
+
+.action-icons { display: flex; align-items: center; gap: 2px; }
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  color: #666;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.icon-btn:hover { background: #e8f0fe; color: #1976d2; }
+.icon-btn .material-icons { font-size: 20px; line-height: 1; }
+.ref-thumb { width: 20px; height: 20px; border-radius: 2px; object-fit: cover; display: block; }
 
 .list-footer { margin-top: 1rem; }
 .btn-delete {
