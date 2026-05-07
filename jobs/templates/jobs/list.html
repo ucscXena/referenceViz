@@ -60,9 +60,9 @@
         <td class="proj-download-cell" data-proj-id="{{ proj.id }}">
           {% if proj.status == 'complete' and proj.result.s3_uri %}
             <div class="action-icons">
-              <a href="{% url 'job_detail' job.pk %}" class="icon-btn" title="View report"><span class="material-icons">topic</span></a>
+				{# <a href="{% url 'job_detail' job.pk %}" class="icon-btn" title="View report"><span class="material-icons">topic</span></a> #}
               <a href="{% url 'download_projection' proj.pk %}" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>
-              <a href="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" class="icon-btn" title="View in explorer"><img src="/references/{{ proj.reference.id }}.webp" class="ref-thumb" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'material-icons',textContent:'scatter_plot'}))"></a>
+              <a href="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" class="icon-btn" title="View in explorer"><span class="material-icons">scatter_plot</span></a>
             </div>
           {% else %}
             —
@@ -369,7 +369,7 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
               downloadCell.innerHTML = `<div class="action-icons">` +
                 `<a href="/jobs/${jobId}/" class="icon-btn" title="View report"><span class="material-icons">topic</span></a>` +
                 `<a href="/jobs/projections/${proj.id}/download/" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>` +
-                `<a href="${vizUrl}" class="icon-btn" title="View in explorer"><img src="/references/${proj.reference_id}.webp" class="ref-thumb" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'material-icons',textContent:'scatter_plot'}))"></a>` +
+                `<a href="${vizUrl}" class="icon-btn" title="View in explorer"><span class="material-icons">scatter_plot</span></a>` +
                 `</div>`;
             }
             if (proj.status === 'complete') {
