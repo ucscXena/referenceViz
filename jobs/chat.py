@@ -10,6 +10,7 @@ from django.views.decorators.http import require_POST
 from pgvector.django import CosineDistance
 
 from .models import DocumentChunk, Job
+from .projection_summary import compute_projection_summary
 
 _embed_model = None
 
@@ -102,6 +103,22 @@ def _build_system_prompt(job, chunks=None):
         if meta.get('development_stage'):
             stages = ', '.join(s['label'] for s in meta['development_stage'][:6])
             lines.append(f"Developmental stages: {stages}.")
+
+        if proj.status == 'complete' and proj.result and proj.result.get('s3_uri'):
+            if 'summary' not in proj.result:
+                try:
+                    proj.result['summary'] = compute_projection_summary(proj.result['s3_uri'])
+                    proj.save(update_fields=['result'])
+                except Exception:
+                    pass
+            summary = proj.result.get('summary')
+            if summary:
+                lines.append(f"\n## Your results: {proj.reference.name}")
+                lines.append(f"Total cells mapped: {summary['total_cells']:,}")
+                for col_name, entries in summary['columns'].items():
+                    lines.append(f"Cell type distribution ({col_name}):")
+                    for entry in entries:
+                        lines.append(f"  {entry['label']}: {entry['count']:,} ({entry['pct']}%)")
 
     if chunks:
         lines += ["", "## Relevant excerpts from source papers"]
