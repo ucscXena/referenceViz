@@ -41,8 +41,13 @@ def _batch_link(batch_job_id):
 class ProjectionInline(admin.TabularInline):
     model = Projection
     extra = 0
-    fields = ('reference', 'status', 'batch_job_link', 'download_link', 'created_at', 'updated_at')
-    readonly_fields = ('reference', 'status', 'batch_job_link', 'download_link', 'created_at', 'updated_at')
+    fields = ('link', 'status', 'batch_job_link', 'download_link', 'created_at', 'updated_at')
+    readonly_fields = ('link', 'status', 'batch_job_link', 'download_link', 'created_at', 'updated_at')
+
+    def link(self, obj):
+        url = reverse('admin:jobs_projection_change', args=[obj.pk])
+        return format_html('<a href="{}">{}</a>', url, obj.short_id())
+    link.short_description = 'ID'  # column header label
 
     def batch_job_link(self, obj):
         return _batch_link(obj.batch_job_id)
@@ -52,6 +57,13 @@ class ProjectionInline(admin.TabularInline):
         s3_uri = obj.result.get('s3_uri') if obj.result else None
         return _presigned_link(s3_uri, 'Download')
     download_link.short_description = 'Download'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'job',
+            'reference__group',
+        )
+
 
 
 @admin.register(Job)
@@ -205,6 +217,9 @@ class ProjectionAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'short_job', 'reference_link', 'status', 'batch_job_link', 'download_link', 'created_at')
     list_filter = ('status', 'reference')
     readonly_fields = ('id', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'predictions_download_link', 'viz_link', 'created_at', 'updated_at')
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('reference__group', 'job')
 
     def short_id(self, obj):
         return str(obj.id)[:8]
