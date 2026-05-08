@@ -55,7 +55,7 @@ class Reference(models.Model):
         return self.group.title
 
     def __str__(self):
-        return f'{self.id}' + (f' ({self.version_label})' if self.version_label else '')
+        return f'{self.group.title}' + (f' ({self.version_label})' if self.version_label else '')
 
 
 class Job(models.Model):
@@ -159,8 +159,10 @@ class Projection(models.Model):
     short_id.admin_order_field = 'id'
 
     def __str__(self):
-        return f"Projection {self.job_id} → {self.reference_id}"
-
+        file = self.job.original_filename
+        group_title = self.reference.group.title
+        version = self.reference.version_label
+        return f'{file} → {group_title} {version}'
 
 class DocumentChunk(models.Model):
     """A chunk of text from a paper or reference metadata, with its embedding for RAG."""
