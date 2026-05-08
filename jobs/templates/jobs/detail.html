@@ -344,6 +344,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
 (function() {
   const CHAT_URL = '{% url "job_chat" job.pk %}';
   const CSRF = '{{ csrf_token }}';
+  const STORAGE_KEY = 'chat_{{ job.pk }}';
   const messages = [];
 
   const form = document.getElementById('chat-form');
@@ -389,6 +390,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
           thinking.classList.remove('chat-bubble--thinking');
           thinking.innerHTML = marked.parse(data.content);
           messages.push({role: 'assistant', content: data.content});
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
         }
       })
       .catch(() => {
@@ -422,8 +424,25 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     sendMessage(text);
   });
 
+  // Restore saved session
+  const saved = sessionStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      const prior = JSON.parse(saved);
+      prior.forEach(msg => {
+        if (msg.role === 'user') {
+          addBubble('user', msg.content);
+        } else if (msg.role === 'assistant') {
+          const div = addBubble('assistant', '');
+          div.innerHTML = marked.parse(msg.content);
+        }
+      });
+      messages.push(...prior);
+    } catch (e) {}
+  }
+
   {% if job.status == 'complete' %}
-  sendMessage('What cell types are in my data?');
+  if (!saved) sendMessage('What cell types are in my data?');
   {% endif %}
 })();
 </script>
