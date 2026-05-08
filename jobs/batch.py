@@ -76,7 +76,7 @@ def check_batch_job(batch_job_id):
     status = job['status']  # SUBMITTED|PENDING|RUNNABLE|STARTING|RUNNING|SUCCEEDED|FAILED
 
     if status == 'SUCCEEDED':
-        return 'complete', None
+        return 'complete', None, 'SUCCEEDED'
 
     if status == 'FAILED':
         reason = job.get('statusReason', 'Unknown failure')
@@ -85,6 +85,6 @@ def check_batch_job(batch_job_id):
             container_reason = attempts[-1].get('container', {}).get('reason', '')
             if container_reason:
                 reason = f'{reason}: {container_reason}'
-        return 'error', reason
+        return 'error', reason, 'FAILED'
 
-    return 'running', None
+    return 'running', None, status

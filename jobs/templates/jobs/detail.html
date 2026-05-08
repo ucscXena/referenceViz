@@ -93,6 +93,7 @@ document.querySelectorAll('time[datetime]').forEach(el => {
 <script>
 (function() {
   const TERMINAL = new Set(['complete', 'error']);
+  const QUEUED_BATCH = new Set(['SUBMITTED', 'PENDING', 'RUNNABLE']);
   const uceStatusText = document.getElementById('uce-status-text');
 
   function hasActiveWork() {
@@ -107,7 +108,8 @@ document.querySelectorAll('time[datetime]').forEach(el => {
       .then(r => r.json())
       .then(data => {
         if (uceStatusText) {
-          uceStatusText.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+          const waiting = data.status === 'running' && (!data.batch_status || QUEUED_BATCH.has(data.batch_status));
+          uceStatusText.textContent = waiting ? 'Waiting' : data.status.charAt(0).toUpperCase() + data.status.slice(1);
           uceStatusText.className = 'status-' + data.status;
         }
 
@@ -116,7 +118,8 @@ document.querySelectorAll('time[datetime]').forEach(el => {
           if (!row) return;
           const statusCell = row.querySelector('.proj-status-cell');
           if (statusCell) {
-            const label = proj.status.charAt(0).toUpperCase() + proj.status.slice(1);
+            const projWaiting = proj.status === 'running' && proj.batch_status && QUEUED_BATCH.has(proj.batch_status);
+            const label = projWaiting ? 'Waiting' : proj.status.charAt(0).toUpperCase() + proj.status.slice(1);
             statusCell.innerHTML = `<span class="status-${proj.status}">${label}</span>`;
           }
           const dlCell = row.cells[2];

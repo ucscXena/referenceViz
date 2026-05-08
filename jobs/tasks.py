@@ -76,7 +76,7 @@ def check_job_result(job_id, attempt=0):
         try:
             batch_job_id = job_instance.batch_job_id
             uce_s3_uri = job_instance.result.get('uce_s3_uri')
-            status, detail = check_batch_job(batch_job_id)
+            status, detail, batch_status = check_batch_job(batch_job_id)
 
             if status == 'complete':
                 job_instance.status = 'complete'
@@ -96,6 +96,17 @@ def check_job_result(job_id, attempt=0):
             else:
                 pending_projections = None  # still running
                 s3_input_key = None
+                result = dict(job_instance.result or {})
+                old_started_at = result.get('started_at')
+                old_batch_status = result.get('batch_status')
+                result['batch_status'] = batch_status
+                if batch_status in ('RUNNING', 'STARTING'):
+                    result.setdefault('started_at', timezone.now().isoformat())
+                elif batch_status in ('SUBMITTED', 'PENDING', 'RUNNABLE'):
+                    result.pop('started_at', None)  # spot preemption — reset clock
+                if result.get('started_at') != old_started_at or result.get('batch_status') != old_batch_status:
+                    job_instance.result = result
+                    job_instance.save(update_fields=['result'])
         except Exception as e:
             job_instance.result = {'error': str(e), 'traceback': traceback.format_exc()}
             job_instance.status = 'error'
@@ -178,7 +189,7 @@ def check_projection_result(projection_id, attempt=0):
         return  # already resolved
 
     try:
-        status, detail = check_batch_job(projection.batch_job_id)
+        status, detail, batch_status = check_batch_job(projection.batch_job_id)
 
         if status == 'complete':
             projection.result = {
@@ -198,6 +209,19 @@ def check_projection_result(projection_id, attempt=0):
                 message=f'Projection {projection_id} failed.\nUser: {projection.job.user}\nReference: {projection.reference.name}\nReason: {detail}',
             )
             return
+
+        # Still running — track start time and batch status
+        result = dict(projection.result or {})
+        old_started_at = result.get('started_at')
+        old_batch_status = result.get('batch_status')
+        result['batch_status'] = batch_status
+        if batch_status in ('RUNNING', 'STARTING'):
+            result.setdefault('started_at', timezone.now().isoformat())
+        elif batch_status in ('SUBMITTED', 'PENDING', 'RUNNABLE'):
+            result.pop('started_at', None)  # spot preemption — reset clock
+        if result.get('started_at') != old_started_at or result.get('batch_status') != old_batch_status:
+            projection.result = result
+            projection.save(update_fields=['result'])
 
         # Still running
         if attempt >= MAX_PROJECTION_ATTEMPTS:
