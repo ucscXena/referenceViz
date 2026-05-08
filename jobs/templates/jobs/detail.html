@@ -317,6 +317,26 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
 }
 .chat-send:disabled { background: #bdbdbd; cursor: default; }
 .chat-send:not(:disabled):hover { background: #1565c0; }
+
+.chat-bubble--thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0.75rem 0.875rem;
+}
+.chat-bubble--thinking span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #aaa;
+  animation: thinking-dot 1.2s ease-in-out infinite;
+}
+.chat-bubble--thinking span:nth-child(2) { animation-delay: 0.2s; }
+.chat-bubble--thinking span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes thinking-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -336,8 +356,47 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     div.className = 'chat-bubble chat-bubble--' + role;
     div.textContent = text;
     log.appendChild(div);
-    log.scrollTop = log.scrollHeight;
     return div;
+  }
+
+  function addThinkingBubble() {
+    const div = document.createElement('div');
+    div.className = 'chat-bubble chat-bubble--assistant chat-bubble--thinking';
+    div.innerHTML = '<span></span><span></span><span></span>';
+    log.appendChild(div);
+    div.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    return div;
+  }
+
+  function sendMessage(text) {
+    btn.disabled = true;
+    messages.push({role: 'user', content: text});
+    addBubble('user', text);
+    const thinking = addThinkingBubble();
+
+    fetch(CHAT_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({messages}),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          thinking.className = 'chat-bubble chat-bubble--error';
+          thinking.textContent = 'Error: ' + data.error;
+          messages.pop();
+        } else {
+          thinking.classList.remove('chat-bubble--thinking');
+          thinking.innerHTML = marked.parse(data.content);
+          messages.push({role: 'assistant', content: data.content});
+        }
+      })
+      .catch(() => {
+        thinking.className = 'chat-bubble chat-bubble--error';
+        thinking.textContent = 'Network error — please try again.';
+        messages.pop();
+      })
+      .finally(() => { btn.disabled = false; });
   }
 
   // Auto-resize textarea
@@ -358,38 +417,14 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     e.preventDefault();
     const text = input.value.trim();
     if (!text) return;
-
     input.value = '';
     input.style.height = 'auto';
-    btn.disabled = true;
-
-    messages.push({role: 'user', content: text});
-    addBubble('user', text);
-    const thinking = addBubble('assistant', '…');
-
-    fetch(CHAT_URL, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
-      body: JSON.stringify({messages}),
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) {
-          thinking.className = 'chat-bubble chat-bubble--error';
-          thinking.textContent = 'Error: ' + data.error;
-          messages.pop();
-        } else {
-          thinking.innerHTML = marked.parse(data.content);
-          messages.push({role: 'assistant', content: data.content});
-        }
-      })
-      .catch(() => {
-        thinking.className = 'chat-bubble chat-bubble--error';
-        thinking.textContent = 'Network error — please try again.';
-        messages.pop();
-      })
-      .finally(() => { btn.disabled = false; input.focus(); });
+    sendMessage(text);
   });
+
+  {% if job.status == 'complete' %}
+  sendMessage('What cell types are in my data?');
+  {% endif %}
 })();
 </script>
 {% endblock %}
