@@ -71,11 +71,12 @@ ssh -l${USER} ${HOST} <<-ENDSSH
     python ./manage.py migrate
     python manage.py collectstatic
     # Pre-download the sentence-transformers embedding model so Apache (www-data)
-    # never needs to fetch it at request time.
+    # never needs to fetch it at request time. Keep files owned by ubuntu (so the
+    # next deploy can overwrite them) but make them world-readable for www-data.
     mkdir -p /var/www/backend/st-models
     SENTENCE_TRANSFORMERS_HOME=/var/www/backend/st-models HF_HOME=/var/www/backend/st-models \
         python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-    sudo chown -R www-data:www-data /var/www/backend/st-models
+    chmod -R a+rX /var/www/backend/st-models
     sudo apache2ctl restart
     sudo systemctl start rqworker
     python manage.py recover_pending_projections
