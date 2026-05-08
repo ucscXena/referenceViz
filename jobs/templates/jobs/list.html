@@ -62,7 +62,7 @@
             <div class="action-icons">
               <a href="{% url 'job_detail' job.pk %}" class="icon-btn" title="View report"><span class="material-icons">topic</span></a>
               <a href="{% url 'download_projection' proj.pk %}" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>
-              <a href="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" class="icon-btn" title="View in explorer"><img src="/references/{{ proj.reference.id }}.webp" class="ref-thumb" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'material-icons',textContent:'scatter_plot'}))"></a>
+              <a href="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" class="icon-btn" title="View in explorer"><span class="material-icons">scatter_plot</span></a>
             </div>
           {% else %}
             —
@@ -257,15 +257,16 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
 // Status polling
 (function() {
   const TERMINAL = new Set(['complete', 'error']);
+  const QUEUED_BATCH = new Set(['SUBMITTED', 'PENDING', 'RUNNABLE']);
   // Track last-known projection statuses for transition detection
   const projLastStatus = new Map();
   const LABELS = {pending: 'Pending', running: 'Running', complete: 'Complete', error: 'Error'};
 
-  function formatEst(seconds) {
+  function formatEst(seconds, queued) {
+    if (queued) return '<br><span class="status-est">for capacity</span>';
     if (seconds == null) return '<br><span class="status-est">estimating\u2026</span>';
     const mins = Math.round(seconds / 60);
-    const text = '~' + mins + ' min';
-    return '<br><span class="status-est">' + text + '</span>';
+    return '<br><span class="status-est">~' + mins + ' min</span>';
   }
 
   function activeJobRows() {
@@ -345,8 +346,9 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
             if (data.status === 'error') {
               uceCell.innerHTML = `<a href="/jobs/${jobId}/" class="status-error">Error</a>`;
             } else {
-              const label = (data.status === 'running' && !data.cell_count) ? 'Starting' : (LABELS[data.status] || data.status);
-              const est = TERMINAL.has(data.status) ? '' : formatEst(data.estimated_remaining_seconds);
+              const waiting = data.status === 'running' && (!data.batch_status || QUEUED_BATCH.has(data.batch_status));
+              const label = waiting ? 'Waiting' : (LABELS[data.status] || data.status);
+              const est = TERMINAL.has(data.status) ? '' : formatEst(data.estimated_remaining_seconds, waiting);
               uceCell.innerHTML = `<span class="status-${data.status}">${label}${est}</span>`;
             }
           }
@@ -359,8 +361,9 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
               if (proj.status === 'error') {
                 statusCell.innerHTML = `<a href="/jobs/${jobId}/" class="status-error">Error</a>`;
               } else {
-                const label = LABELS[proj.status] || proj.status;
-                const est = TERMINAL.has(proj.status) ? '' : formatEst(proj.estimated_remaining_seconds);
+                const projWaiting = proj.status === 'running' && proj.batch_status && QUEUED_BATCH.has(proj.batch_status);
+                const label = projWaiting ? 'Waiting' : (LABELS[proj.status] || proj.status);
+                const est = TERMINAL.has(proj.status) ? '' : formatEst(proj.estimated_remaining_seconds, projWaiting);
                 statusCell.innerHTML = `<span class="status-${proj.status}">${label}${est}</span>`;
               }
             }
@@ -369,7 +372,7 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
               downloadCell.innerHTML = `<div class="action-icons">` +
                 `<a href="/jobs/${jobId}/" class="icon-btn" title="View report"><span class="material-icons">topic</span></a>` +
                 `<a href="/jobs/projections/${proj.id}/download/" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>` +
-                `<a href="${vizUrl}" class="icon-btn" title="View in explorer"><img src="/references/${proj.reference_id}.webp" class="ref-thumb" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'material-icons',textContent:'scatter_plot'}))"></a>` +
+                `<a href="${vizUrl}" class="icon-btn" title="View in explorer"><span class="material-icons">scatter_plot</span></a>` +
                 `</div>`;
             }
             if (proj.status === 'complete') {

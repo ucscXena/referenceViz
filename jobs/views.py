@@ -220,16 +220,22 @@ def job_detail(request, pk):
     return render(request, 'jobs/detail.html', {'job': job, 'projections': projections})
 
 
+_QUEUED_BATCH_STATES = {'SUBMITTED', 'PENDING', 'RUNNABLE'}
+
+
 def _estimate_uce_remaining(job):
-    """Estimated seconds until UCE embedding completes, or None if terminal."""
+    """Estimated seconds until UCE embedding completes, or None if queued/unknown."""
     if job.status not in ('pending', 'running'):
         return None
-    elapsed = (timezone.now() - job.created_at).total_seconds()
+    result = job.result or {}
+    if result.get('batch_status') not in ('RUNNING', 'STARTING'):
+        return None  # queued or not yet polled — no meaningful estimate
+    started_at_str = result.get('started_at')
+    reference_time = parse_datetime(started_at_str) if started_at_str else job.created_at
+    elapsed = (timezone.now() - reference_time).total_seconds()
     cell_count = job.cell_count()
     if not cell_count:
-        # Cell count not yet reported — count down through startup window.
         return max(0, int(settings.UCE_STARTUP_SECONDS - elapsed))
-    result = job.result or {}
     cells_per_second = result.get('cells_per_second')
     if cells_per_second:
         uce_total = settings.UCE_STARTUP_SECONDS + cell_count / cells_per_second
@@ -241,18 +247,20 @@ def _estimate_uce_remaining(job):
 
 
 def _estimate_projection_remaining(proj, job):
-    """Estimated seconds until this projection completes, or None if unknown/irrelevant."""
+    """Estimated seconds until this projection completes, or None if queued/unknown."""
     if proj.status not in ('pending', 'running'):
         return None
     if job.status != 'complete':
-        # UCE still running — client shows UCE status, skip projection estimate
         return None
+    result = proj.result or {}
+    if result.get('batch_status') in _QUEUED_BATCH_STATES:
+        return None  # explicitly queued — waiting for capacity
     cell_count = job.cell_count() or 0
     total = settings.PROJ_STARTUP_SECONDS + cell_count * settings.PROJ_SECONDS_PER_CELL
     if proj.status == 'running':
-        submitted_at_str = proj.result.get('submitted_at') if proj.result else None
-        submitted_at = parse_datetime(submitted_at_str) if submitted_at_str else timezone.now()
-        elapsed = (timezone.now() - submitted_at).total_seconds()
+        started_at_str = result.get('started_at') or result.get('submitted_at')
+        reference_time = parse_datetime(started_at_str) if started_at_str else timezone.now()
+        elapsed = (timezone.now() - reference_time).total_seconds()
         return max(0, int(total - elapsed))
     # pending + job complete: transient hand-off state, elapsed ≈ 0
     return int(total)
@@ -268,6 +276,9 @@ def job_status(request, pk):
     if job.status in ('pending', 'running'):
         data['estimated_remaining_seconds'] = _estimate_uce_remaining(job)
         data['cell_count'] = job.cell_count()
+        batch_status = (job.result or {}).get('batch_status')
+        if batch_status:
+            data['batch_status'] = batch_status
 
     projections = []
     for proj in Projection.objects.select_related('reference__group').filter(job_id=str(job.pk)):
@@ -284,6 +295,9 @@ def job_status(request, pk):
             p['error'] = proj.result.get('error', '')
         if proj.status in ('pending', 'running'):
             p['estimated_remaining_seconds'] = _estimate_projection_remaining(proj, job)
+            batch_status = (proj.result or {}).get('batch_status')
+            if batch_status:
+                p['batch_status'] = batch_status
         projections.append(p)
 
     data['projections'] = projections

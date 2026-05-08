@@ -78,7 +78,7 @@ export default el(class extends PureComponent {
 
 	onLayer = ev => {
 		var layer = ev.target.value;
-		this.props.onState(state => merge(state, {layer, hidden: []}));
+		this.props.onState(state => merge(state, {layer, hidden: [], legendSort: null}));
 	};
 
 	onRefFilterVar = (i, value) => {
