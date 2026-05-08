@@ -46,6 +46,8 @@ rm -rf ${BUILD_DJANGO}
 mkdir ${BUILD_DJANGO}
 # copy only the python files that are in git, to avoid temporary files.
 git ls-files -z requirements.txt manage.py server jobs templates static | rsync -a --files-from=- --from0 ./ "$BUILD_DJANGO"/
+# include the Brain Explorer metadata JSON from the data-explorer repo
+cp "${EXPLORER}/../UCSC_Brain_Explorer_metadata.json" "$BUILD_DJANGO"/
 rsync "${RSYNC_OPTS[@]}" ${BUILD_DJANGO}/ ${USER}@${HOST}:/var/www/backend/django
 
 ssh -l${USER} ${HOST} <<-ENDSSH
@@ -61,13 +63,19 @@ ssh -l${USER} ${HOST} <<-ENDSSH
     # job mid-deploy. Jobs in the Redis queue simply wait and are picked up
     # by the new worker after start.
     sudo systemctl stop rqworker
-    pip install --require-hashes -r requirements.txt
+    pip install --no-cache-dir --require-hashes -r requirements.txt
     # Remove stale .pyc bytecode so Python recompiles fresh on next startup.
     # pip skips packages already at the correct version, leaving old .pyc files
     # in place, which can cause SQLCompiler/ORM errors.
     find /var/www/backend -name '*.pyc' -delete
     python ./manage.py migrate
     python manage.py collectstatic
+    # Pre-download the sentence-transformers embedding model so Apache (www-data)
+    # never needs to fetch it at request time.
+    mkdir -p /var/www/backend/st-models
+    SENTENCE_TRANSFORMERS_HOME=/var/www/backend/st-models HF_HOME=/var/www/backend/st-models \
+        python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+    sudo chown -R www-data:www-data /var/www/backend/st-models
     sudo apache2ctl restart
     sudo systemctl start rqworker
     python manage.py recover_pending_projections

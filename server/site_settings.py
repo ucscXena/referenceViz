@@ -50,8 +50,13 @@ PROJ_SECONDS_PER_CELL = 169 / 10000  # per cell
 
 # Chatbot
 ANTHROPIC_API_KEY = ''
-# Absolute path to UCSC_Brain_Explorer_metadata.json; override in site_settings_private.py
-BRAIN_EXPLORER_METADATA_PATH = ''
+# Where sentence-transformers caches downloaded models.
+# The deploy script downloads the model here (as ubuntu) and chowns it to www-data,
+# so Apache can read it at request time without fetching anything.
+SENTENCE_TRANSFORMERS_HOME = os.path.join(os.path.dirname(BASE_DIR), 'st-models')
+# Absolute path to UCSC_Brain_Explorer_metadata.json
+# Deployed alongside the Django project by the deploy script; override locally in site_settings_private.py
+BRAIN_EXPLORER_METADATA_PATH = os.path.join(BASE_DIR, 'UCSC_Brain_Explorer_metadata.json')
 # Directory where fetched paper text files are stored; override in site_settings_private.py
 PAPERS_DIR = os.path.join(BASE_DIR, 'papers')
 

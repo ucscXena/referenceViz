@@ -15,6 +15,12 @@ import os
 EXTRA_MIDDLEWARE = []
 from .site_settings import *
 
+# Tell sentence-transformers (and HuggingFace hub) where to cache models.
+# Must be set before any import of sentence_transformers.
+os.environ.setdefault('SENTENCE_TRANSFORMERS_HOME', SENTENCE_TRANSFORMERS_HOME)
+os.environ.setdefault('HF_HOME', SENTENCE_TRANSFORMERS_HOME)
+os.environ.setdefault('HF_HUB_OFFLINE', '1')
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
