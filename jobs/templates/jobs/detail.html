@@ -5,20 +5,14 @@
 <div class="base-container wide">
 
   <div class="detail-header">
-    <h1 class="base-h1" style="margin:0;">Mapping Details</h1>
+    <div>
+      <h1 class="base-h1" style="margin:0;">Mapping Report</h1>
+      <p class="job-meta-id">{{ job.short_id }}</p>
+    </div>
     <a href="{% url 'job_list' %}" class="back-link">&#8592; Back to mappings</a>
   </div>
 
-  <table class="detail-table">
-    <tr><th>ID</th><td>{{ job.id }}</td></tr>
-    <tr><th>File</th><td>{{ job.original_filename }}</td></tr>
-    <tr>
-      <th>UCE Status</th>
-      <td><span id="uce-status-text" class="status-{{ job.status }}">{{ job.get_status_display }}</span></td>
-    </tr>
-    <tr><th>Created</th><td><time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i:s" }}</time></td></tr>
-    <tr><th>Updated</th><td><time datetime="{{ job.updated_at|date:"c" }}">{{ job.updated_at|date:"Y-m-d H:i:s" }}</time></td></tr>
-  </table>
+  <p class="job-meta-line">{{ job.original_filename }} &middot; <time datetime="{{ job.created_at|date:"c" }}">{{ job.created_at|date:"Y-m-d H:i" }}</time></p>
 
   {% if job.status == 'error' %}
   <div class="result-box error-box">
@@ -46,13 +40,13 @@
     <tbody>
     {% for proj in projections %}
     <tr data-proj-id="{{ proj.id }}">
-      <td>{{ proj.reference.name }}</td>
+      <td>{{ proj.reference.name }}{% if proj.reference.version_label %}<br><span class="ref-version-label">{{ proj.reference.version_label }}</span>{% endif %}</td>
       <td class="proj-status-cell">
         <span class="status-{{ proj.status }}">{{ proj.get_status_display }}</span>
       </td>
       <td>
         {% if proj.status == 'complete' and proj.result.s3_uri %}
-          <a href="{% url 'download_projection' proj.pk %}" class="link-download">Download</a>
+          <a href="{% url 'download_projection' proj.pk %}" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>
         {% else %}
           —
         {% endif %}
@@ -93,7 +87,7 @@
 <script>
 document.querySelectorAll('time[datetime]').forEach(el => {
   el.textContent = new Date(el.getAttribute('datetime')).toLocaleString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit'
+    year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
   });
 });
 </script>
@@ -102,10 +96,9 @@ document.querySelectorAll('time[datetime]').forEach(el => {
 <script>
 (function() {
   const TERMINAL = new Set(['complete', 'error']);
-  const uceStatusText = document.getElementById('uce-status-text');
+  const QUEUED_BATCH = new Set(['SUBMITTED', 'PENDING', 'RUNNABLE']);
 
   function hasActiveWork() {
-    if (uceStatusText && !TERMINAL.has(uceStatusText.className.replace('status-', ''))) return true;
     return [...document.querySelectorAll('.proj-status-cell span')].some(
       s => !TERMINAL.has(s.className.replace('status-', ''))
     );
@@ -115,22 +108,18 @@ document.querySelectorAll('time[datetime]').forEach(el => {
     fetch('{% url "job_status" job.pk %}')
       .then(r => r.json())
       .then(data => {
-        if (uceStatusText) {
-          uceStatusText.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
-          uceStatusText.className = 'status-' + data.status;
-        }
-
         (data.projections || []).forEach(proj => {
           const row = document.querySelector(`tr[data-proj-id="${proj.id}"]`);
           if (!row) return;
           const statusCell = row.querySelector('.proj-status-cell');
           if (statusCell) {
-            const label = proj.status.charAt(0).toUpperCase() + proj.status.slice(1);
+            const projWaiting = proj.status === 'running' && proj.batch_status && QUEUED_BATCH.has(proj.batch_status);
+            const label = projWaiting ? 'Waiting' : proj.status.charAt(0).toUpperCase() + proj.status.slice(1);
             statusCell.innerHTML = `<span class="status-${proj.status}">${label}</span>`;
           }
           const dlCell = row.cells[2];
           if (dlCell && proj.status === 'complete' && proj.has_download) {
-            dlCell.innerHTML = `<a href="/jobs/projections/${proj.id}/download/" class="link-download">Download</a>`;
+            dlCell.innerHTML = `<a href="/jobs/projections/${proj.id}/download/" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>`;
           }
         });
 
@@ -147,9 +136,9 @@ document.querySelectorAll('time[datetime]').forEach(el => {
 <style>
 .detail-header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
 }
 .back-link {
   font-size: 0.875rem;
@@ -157,6 +146,9 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   text-decoration: none;
 }
 .back-link:hover { text-decoration: underline; }
+
+.job-meta-id   { font-size: 0.8rem; color: #aaa; margin: 0.25rem 0 0.2rem; font-family: monospace; }
+.job-meta-line { font-size: 0.9rem; color: #666; margin: 0 0 1.5rem; }
 
 .section-heading {
   font-size: 1rem;
@@ -185,14 +177,26 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   word-break: break-all;
 }
 .error-detail-row td { padding: 0 12px 12px; border-bottom: none; }
+.ref-version-label { font-size: 0.8rem; color: #888; }
 
 .status-complete { color: #2e7d32; font-weight: 500; }
 .status-running  { color: #1565c0; font-weight: 500; }
 .status-pending  { color: #888; }
 .status-error    { color: #c62828; font-weight: 500; }
 
-.link-download   { color: #1976d2; text-decoration: none; font-weight: 500; }
-.link-download:hover { text-decoration: underline; }
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  color: #666;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.icon-btn:hover { background: #e8f0fe; color: #1976d2; }
+.icon-btn .material-icons { font-size: 20px; line-height: 1; }
 
 .result-box {
   border-radius: 4px;
@@ -219,15 +223,13 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   border-radius: 4px;
   display: flex;
   flex-direction: column;
-  height: 360px;
 }
 .chat-messages {
-  flex: 1;
-  overflow-y: auto;
   padding: 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-height: 4rem;
 }
 .chat-bubble {
   max-width: 80%;

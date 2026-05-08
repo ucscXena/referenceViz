@@ -83,7 +83,9 @@ class Job(models.Model):
         return f"Job {self.id} for user {self.user.username} - Status: {self.status}"
 
     def short_id(self):
-        return str(self.id)[:5]
+        return str(self.id)[:8]
+    short_id.short_description = 'ID'
+    short_id.admin_order_field = 'id'
 
     def short_uploaded_file(self):
         return self.original_filename or 'unknown'
@@ -150,6 +152,11 @@ class Projection(models.Model):
     class Meta:
         ordering = ['reference__group__title']
         unique_together = [('job', 'reference')]
+
+    def short_id(self):
+        return str(self.id)[:8]
+    short_id.short_description = 'ID'
+    short_id.admin_order_field = 'id'
 
     def __str__(self):
         return f"Projection {self.job_id} → {self.reference_id}"

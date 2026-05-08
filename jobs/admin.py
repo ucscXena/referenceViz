@@ -142,11 +142,6 @@ class JobAdmin(admin.ModelAdmin):
         }
         return render(request, 'admin/jobs/job/stats.html', context)
 
-    def short_id(self, obj):
-        return str(obj.id)[:8]
-    short_id.short_description = 'ID'
-    short_id.admin_order_field = 'id'
-
     def batch_job_link(self, obj):
         return _batch_link(obj.batch_job_id)
     batch_job_link.short_description = 'Batch Job'
@@ -205,11 +200,6 @@ class ProjectionAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'short_job', 'reference_link', 'status', 'batch_job_link', 'download_link', 'created_at')
     list_filter = ('status', 'reference')
     readonly_fields = ('id', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'predictions_download_link', 'viz_link', 'created_at', 'updated_at')
-
-    def short_id(self, obj):
-        return str(obj.id)[:8]
-    short_id.short_description = 'ID'
-    short_id.admin_order_field = 'id'
 
     def short_job(self, obj):
         label = f'{str(obj.job_id)[:8]} · {obj.job.user.username}'
