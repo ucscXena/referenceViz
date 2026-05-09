@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 
 import anthropic
@@ -11,6 +12,8 @@ from pgvector.django import CosineDistance
 
 from .models import DocumentChunk, Job
 from .projection_summary import compute_projection_summary
+
+logger = logging.getLogger(__name__)
 
 _embed_model = None
 
@@ -110,7 +113,7 @@ def _build_system_prompt(job, chunks=None):
                     proj.result['summary'] = compute_projection_summary(proj.result['s3_uri'])
                     proj.save(update_fields=['result'])
                 except Exception:
-                    pass
+                    logger.exception('Failed to compute projection summary for projection %s', proj.pk)
             summary = proj.result.get('summary')
             if summary:
                 lines.append(f"\n## Your results: {proj.reference.name}")
