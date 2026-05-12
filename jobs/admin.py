@@ -4,7 +4,8 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib import admin
 from django.db.models import Count, Q
-from django.shortcuts import render
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
@@ -70,7 +71,7 @@ class ProjectionInline(admin.TabularInline):
 class JobAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'user', 'original_filename', 'status', 'batch_job_link', 'created_at', 'uce_download_link')
     list_filter = ('status',)
-    readonly_fields = ('id', 'batch_job_link', 'created_at', 'updated_at', 'uce_download_link')
+    readonly_fields = ('id', 'batch_job_link', 'created_at', 'updated_at', 'uce_download_link', 'system_prompt_link')
     inlines = [ProjectionInline]
     change_list_template = 'admin/jobs/job/change_list.html'
 
@@ -78,6 +79,9 @@ class JobAdmin(admin.ModelAdmin):
         urls = super().get_urls()
         custom = [
             path('stats/', self.admin_site.admin_view(self.stats_view), name='jobs_job_stats'),
+            path('<uuid:job_id>/system-prompt/',
+                 self.admin_site.admin_view(self.system_prompt_view),
+                 name='jobs_job_system_prompt'),
         ]
         return custom + urls
 
@@ -154,6 +158,39 @@ class JobAdmin(admin.ModelAdmin):
         }
         return render(request, 'admin/jobs/job/stats.html', context)
 
+    def system_prompt_view(self, request, job_id):
+        from .chat import _build_system_prompt
+        from .projection_summary import compute_projection_summary
+        job = get_object_or_404(Job, pk=job_id)
+
+        recomputed = 0
+        if request.method == 'POST':
+            for proj in job.projections.all():
+                if proj.result and proj.result.get('s3_uri'):
+                    proj.result.pop('summary', None)
+                    try:
+                        proj.result['summary'] = compute_projection_summary(proj.result['s3_uri'])
+                    except Exception:
+                        logger.exception('Failed to recompute summary for projection %s', proj.pk)
+                    proj.save(update_fields=['result'])
+                    recomputed += 1
+
+        prompt = _build_system_prompt(job, chunks=[])
+        context = {
+            **self.admin_site.each_context(request),
+            'title': f'System prompt — {job.original_filename or job.pk}',
+            'prompt': prompt,
+            'recomputed': recomputed if request.method == 'POST' else None,
+        }
+        return render(request, 'admin/jobs/job/system_prompt.html', context)
+
+    def system_prompt_link(self, obj):
+        if not obj.pk:
+            return '—'
+        url = reverse('admin:jobs_job_system_prompt', args=[obj.pk])
+        return format_html('<a href="{}" target="_blank">View system prompt</a>', url)
+    system_prompt_link.short_description = 'System Prompt'
+
     def batch_job_link(self, obj):
         return _batch_link(obj.batch_job_id)
     batch_job_link.short_description = 'Batch Job'
@@ -211,10 +248,13 @@ class ReferenceAdmin(admin.ModelAdmin):
 class ProjectionAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'short_job', 'reference_link', 'status', 'batch_job_link', 'download_link', 'created_at')
     list_filter = ('status', 'reference')
-    readonly_fields = ('id', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'predictions_download_link', 'viz_link', 'created_at', 'updated_at')
-
+    readonly_fields = ('id', 'job_file', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'predictions_download_link', 'viz_link', 'created_at', 'updated_at')
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('reference__group', 'job')
+        return super().get_queryset(request).select_related('reference__group', 'job__user')
+
+    def job_file(self, obj):
+        return obj.job.original_filename or '—'
+    job_file.short_description = 'Input file'
 
     def short_job(self, obj):
         label = f'{str(obj.job_id)[:8]} · {obj.job.user.username}'

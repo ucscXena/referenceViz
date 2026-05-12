@@ -108,7 +108,13 @@ def _build_system_prompt(job, chunks=None):
             lines.append(f"Developmental stages: {stages}.")
 
         if proj.status == 'complete' and proj.result and proj.result.get('s3_uri'):
-            if 'summary' not in proj.result:
+            existing = proj.result.get('summary')
+            # Recompute if missing or in old format (no 'type' key on column entries)
+            needs_compute = not existing or not any(
+                isinstance(v, dict) and 'type' in v
+                for v in existing.get('columns', {}).values()
+            )
+            if needs_compute:
                 try:
                     proj.result['summary'] = compute_projection_summary(proj.result['s3_uri'])
                     proj.save(update_fields=['result'])
@@ -116,12 +122,50 @@ def _build_system_prompt(job, chunks=None):
                     logger.exception('Failed to compute projection summary for projection %s', proj.pk)
             summary = proj.result.get('summary')
             if summary:
-                lines.append(f"\n## Your results: {proj.reference.name}")
-                lines.append(f"Total cells mapped: {summary['total_cells']:,}")
-                for col_name, entries in summary['columns'].items():
-                    lines.append(f"Cell type distribution ({col_name}):")
-                    for entry in entries:
-                        lines.append(f"  {entry['label']}: {entry['count']:,} ({entry['pct']}%)")
+                total_cells = summary['total_cells']
+                lines.append(f"\n## Mapping results: {proj.reference.name}")
+                lines.append(f"Total cells: {total_cells:,}")
+
+                pred_cols = {k: v for k, v in summary['columns'].items()
+                             if isinstance(v, dict) and v.get('type') == 'prediction'}
+                user_cols = {k: v for k, v in summary['columns'].items()
+                             if isinstance(v, dict) and v.get('type') == 'user_label'}
+                legacy_cols = {k: v for k, v in summary['columns'].items()
+                               if not isinstance(v, dict) or 'type' not in v}
+
+                if pred_cols:
+                    lines.append(
+                        "\nPipeline predictions (these are UCE model outputs, NOT the "
+                        "user's own labels):"
+                    )
+                    for col_name, col_data in pred_cols.items():
+                        ref_col = col_data.get('reference_column', col_name)
+                        unclassified = col_data.get('unclassified', 0)
+                        lines.append(f"  Predicted {ref_col}:")
+                        if unclassified:
+                            lines.append(f"    Unclassified: {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
+                        for e in col_data.get('entries', []):
+                            lines.append(f"    {e['label']}: {e['count']:,} ({e['pct']}%)")
+
+                if user_cols:
+                    lines.append("\nUser-supplied annotations (from the uploaded file):")
+                    for col_name, col_data in user_cols.items():
+                        unclassified = col_data.get('unclassified', 0)
+                        lines.append(f"  Column '{col_name}':")
+                        if unclassified:
+                            lines.append(f"    Unclassified: {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
+                        for e in col_data.get('entries', []):
+                            lines.append(f"    {e['label']}: {e['count']:,} ({e['pct']}%)")
+
+                # Legacy format (flat list of entries per column)
+                for col_name, entries in legacy_cols.items():
+                    entry_list = entries if isinstance(entries, list) else entries.get('entries', [])
+                    unclassified = entries.get('unclassified', 0) if isinstance(entries, dict) else 0
+                    lines.append(f"  {col_name}:")
+                    if unclassified:
+                        lines.append(f"    Unclassified: {unclassified:,}")
+                    for e in entry_list:
+                        lines.append(f"    {e['label']}: {e['count']:,} ({e['pct']}%)")
 
     if chunks:
         lines += ["", "## Relevant excerpts from source papers"]
@@ -137,6 +181,9 @@ def _build_system_prompt(job, chunks=None):
         "Answer questions about this mapping job, the reference datasets, cell types, "
         "and what results might mean biologically. Be concise. If asked something "
         "outside this context, note that you are specialized for brain cell mapping.",
+        "When discussing cell types, always be explicit about whether you are referring "
+        "to pipeline predictions (from the mapping above) or any cell type labels the "
+        "user may have supplied in their own data file.",
     ]
 
     return "\n".join(lines)
