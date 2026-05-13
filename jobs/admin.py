@@ -168,6 +168,7 @@ class JobAdmin(admin.ModelAdmin):
             for proj in job.projections.all():
                 if proj.result and proj.result.get('s3_uri'):
                     proj.result.pop('summary', None)
+                    proj.result.pop('column_notes', None)
                     try:
                         proj.result['summary'] = compute_projection_summary(proj.result['s3_uri'])
                     except Exception:

@@ -3,6 +3,7 @@ import re
 
 import numpy as np
 import pyarrow
+import pyarrow.compute as pc
 import pyarrow.ipc as pa_ipc
 
 from .aws import boto_client
@@ -34,6 +35,20 @@ def _distribution(col, total):
     return unclassified, entries
 
 
+def _numeric_summary(col):
+    """Return min/max/mean/null_count for a numeric column, skipping nulls."""
+    combined = col.combine_chunks()
+    null_count = int(combined.null_count)
+    if combined.length() == null_count:
+        return {'min': None, 'max': None, 'mean': None, 'null_count': null_count}
+    return {
+        'min': round(float(pc.min(combined).as_py()), 4),
+        'max': round(float(pc.max(combined).as_py()), 4),
+        'mean': round(float(pc.mean(combined).as_py()), 4),
+        'null_count': null_count,
+    }
+
+
 def summarize_arrow_bytes(body):
     """
     Compute cell type distributions from raw Arrow file bytes.
@@ -56,7 +71,18 @@ def summarize_arrow_bytes(body):
         if f.name not in ('x', 'y')
         and not f.name.startswith('prediction_by_')
         and pyarrow.types.is_dictionary(f.type)
-        and not f.type.ordered   # ordered = binned continuous metric
+    ]
+    numeric_names = [
+        f.name for f in schema
+        if f.name not in ('x', 'y')
+        and not f.name.startswith('prediction_by_')
+        and (pyarrow.types.is_integer(f.type) or pyarrow.types.is_floating(f.type))
+    ]
+    boolean_names = [
+        f.name for f in schema
+        if f.name not in ('x', 'y')
+        and not f.name.startswith('prediction_by_')
+        and pyarrow.types.is_boolean(f.type)
     ]
 
     columns = {}
@@ -77,6 +103,23 @@ def summarize_arrow_bytes(body):
             'type': 'user_label',
             'unclassified': unclassified,
             'entries': entries,
+        }
+
+    for name in numeric_names:
+        columns[name] = {
+            'type': 'numeric',
+            **_numeric_summary(table.column(name)),
+        }
+
+    for name in boolean_names:
+        combined = table.column(name).combine_chunks()
+        true_count = int(pc.sum(combined).as_py() or 0)
+        null_count = int(combined.null_count)
+        columns[name] = {
+            'type': 'boolean',
+            'true_count': true_count,
+            'false_count': combined.length() - true_count - null_count,
+            'null_count': null_count,
         }
 
     return {'total_cells': total, 'columns': columns}

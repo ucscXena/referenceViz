@@ -60,6 +60,66 @@ def _strip_html(text):
     return re.sub(r'<[^>]+>', '', text or '')
 
 
+def _interpret_columns(summary):
+    """
+    Call the API with a compact column inventory and return a short plain-text
+    assessment of what the user's columns represent.  Result is meant to be
+    cached; returns '' on failure or when the API key is absent.
+    """
+    api_key = getattr(settings, 'ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return ''
+
+    lines = []
+    for col_name, col_data in summary.get('columns', {}).items():
+        col_type = col_data.get('type')
+        if col_type == 'prediction':
+            continue
+        elif col_type == 'user_label':
+            top = ', '.join(
+                f"{e['label']} ({e['pct']}%)"
+                for e in col_data.get('entries', [])[:6]
+            )
+            lines.append(f"  '{col_name}' (categorical): {top}")
+        elif col_type == 'numeric':
+            mn, mx, mean = col_data.get('min'), col_data.get('max'), col_data.get('mean')
+            null_count = col_data.get('null_count', 0)
+            s = f"  '{col_name}' (numeric): min={mn}, max={mx}, mean={mean}"
+            if null_count:
+                s += f", {null_count:,} nulls"
+            lines.append(s)
+        elif col_type == 'boolean':
+            t, f_ = col_data.get('true_count', 0), col_data.get('false_count', 0)
+            lines.append(f"  '{col_name}' (boolean): True={t:,}, False={f_:,}")
+
+    if not lines:
+        return ''
+
+    prompt = (
+        f"A user uploaded a single-cell RNA-seq file to UCSC Brain Explorer "
+        f"({summary['total_cells']:,} cells). "
+        f"The file contains the following columns (pipeline outputs excluded):\n\n"
+        + '\n'.join(lines)
+        + "\n\nIn 2-4 sentences identify: which columns (if any) look like quality "
+        "control metrics and whether filtering may be warranted before interpreting "
+        "the mapping results; what analysis platform or workflow likely generated "
+        "this file; and what user-defined annotations are present. "
+        "Be specific about column names. Omit anything you cannot determine."
+    )
+
+    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        response = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=300,
+            messages=[{'role': 'user', 'content': prompt}],
+        )
+        return response.content[0].text
+    except anthropic.APIError:
+        logger.exception('Failed to interpret columns')
+        return ''
+
+
 def _build_system_prompt(job, chunks=None):
     metadata = _load_metadata()
     projections = list(job.projections.select_related('reference').all())
@@ -130,6 +190,8 @@ def _build_system_prompt(job, chunks=None):
                              if isinstance(v, dict) and v.get('type') == 'prediction'}
                 user_cols = {k: v for k, v in summary['columns'].items()
                              if isinstance(v, dict) and v.get('type') == 'user_label'}
+                numeric_cols = {k: v for k, v in summary['columns'].items()
+                                if isinstance(v, dict) and v.get('type') in ('numeric', 'boolean')}
                 legacy_cols = {k: v for k, v in summary['columns'].items()
                                if not isinstance(v, dict) or 'type' not in v}
 
@@ -156,6 +218,33 @@ def _build_system_prompt(job, chunks=None):
                             lines.append(f"    Unclassified: {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
                         for e in col_data.get('entries', []):
                             lines.append(f"    {e['label']}: {e['count']:,} ({e['pct']}%)")
+
+                if numeric_cols:
+                    lines.append("\nNumeric/boolean columns (from user file):")
+                    for col_name, col_data in numeric_cols.items():
+                        if col_data.get('type') == 'boolean':
+                            t = col_data.get('true_count', 0)
+                            f_ = col_data.get('false_count', 0)
+                            lines.append(f"  '{col_name}': True={t:,}, False={f_:,}")
+                        else:
+                            mn, mx, mean = col_data.get('min'), col_data.get('max'), col_data.get('mean')
+                            null_count = col_data.get('null_count', 0)
+                            s = f"  '{col_name}': min={mn}, max={mx}, mean={mean}"
+                            if null_count:
+                                s += f", {null_count:,} nulls"
+                            lines.append(s)
+
+                # Compute and cache a model-generated interpretation of the user's columns
+                if 'column_notes' not in proj.result:
+                    try:
+                        proj.result['column_notes'] = _interpret_columns(summary)
+                        proj.save(update_fields=['result'])
+                    except Exception:
+                        logger.exception('Failed to interpret columns for projection %s', proj.pk)
+
+                column_notes = proj.result.get('column_notes', '')
+                if column_notes:
+                    lines.append(f"\n## Assessment of user data columns\n{column_notes}")
 
                 # Legacy format (flat list of entries per column)
                 for col_name, entries in legacy_cols.items():
