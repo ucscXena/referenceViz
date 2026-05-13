@@ -118,7 +118,7 @@ export default el(class SinglecellView extends PureComponent {
 		tooltipID: undefined,
 		tooltipValue: undefined,
 		scale: null,
-		showControls: false,
+		showControls: true,
 		radius: 1.5,
 		overlayRadius: 3
 	};
