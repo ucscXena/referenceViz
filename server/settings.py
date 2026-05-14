@@ -146,6 +146,11 @@ LOGGING = {
             'level': 'WARNING',
             'propagate': True,
         },
+        'jobs': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False
+        },
         'rq.worker': {
             'handlers': ['console_timestamped'],
             'level': 'INFO',

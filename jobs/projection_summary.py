@@ -125,6 +125,141 @@ def summarize_arrow_bytes(body):
     return {'total_cells': total, 'columns': columns}
 
 
+def compare_columns_stat(s3_uri, col_a, col_b, filters=None):
+    """
+    Download Arrow file, apply optional QC filters, and compute chi-squared + Cramér's V
+    for two categorical (dictionary or boolean) columns.
+    """
+    from scipy.stats import chi2_contingency
+
+    bucket, key = s3_uri.removeprefix('s3://').split('/', 1)
+    body = boto_client('s3').get_object(Bucket=bucket, Key=key)['Body'].read()
+    table = pa_ipc.open_file(io.BytesIO(body)).read_all()
+    del body
+
+    n_total = table.num_rows
+
+    if filters:
+        _num_ops = {
+            'lt': pc.less, 'le': pc.less_equal,
+            'gt': pc.greater, 'ge': pc.greater_equal,
+            'eq': pc.equal, 'ne': pc.not_equal,
+        }
+        mask = None
+        for f in filters:
+            col = table.column(f['column'])
+            op = f['op']
+            val = f['value']
+            combined = col.combine_chunks()
+            if pyarrow.types.is_dictionary(combined.type):
+                # Dictionary columns have string bin labels — only eq/ne make sense.
+                # Numeric comparisons (lt, gt, …) are not supported.
+                labels = combined.dictionary.to_pylist()
+                if op not in ('eq', 'ne'):
+                    raise ValueError(
+                        f"Column '{f['column']}' is categorical with bin labels {labels}. "
+                        f"Use op='eq' or op='ne' with one of those string values."
+                    )
+                if val not in labels:
+                    raise ValueError(
+                        f"Value {val!r} not in column '{f['column']}'. "
+                        f"Available values: {labels}"
+                    )
+                idx = labels.index(val)
+                raw = combined.indices.to_numpy(zero_copy_only=False)
+                bool_arr = (raw == idx) if op == 'eq' else (raw != idx)
+                cond = pyarrow.array(bool_arr.tolist(), type=pyarrow.bool_())
+            else:
+                op_fn = _num_ops.get(op)
+                if op_fn is None:
+                    raise ValueError(f"Unknown operator {op!r}")
+                cond = op_fn(col, val)
+            mask = cond if mask is None else pc.and_(mask, cond)
+        table = table.filter(mask)
+
+    n_filtered = table.num_rows
+
+    def to_label_indices(col):
+        combined = col.combine_chunks()
+        if pyarrow.types.is_dictionary(combined.type):
+            labels = combined.dictionary.to_pylist()
+            indices = combined.indices.to_numpy(zero_copy_only=False)
+            return labels, indices
+        elif pyarrow.types.is_boolean(combined.type):
+            arr = combined.to_pylist()
+            indices = np.array([1 if v is True else 0 if v is False else -1 for v in arr])
+            return ['False', 'True'], indices
+        else:
+            raise ValueError(
+                f"Column has type {combined.type}; only categorical and boolean columns are supported"
+            )
+
+    a_labels, a_idx = to_label_indices(table.column(col_a))
+    b_labels, b_idx = to_label_indices(table.column(col_b))
+
+    valid = (a_idx >= 0) & (b_idx >= 0)
+    a_valid = a_idx[valid].astype(np.intp)
+    b_valid = b_idx[valid].astype(np.intp)
+    n_compared = int(valid.sum())
+
+    if n_compared == 0:
+        return {'error': 'No valid (non-null) cells remain after filtering'}
+
+    contingency = np.zeros((len(a_labels), len(b_labels)), dtype=np.int64)
+    np.add.at(contingency, (a_valid, b_valid), 1)
+
+    # chi2_contingency requires no all-zero rows/cols
+    row_mask = contingency.sum(axis=1) > 0
+    col_mask = contingency.sum(axis=0) > 0
+    trimmed = contingency[np.ix_(row_mask, col_mask)]
+
+    chi2, p_value, dof, _ = chi2_contingency(trimmed)
+
+    n = int(trimmed.sum())
+    k = min(trimmed.shape) - 1
+    cramers_v = float(np.sqrt(chi2 / (n * k))) if k > 0 else 0.0
+
+    if cramers_v >= 0.5:
+        strength = 'strong'
+    elif cramers_v >= 0.3:
+        strength = 'moderate'
+    elif cramers_v >= 0.1:
+        strength = 'weak'
+    else:
+        strength = 'negligible'
+
+    # For each col_a value, report its most common col_b value
+    top_pairings = []
+    for i, a_label in enumerate(a_labels):
+        row = contingency[i]
+        total_a = int(row.sum())
+        if total_a == 0:
+            continue
+        j = int(np.argmax(row))
+        top_pairings.append({
+            'col_a_value': a_label,
+            'col_b_value': b_labels[j],
+            'count': int(row[j]),
+            'total_a': total_a,
+            'pct_of_a': round(100 * int(row[j]) / total_a, 1),
+        })
+    top_pairings.sort(key=lambda x: -x['total_a'])
+
+    return {
+        'n_total': n_total,
+        'n_after_filter': n_filtered,
+        'n_compared': n_compared,
+        'col_a': col_a,
+        'col_b': col_b,
+        'chi2': round(chi2, 2),
+        'p_value': float(p_value),
+        'degrees_of_freedom': dof,
+        'cramers_v': round(cramers_v, 3),
+        'association_strength': strength,
+        'top_pairings': top_pairings[:12],
+    }
+
+
 def compute_projection_summary(s3_uri):
     """Download the projection Arrow file from S3 and compute cell type distributions."""
     bucket, key = s3_uri.removeprefix('s3://').split('/', 1)

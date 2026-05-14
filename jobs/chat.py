@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 from pgvector.django import CosineDistance
 
 from .models import DocumentChunk, Job
-from .projection_summary import compute_projection_summary
+from .projection_summary import compare_columns_stat, compute_projection_summary
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,103 @@ def _load_metadata():
         else:
             _metadata_cache = {}
     return _metadata_cache
+
+
+TOOLS = [
+    {
+        'name': 'compare_columns',
+        'description': (
+            'Compute the statistical association between two categorical columns in the '
+            'user\'s projection data using chi-squared and Cramér\'s V. Use this when asked '
+            'how well the user\'s own annotations or cluster labels agree with the pipeline '
+            'predictions, or to compare any two categorical columns. '
+            'Always check the data assessment in the system prompt for QC columns '
+            '(e.g. doublet scores, mitochondrial fraction) and apply appropriate filters '
+            'before comparing — QC filtering can substantially change results. '
+            'Categorical QC columns must be filtered with op="eq" or op="ne" using their '
+            'exact string label values (not numeric thresholds).'
+        ),
+        'input_schema': {
+            'type': 'object',
+            'properties': {
+                'col_a': {
+                    'type': 'string',
+                    'description': 'First column name (e.g. a user annotation like "cell_type" or "cluster")',
+                },
+                'col_b': {
+                    'type': 'string',
+                    'description': 'Second column name (e.g. a pipeline prediction like "prediction_by_cell_type_top1")',
+                },
+                'filters': {
+                    'type': 'array',
+                    'description': 'Optional QC filters. Rows must satisfy all filters to be included.',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'column': {'type': 'string'},
+                            'op': {
+                                'type': 'string',
+                                'enum': ['lt', 'le', 'gt', 'ge', 'eq', 'ne'],
+                                'description': 'lt=<  le=<=  gt=>  ge=>=  eq===  ne=!=',
+                            },
+                            'value': {'description': 'Number or boolean to compare against'},
+                        },
+                        'required': ['column', 'op', 'value'],
+                    },
+                },
+                'reference': {
+                    'type': 'string',
+                    'description': 'Reference atlas name, only needed when the job has multiple projections.',
+                },
+            },
+            'required': ['col_a', 'col_b'],
+        },
+    }
+]
+
+
+def _dispatch_tool(name, tool_input, job):
+    logger.debug('Tool call: %s  input=%s', name, tool_input)
+
+    if name == 'compare_columns':
+        col_a = tool_input['col_a']
+        col_b = tool_input['col_b']
+        filters = tool_input.get('filters') or []
+        reference = tool_input.get('reference')
+
+        projections = list(
+            job.projections.filter(status='complete').select_related('reference').all()
+        )
+        if not projections:
+            return {'error': 'No complete projections available'}
+
+        if reference:
+            proj = next((p for p in projections if p.reference.name == reference), None)
+            if proj is None:
+                return {'error': f'Reference {reference!r} not found. Available: {[p.reference.name for p in projections]}'}
+        else:
+            proj = projections[0]
+
+        s3_uri = (proj.result or {}).get('s3_uri')
+        if not s3_uri:
+            return {'error': 'Projection result file not available'}
+
+        try:
+            result = compare_columns_stat(s3_uri, col_a, col_b, filters)
+            logger.debug(
+                'Tool result: compare_columns  col_a=%r col_b=%r filters=%s  '
+                'n_total=%s n_after_filter=%s n_compared=%s cramers_v=%s strength=%s',
+                col_a, col_b, filters,
+                result.get('n_total'), result.get('n_after_filter'), result.get('n_compared'),
+                result.get('cramers_v'), result.get('association_strength'),
+            )
+            return result
+        except Exception as e:
+            logger.exception('compare_columns_stat failed for projection %s', proj.pk)
+            return {'error': str(e)}
+
+    logger.warning('Unknown tool called: %r', name)
+    return {'error': f'Unknown tool: {name!r}'}
 
 
 def _strip_html(text):
@@ -156,8 +253,11 @@ def _build_system_prompt(job, chunks=None):
             lines.append(f"Brain regions covered: {tissues}.")
 
         if meta.get('cell_type'):
-            types = ', '.join(ct['label'] for ct in meta['cell_type'][:12])
-            lines.append(f"Major cell types: {types}.")
+            types = ', '.join(ct['label'] for ct in meta['cell_type'])
+            lines.append(
+                f"Complete list of cell types in this reference "
+                f"(these are the exact labels used in pipeline predictions): {types}."
+            )
 
         if meta.get('disease'):
             diseases = ', '.join(d['label'] for d in meta['disease'])
@@ -203,7 +303,7 @@ def _build_system_prompt(job, chunks=None):
                     for col_name, col_data in pred_cols.items():
                         ref_col = col_data.get('reference_column', col_name)
                         unclassified = col_data.get('unclassified', 0)
-                        lines.append(f"  Predicted {ref_col}:")
+                        lines.append(f"  Predicted {ref_col} (column: '{col_name}'):")
                         if unclassified:
                             lines.append(f"    Unclassified: {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
                         for e in col_data.get('entries', []):
@@ -213,7 +313,7 @@ def _build_system_prompt(job, chunks=None):
                     lines.append("\nUser-supplied annotations (from the uploaded file):")
                     for col_name, col_data in user_cols.items():
                         unclassified = col_data.get('unclassified', 0)
-                        lines.append(f"  Column '{col_name}':")
+                        lines.append(f"  '{col_name}':")
                         if unclassified:
                             lines.append(f"    Unclassified: {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
                         for e in col_data.get('entries', []):
@@ -304,15 +404,39 @@ def chat(request, pk):
         (m['content'] for m in reversed(messages) if m.get('role') == 'user'), ''
     )
     chunks = retrieve_chunks(last_user_message)
+    system_prompt = _build_system_prompt(job, chunks)
 
     try:
-        response = client.messages.create(
-            model='claude-haiku-4-5-20251001',
-            max_tokens=1024,
-            system=_build_system_prompt(job, chunks),
-            messages=messages,
-        )
+        thread = list(messages)
+        response = None
+        for _ in range(5):  # allow up to 5 tool-call rounds
+            response = client.messages.create(
+                model='claude-haiku-4-5-20251001',
+                max_tokens=1024,
+                system=system_prompt,
+                messages=thread,
+                tools=TOOLS,
+            )
+            if response.stop_reason != 'tool_use':
+                break
+
+            tool_results = []
+            for block in response.content:
+                if block.type == 'tool_use':
+                    result = _dispatch_tool(block.name, block.input, job)
+                    is_error = 'error' in result
+                    tool_results.append({
+                        'type': 'tool_result',
+                        'tool_use_id': block.id,
+                        'content': json.dumps(result),
+                        'is_error': is_error,
+                    })
+
+            thread.append({'role': 'assistant', 'content': [b.model_dump() for b in response.content]})
+            thread.append({'role': 'user', 'content': tool_results})
+
+        text = next((b.text for b in response.content if hasattr(b, 'text')), '')
+        return JsonResponse({'content': text})
+
     except anthropic.APIError as e:
         return JsonResponse({'error': str(e)}, status=502)
-
-    return JsonResponse({'content': response.content[0].text})
