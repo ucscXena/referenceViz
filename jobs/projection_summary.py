@@ -61,9 +61,14 @@ def summarize_arrow_bytes(body):
     total = table.num_rows
     schema = table.schema
 
-    pred_top1_names = [
+    pred_top_names = [
         f.name for f in schema
-        if re.match(r'prediction_by_.+_top1$', f.name)
+        if re.match(r'prediction_by_.+_top[12]$', f.name)
+        and pyarrow.types.is_dictionary(f.type)
+    ]
+    pred_score_names = [
+        f.name for f in schema
+        if re.match(r'prediction_by_.+_top[12]_score$', f.name)
         and pyarrow.types.is_dictionary(f.type)
     ]
     user_label_names = [
@@ -87,12 +92,24 @@ def summarize_arrow_bytes(body):
 
     columns = {}
 
-    for name in pred_top1_names:
-        ref_col = re.match(r'prediction_by_(.+)_top1$', name).group(1)
+    for name in pred_top_names:
+        m = re.match(r'prediction_by_(.+)_top([12])$', name)
         unclassified, entries = _distribution(table.column(name), total)
         columns[name] = {
             'type': 'prediction',
-            'reference_column': ref_col,
+            'rank': int(m.group(2)),
+            'reference_column': m.group(1),
+            'unclassified': unclassified,
+            'entries': entries,
+        }
+
+    for name in pred_score_names:
+        m = re.match(r'prediction_by_(.+)_top([12])_score$', name)
+        unclassified, entries = _distribution(table.column(name), total)
+        columns[name] = {
+            'type': 'prediction_score',
+            'rank': int(m.group(2)),
+            'reference_column': m.group(1),
             'unclassified': unclassified,
             'entries': entries,
         }

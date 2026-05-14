@@ -305,6 +305,8 @@ def _build_system_prompt(job, chunks=None):
 
                 pred_cols = {k: v for k, v in summary['columns'].items()
                              if isinstance(v, dict) and v.get('type') == 'prediction'}
+                score_cols = {k: v for k, v in summary['columns'].items()
+                              if isinstance(v, dict) and v.get('type') == 'prediction_score'}
                 user_cols = {k: v for k, v in summary['columns'].items()
                              if isinstance(v, dict) and v.get('type') == 'user_label'}
                 numeric_cols = {k: v for k, v in summary['columns'].items()
@@ -317,10 +319,23 @@ def _build_system_prompt(job, chunks=None):
                         "\nPipeline predictions (these are UCE model outputs, NOT the "
                         "user's own labels):"
                     )
-                    for col_name, col_data in pred_cols.items():
+                    for col_name, col_data in sorted(pred_cols.items(), key=lambda x: x[1].get('rank', 1)):
                         ref_col = col_data.get('reference_column', col_name)
+                        rank = col_data.get('rank', 1)
                         unclassified = col_data.get('unclassified', 0)
-                        lines.append(f"  Predicted {ref_col} (column: '{col_name}'):")
+                        lines.append(f"  Predicted {ref_col} top {rank} (column: '{col_name}'):")
+                        if unclassified:
+                            lines.append(f"    Unclassified: {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
+                        for e in col_data.get('entries', []):
+                            lines.append(f"    {e['label']}: {e['count']:,} ({e['pct']}%)")
+
+                if score_cols:
+                    lines.append("\nPrediction confidence scores:")
+                    for col_name, col_data in sorted(score_cols.items(), key=lambda x: x[1].get('rank', 1)):
+                        ref_col = col_data.get('reference_column', col_name)
+                        rank = col_data.get('rank', 1)
+                        unclassified = col_data.get('unclassified', 0)
+                        lines.append(f"  {ref_col} top {rank} score (column: '{col_name}'):")
                         if unclassified:
                             lines.append(f"    Unclassified: {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
                         for e in col_data.get('entries', []):
