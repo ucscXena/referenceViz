@@ -68,7 +68,10 @@ TOOLS = [
             '(e.g. doublet scores, mitochondrial fraction) and apply appropriate filters '
             'before comparing — QC filtering can substantially change results. '
             'Categorical QC columns must be filtered with op="eq" or op="ne" using their '
-            'exact string label values (not numeric thresholds).'
+            'exact string label values (not numeric thresholds). '
+            'IMPORTANT: when this tool succeeds a dot plot is automatically rendered for '
+            'the user — do not say you are about to show a chart or include a duplicate '
+            'table. Describe the statistical findings only.'
         ),
         'input_schema': {
             'type': 'object',
@@ -101,6 +104,13 @@ TOOLS = [
                 'reference': {
                     'type': 'string',
                     'description': 'Reference atlas name, only needed when the job has multiple projections.',
+                },
+                'transpose': {
+                    'type': 'boolean',
+                    'description': (
+                        'Flip the dot plot axes. By default the longer dimension is placed on '
+                        'the Y axis. Set true if the user asks to flip or transpose the chart.'
+                    ),
                 },
             },
             'required': ['col_a', 'col_b'],
@@ -137,6 +147,13 @@ def _dispatch_tool(name, tool_input, job):
 
         try:
             result = compare_columns_stat(s3_uri, col_a, col_b, filters)
+            dp = result.get('dot_plot')
+            if dp and tool_input.get('transpose', False):
+                # Transpose: swap rows/cols and flip the matrix
+                old_m, nr, nc = dp['matrix'], len(dp['rows']), len(dp['cols'])
+                dp['rows'], dp['cols'] = dp['cols'], dp['rows']
+                dp['matrix'] = [[old_m[i][j] for i in range(nr)] for j in range(nc)]
+                dp['row_totals'] = [sum(old_m[i][j] for i in range(nr)) for j in range(nc)]
             logger.debug(
                 'Tool result: compare_columns  col_a=%r col_b=%r filters=%s  '
                 'n_total=%s n_after_filter=%s n_compared=%s cramers_v=%s strength=%s',
@@ -409,6 +426,7 @@ def chat(request, pk):
     try:
         thread = list(messages)
         response = None
+        charts = []
         for _ in range(5):  # allow up to 5 tool-call rounds
             response = client.messages.create(
                 model='claude-haiku-4-5-20251001',
@@ -425,6 +443,13 @@ def chat(request, pk):
                 if block.type == 'tool_use':
                     result = _dispatch_tool(block.name, block.input, job)
                     is_error = 'error' in result
+                    if not is_error and 'dot_plot' in result:
+                        charts.append({
+                            'type': 'dot_plot',
+                            'col_a': result['col_a'],
+                            'col_b': result['col_b'],
+                            'data': result['dot_plot'],
+                        })
                     tool_results.append({
                         'type': 'tool_result',
                         'tool_use_id': block.id,
@@ -436,7 +461,10 @@ def chat(request, pk):
             thread.append({'role': 'user', 'content': tool_results})
 
         text = next((b.text for b in response.content if hasattr(b, 'text')), '')
-        return JsonResponse({'content': text})
+        resp = {'content': text}
+        if charts:
+            resp['charts'] = charts
+        return JsonResponse(resp)
 
     except anthropic.APIError as e:
         return JsonResponse({'error': str(e)}, status=502)

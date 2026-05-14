@@ -245,6 +245,9 @@ def compare_columns_stat(s3_uri, col_a, col_b, filters=None):
         })
     top_pairings.sort(key=lambda x: -x['total_a'])
 
+    active_a = [a_labels[i] for i in np.where(row_mask)[0]]
+    active_b = [b_labels[j] for j in np.where(col_mask)[0]]
+
     return {
         'n_total': n_total,
         'n_after_filter': n_filtered,
@@ -257,6 +260,12 @@ def compare_columns_stat(s3_uri, col_a, col_b, filters=None):
         'cramers_v': round(cramers_v, 3),
         'association_strength': strength,
         'top_pairings': top_pairings[:12],
+        'dot_plot': {
+            'rows': active_a,
+            'cols': active_b,
+            'matrix': trimmed.tolist(),
+            'row_totals': trimmed.sum(axis=1).tolist(),
+        },
     }
 
 
