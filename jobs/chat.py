@@ -405,6 +405,11 @@ def _build_system_prompt(job, chunks=None):
         "When discussing cell types, always be explicit about whether you are referring "
         "to pipeline predictions (from the mapping above) or any cell type labels the "
         "user may have supplied in their own data file.",
+        "Use the compare_columns tool whenever the user asks about relationships between "
+        "columns, or when a comparison would illuminate their question — even if they "
+        "didn't explicitly request statistics. All columns, including any QC metrics, "
+        "are stored as categories; compare_columns is the right tool for any pairwise "
+        "analysis. Filters can be applied to restrict the analysis to a subset of cells.",
     ]
 
     return "\n".join(lines)
