@@ -17,7 +17,11 @@ def _distribution(col, total):
     labels = combined.dictionary.to_pylist()
     indices = combined.indices.to_numpy(zero_copy_only=False)
 
-    classified_mask = indices >= 0   # NaN and negatives = unclassified
+    # Treat null indices (NaN/negative) and empty-string label as unclassified
+    empty_idx = labels.index('') if '' in labels else None
+    classified_mask = indices >= 0
+    if empty_idx is not None:
+        classified_mask = classified_mask & (indices != empty_idx)
     unclassified = int((~classified_mask).sum())
     valid = indices[classified_mask].astype(np.intp)
     counts = np.bincount(valid, minlength=len(labels))
@@ -156,25 +160,48 @@ def _apply_filters(table, filters):
     mask = None
     for f in filters:
         col = table.column(f['column'])
-        op, val = f['op'], f['value']
+        op = f['op']
         combined = col.combine_chunks()
-        if pyarrow.types.is_dictionary(combined.type):
+
+        if op in ('is_null', 'is_not_null'):
+            if pyarrow.types.is_dictionary(combined.type):
+                labels = combined.dictionary.to_pylist()
+                raw = combined.indices.to_numpy(zero_copy_only=False)
+                unclassified_mask = raw < 0
+                if '' in labels:
+                    unclassified_mask = unclassified_mask | (raw == labels.index(''))
+                bool_arr = unclassified_mask if op == 'is_null' else ~unclassified_mask
+                cond = pyarrow.array(bool_arr.tolist(), type=pyarrow.bool_())
+            else:
+                cond = pc.is_null(col) if op == 'is_null' else pc.is_valid(col)
+        elif pyarrow.types.is_dictionary(combined.type):
             labels = combined.dictionary.to_pylist()
             if op not in ('eq', 'ne'):
                 raise ValueError(
                     f"Column '{f['column']}' is categorical with labels {labels}. "
-                    f"Use op='eq' or op='ne' with one of those string values."
+                    f"Use op='eq' or op='ne' with one of those string values, "
+                    f"or op='is_null'/'is_not_null' to filter unclassified cells."
                 )
-            if val not in labels:
+            val = f['value']
+            raw = combined.indices.to_numpy(zero_copy_only=False)
+            # Accept 'Unclassified' as a synonym for is_null/is_not_null
+            if val == 'Unclassified' and val not in labels:
+                unclassified_mask = raw < 0
+                if '' in labels:
+                    unclassified_mask = unclassified_mask | (raw == labels.index(''))
+                bool_arr = unclassified_mask if op == 'eq' else ~unclassified_mask
+            elif val not in labels:
                 raise ValueError(
                     f"Value {val!r} not in column '{f['column']}'. "
-                    f"Available values: {labels}"
+                    f"Available values: {labels}. "
+                    f"To filter for unclassified cells use op='is_null' (no value needed)."
                 )
-            raw = combined.indices.to_numpy(zero_copy_only=False)
-            idx = labels.index(val)
-            bool_arr = (raw == idx) if op == 'eq' else (raw != idx)
+            else:
+                idx = labels.index(val)
+                bool_arr = (raw == idx) if op == 'eq' else (raw != idx)
             cond = pyarrow.array(bool_arr.tolist(), type=pyarrow.bool_())
         else:
+            val = f['value']
             op_fn = _FILTER_NUM_OPS.get(op)
             if op_fn is None:
                 raise ValueError(f"Unknown operator {op!r}")
@@ -208,15 +235,21 @@ def compare_columns_stat(s3_uri, col_a, col_b, filters=None):
     n_filtered = table.num_rows
 
     def to_label_indices(col):
+        """Return (labels, indices) with 'Unclassified' appended as the last label.
+        Null/negative indices are remapped to that last position."""
         combined = col.combine_chunks()
         if pyarrow.types.is_dictionary(combined.type):
-            labels = combined.dictionary.to_pylist()
-            indices = combined.indices.to_numpy(zero_copy_only=False)
-            return labels, indices
+            base_labels = combined.dictionary.to_pylist()
+            indices = combined.indices.to_numpy(zero_copy_only=False).copy()
+            unclassified_idx = len(base_labels)
+            indices[indices < 0] = unclassified_idx
+            if '' in base_labels:
+                indices[indices == base_labels.index('')] = unclassified_idx
+            return base_labels + ['Unclassified'], indices.astype(np.intp)
         elif pyarrow.types.is_boolean(combined.type):
             arr = combined.to_pylist()
-            indices = np.array([1 if v is True else 0 if v is False else -1 for v in arr])
-            return ['False', 'True'], indices
+            indices = np.array([1 if v is True else 0 if v is False else 2 for v in arr], dtype=np.intp)
+            return ['False', 'True', 'Unclassified'], indices
         else:
             raise ValueError(
                 f"Column has type {combined.type}; only categorical and boolean columns are supported"
@@ -225,16 +258,12 @@ def compare_columns_stat(s3_uri, col_a, col_b, filters=None):
     a_labels, a_idx = to_label_indices(table.column(col_a))
     b_labels, b_idx = to_label_indices(table.column(col_b))
 
-    valid = (a_idx >= 0) & (b_idx >= 0)
-    a_valid = a_idx[valid].astype(np.intp)
-    b_valid = b_idx[valid].astype(np.intp)
-    n_compared = int(valid.sum())
-
+    n_compared = len(a_idx)
     if n_compared == 0:
-        return {'error': 'No valid (non-null) cells remain after filtering'}
+        return {'error': 'No cells remain after filtering'}
 
     contingency = np.zeros((len(a_labels), len(b_labels)), dtype=np.int64)
-    np.add.at(contingency, (a_valid, b_valid), 1)
+    np.add.at(contingency, (a_idx, b_idx), 1)
 
     # chi2_contingency requires no all-zero rows/cols
     row_mask = contingency.sum(axis=1) > 0

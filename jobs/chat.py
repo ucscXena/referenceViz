@@ -93,12 +93,16 @@ TOOLS = [
                             'column': {'type': 'string'},
                             'op': {
                                 'type': 'string',
-                                'enum': ['lt', 'le', 'gt', 'ge', 'eq', 'ne'],
-                                'description': 'lt=<  le=<=  gt=>  ge=>=  eq===  ne=!=',
+                                'enum': ['lt', 'le', 'gt', 'ge', 'eq', 'ne', 'is_null', 'is_not_null'],
+                                'description': (
+                                    'lt=<  le=<=  gt=>  ge=>=  eq===  ne=!=  '
+                                    'is_null=unclassified/missing  is_not_null=classified only. '
+                                    'is_null and is_not_null do not require a value.'
+                                ),
                             },
-                            'value': {'description': 'Number or boolean to compare against'},
+                            'value': {'description': 'Number or string to compare against (omit for is_null/is_not_null)'},
                         },
-                        'required': ['column', 'op', 'value'],
+                        'required': ['column', 'op'],
                     },
                 },
                 'reference': {
@@ -325,7 +329,7 @@ def _build_system_prompt(job, chunks=None):
                         unclassified = col_data.get('unclassified', 0)
                         lines.append(f"  Predicted {ref_col} top {rank} (column: '{col_name}'):")
                         if unclassified:
-                            lines.append(f"    Unclassified: {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
+                            lines.append(f"    (no prediction): {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
                         for e in col_data.get('entries', []):
                             lines.append(f"    {e['label']}: {e['count']:,} ({e['pct']}%)")
 
@@ -337,7 +341,7 @@ def _build_system_prompt(job, chunks=None):
                         unclassified = col_data.get('unclassified', 0)
                         lines.append(f"  {ref_col} top {rank} score (column: '{col_name}'):")
                         if unclassified:
-                            lines.append(f"    Unclassified: {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
+                            lines.append(f"    (no prediction): {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
                         for e in col_data.get('entries', []):
                             lines.append(f"    {e['label']}: {e['count']:,} ({e['pct']}%)")
 
@@ -347,7 +351,7 @@ def _build_system_prompt(job, chunks=None):
                         unclassified = col_data.get('unclassified', 0)
                         lines.append(f"  '{col_name}':")
                         if unclassified:
-                            lines.append(f"    Unclassified: {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
+                            lines.append(f"    (no prediction): {unclassified:,} ({round(100 * unclassified / total_cells, 1)}%)")
                         for e in col_data.get('entries', []):
                             lines.append(f"    {e['label']}: {e['count']:,} ({e['pct']}%)")
 
@@ -384,7 +388,7 @@ def _build_system_prompt(job, chunks=None):
                     unclassified = entries.get('unclassified', 0) if isinstance(entries, dict) else 0
                     lines.append(f"  {col_name}:")
                     if unclassified:
-                        lines.append(f"    Unclassified: {unclassified:,}")
+                        lines.append(f"    (no prediction): {unclassified:,}")
                     for e in entry_list:
                         lines.append(f"    {e['label']}: {e['count']:,} ({e['pct']}%)")
 
