@@ -142,6 +142,59 @@ def summarize_arrow_bytes(body):
     return {'total_cells': total, 'columns': columns}
 
 
+_FILTER_NUM_OPS = {
+    'lt': pc.less, 'le': pc.less_equal,
+    'gt': pc.greater, 'ge': pc.greater_equal,
+    'eq': pc.equal, 'ne': pc.not_equal,
+}
+
+
+def _apply_filters(table, filters):
+    """Apply a list of {column, op, value} filter dicts to a PyArrow table."""
+    if not filters:
+        return table
+    mask = None
+    for f in filters:
+        col = table.column(f['column'])
+        op, val = f['op'], f['value']
+        combined = col.combine_chunks()
+        if pyarrow.types.is_dictionary(combined.type):
+            labels = combined.dictionary.to_pylist()
+            if op not in ('eq', 'ne'):
+                raise ValueError(
+                    f"Column '{f['column']}' is categorical with labels {labels}. "
+                    f"Use op='eq' or op='ne' with one of those string values."
+                )
+            if val not in labels:
+                raise ValueError(
+                    f"Value {val!r} not in column '{f['column']}'. "
+                    f"Available values: {labels}"
+                )
+            raw = combined.indices.to_numpy(zero_copy_only=False)
+            idx = labels.index(val)
+            bool_arr = (raw == idx) if op == 'eq' else (raw != idx)
+            cond = pyarrow.array(bool_arr.tolist(), type=pyarrow.bool_())
+        else:
+            op_fn = _FILTER_NUM_OPS.get(op)
+            if op_fn is None:
+                raise ValueError(f"Unknown operator {op!r}")
+            cond = op_fn(col, val)
+        mask = cond if mask is None else pc.and_(mask, cond)
+    return table.filter(mask)
+
+
+def _download_bytes(s3_uri):
+    bucket, key = s3_uri.removeprefix('s3://').split('/', 1)
+    return boto_client('s3').get_object(Bucket=bucket, Key=key)['Body'].read()
+
+
+def _load_arrow(s3_uri):
+    body = _download_bytes(s3_uri)
+    table = pa_ipc.open_file(io.BytesIO(body)).read_all()
+    del body
+    return table
+
+
 def compare_columns_stat(s3_uri, col_a, col_b, filters=None):
     """
     Download Arrow file, apply optional QC filters, and compute chi-squared + Cramér's V
@@ -149,51 +202,9 @@ def compare_columns_stat(s3_uri, col_a, col_b, filters=None):
     """
     from scipy.stats import chi2_contingency
 
-    bucket, key = s3_uri.removeprefix('s3://').split('/', 1)
-    body = boto_client('s3').get_object(Bucket=bucket, Key=key)['Body'].read()
-    table = pa_ipc.open_file(io.BytesIO(body)).read_all()
-    del body
-
+    table = _load_arrow(s3_uri)
     n_total = table.num_rows
-
-    if filters:
-        _num_ops = {
-            'lt': pc.less, 'le': pc.less_equal,
-            'gt': pc.greater, 'ge': pc.greater_equal,
-            'eq': pc.equal, 'ne': pc.not_equal,
-        }
-        mask = None
-        for f in filters:
-            col = table.column(f['column'])
-            op = f['op']
-            val = f['value']
-            combined = col.combine_chunks()
-            if pyarrow.types.is_dictionary(combined.type):
-                # Dictionary columns have string bin labels — only eq/ne make sense.
-                # Numeric comparisons (lt, gt, …) are not supported.
-                labels = combined.dictionary.to_pylist()
-                if op not in ('eq', 'ne'):
-                    raise ValueError(
-                        f"Column '{f['column']}' is categorical with bin labels {labels}. "
-                        f"Use op='eq' or op='ne' with one of those string values."
-                    )
-                if val not in labels:
-                    raise ValueError(
-                        f"Value {val!r} not in column '{f['column']}'. "
-                        f"Available values: {labels}"
-                    )
-                idx = labels.index(val)
-                raw = combined.indices.to_numpy(zero_copy_only=False)
-                bool_arr = (raw == idx) if op == 'eq' else (raw != idx)
-                cond = pyarrow.array(bool_arr.tolist(), type=pyarrow.bool_())
-            else:
-                op_fn = _num_ops.get(op)
-                if op_fn is None:
-                    raise ValueError(f"Unknown operator {op!r}")
-                cond = op_fn(col, val)
-            mask = cond if mask is None else pc.and_(mask, cond)
-        table = table.filter(mask)
-
+    table = _apply_filters(table, filters)
     n_filtered = table.num_rows
 
     def to_label_indices(col):
@@ -288,6 +299,4 @@ def compare_columns_stat(s3_uri, col_a, col_b, filters=None):
 
 def compute_projection_summary(s3_uri):
     """Download the projection Arrow file from S3 and compute cell type distributions."""
-    bucket, key = s3_uri.removeprefix('s3://').split('/', 1)
-    body = boto_client('s3').get_object(Bucket=bucket, Key=key)['Body'].read()
-    return summarize_arrow_bytes(body)
+    return summarize_arrow_bytes(_download_bytes(s3_uri))

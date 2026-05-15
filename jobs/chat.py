@@ -115,7 +115,7 @@ TOOLS = [
             },
             'required': ['col_a', 'col_b'],
         },
-    }
+    },
 ]
 
 
