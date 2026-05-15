@@ -153,10 +153,10 @@ _FILTER_NUM_OPS = {
 }
 
 
-def _apply_filters(table, filters):
-    """Apply a list of {column, op, value} filter dicts to a PyArrow table."""
+def _compute_filter_mask(table, filters):
+    """Return a combined boolean PyArrow mask for all filters, or None if no filters."""
     if not filters:
-        return table
+        return None
     mask = None
     for f in filters:
         col = table.column(f['column'])
@@ -207,7 +207,13 @@ def _apply_filters(table, filters):
                 raise ValueError(f"Unknown operator {op!r}")
             cond = op_fn(col, val)
         mask = cond if mask is None else pc.and_(mask, cond)
-    return table.filter(mask)
+    return mask
+
+
+def _apply_filters(table, filters):
+    """Apply a list of {column, op, value} filter dicts to a PyArrow table."""
+    mask = _compute_filter_mask(table, filters)
+    return table.filter(mask) if mask is not None else table
 
 
 def _download_bytes(s3_uri):
@@ -222,17 +228,24 @@ def _load_arrow(s3_uri):
     return table
 
 
-def compare_columns_stat(s3_uri, col_a, col_b, filters=None):
+def compare_columns_stat(s3_uri, col_a, col_b, filters=None, s3_uri_b=None):
     """
-    Download Arrow file, apply optional QC filters, and compute chi-squared + Cramér's V
-    for two categorical (dictionary or boolean) columns.
+    Download Arrow file(s), apply optional filters, and compute chi-squared + Cramér's V
+    for two categorical columns. When s3_uri_b is provided, col_b is taken from that
+    file instead (cross-reference comparison); cells are aligned by row position.
+    Filters are computed from col_a's file and the same row mask applied to both.
     """
     from scipy.stats import chi2_contingency
 
-    table = _load_arrow(s3_uri)
-    n_total = table.num_rows
-    table = _apply_filters(table, filters)
-    n_filtered = table.num_rows
+    table_a = _load_arrow(s3_uri)
+    n_total = table_a.num_rows
+    table_b = _load_arrow(s3_uri_b) if s3_uri_b else table_a
+
+    mask = _compute_filter_mask(table_a, filters)
+    if mask is not None:
+        table_a = table_a.filter(mask)
+        table_b = table_b.filter(mask)
+    n_filtered = table_a.num_rows
 
     def to_label_indices(col):
         """Return (labels, indices) with 'Unclassified' appended as the last label.
@@ -255,8 +268,8 @@ def compare_columns_stat(s3_uri, col_a, col_b, filters=None):
                 f"Column has type {combined.type}; only categorical and boolean columns are supported"
             )
 
-    a_labels, a_idx = to_label_indices(table.column(col_a))
-    b_labels, b_idx = to_label_indices(table.column(col_b))
+    a_labels, a_idx = to_label_indices(table_a.column(col_a))
+    b_labels, b_idx = to_label_indices(table_b.column(col_b))
 
     n_compared = len(a_idx)
     if n_compared == 0:

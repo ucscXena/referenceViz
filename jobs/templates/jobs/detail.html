@@ -450,10 +450,16 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     addBubble('user', text);
     const thinking = addThinkingBubble();
 
+    const apiMessages = messages.map(m => ({
+      role: m.role,
+      content: m.charts?.length
+        ? m.charts.map(c => `[Dot plot rendered: ${c.col_a} (Y axis) vs ${c.col_b} (X axis)]`).join(' ') + '\n' + m.content
+        : m.content,
+    }));
     fetch(CHAT_URL, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
-      body: JSON.stringify({messages}),
+      body: JSON.stringify({messages: apiMessages}),
     })
       .then(r => r.json())
       .then(data => {
@@ -473,15 +479,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
           }
           html += marked.parse(data.content);
           thinking.innerHTML = html;
-          // Inject chart notes into stored message so the model knows what was rendered
-          let storedContent = data.content;
-          if (charts.length > 0) {
-            const notes = charts.map(c =>
-              `[Dot plot rendered: ${c.col_a} (Y axis) vs ${c.col_b} (X axis)]`
-            ).join(' ');
-            storedContent = notes + '\n' + storedContent;
-          }
-          messages.push({role: 'assistant', content: storedContent});
+          messages.push({role: 'assistant', content: data.content, charts});
           sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
         }
       })
@@ -526,7 +524,15 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
           addBubble('user', msg.content);
         } else if (msg.role === 'assistant') {
           const div = addBubble('assistant', '');
-          div.innerHTML = marked.parse(msg.content);
+          let html = '';
+          if (msg.charts && msg.charts.length > 0) {
+            html += renderDotPlot(msg.charts[0]);
+            if (msg.charts.length > 1) {
+              html += `<p class="chart-more-note">${msg.charts.length - 1} more comparison${msg.charts.length > 2 ? 's' : ''} computed — ask to see a specific one.</p>`;
+            }
+          }
+          html += marked.parse(msg.content);
+          div.innerHTML = html;
         }
       });
       messages.push(...prior);

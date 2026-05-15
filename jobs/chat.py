@@ -105,9 +105,18 @@ TOOLS = [
                         'required': ['column', 'op'],
                     },
                 },
-                'reference': {
+                'reference_a': {
                     'type': 'string',
-                    'description': 'Reference atlas name, only needed when the job has multiple projections.',
+                    'description': 'Reference atlas name for col_a. Only needed when the job has multiple projections.',
+                },
+                'reference_b': {
+                    'type': 'string',
+                    'description': (
+                        'Reference atlas name for col_b. Set this (and reference_a) to compare '
+                        'predictions across two different reference atlases — e.g. top1 prediction '
+                        'from reference A vs top1 prediction from reference B. '
+                        'Omit when both columns are from the same projection.'
+                    ),
                 },
                 'transpose': {
                     'type': 'boolean',
@@ -130,7 +139,8 @@ def _dispatch_tool(name, tool_input, job):
         col_a = tool_input['col_a']
         col_b = tool_input['col_b']
         filters = tool_input.get('filters') or []
-        reference = tool_input.get('reference')
+        reference_a = tool_input.get('reference_a')
+        reference_b = tool_input.get('reference_b')
 
         projections = list(
             job.projections.filter(status='complete').select_related('reference').all()
@@ -138,19 +148,27 @@ def _dispatch_tool(name, tool_input, job):
         if not projections:
             return {'error': 'No complete projections available'}
 
-        if reference:
-            proj = next((p for p in projections if p.reference.name == reference), None)
-            if proj is None:
-                return {'error': f'Reference {reference!r} not found. Available: {[p.reference.name for p in projections]}'}
-        else:
-            proj = projections[0]
-
-        s3_uri = (proj.result or {}).get('s3_uri')
-        if not s3_uri:
-            return {'error': 'Projection result file not available'}
+        def _find_proj(ref_name):
+            if ref_name:
+                p = next((p for p in projections if p.reference.name == ref_name), None)
+                if p is None:
+                    raise ValueError(f'Reference {ref_name!r} not found. Available: {[p.reference.name for p in projections]}')
+                return p
+            return projections[0]
 
         try:
-            result = compare_columns_stat(s3_uri, col_a, col_b, filters)
+            proj_a = _find_proj(reference_a)
+            proj_b = _find_proj(reference_b) if reference_b else proj_a
+        except ValueError as e:
+            return {'error': str(e)}
+
+        s3_uri = (proj_a.result or {}).get('s3_uri')
+        if not s3_uri:
+            return {'error': 'Projection result file not available'}
+        s3_uri_b = (proj_b.result or {}).get('s3_uri') if proj_b is not proj_a else None
+
+        try:
+            result = compare_columns_stat(s3_uri, col_a, col_b, filters, s3_uri_b=s3_uri_b)
             dp = result.get('dot_plot')
             if dp and tool_input.get('transpose', False):
                 # Transpose: swap rows/cols and flip the matrix
@@ -159,9 +177,9 @@ def _dispatch_tool(name, tool_input, job):
                 dp['matrix'] = [[old_m[i][j] for i in range(nr)] for j in range(nc)]
                 dp['row_totals'] = [sum(old_m[i][j] for i in range(nr)) for j in range(nc)]
             logger.debug(
-                'Tool result: compare_columns  col_a=%r col_b=%r filters=%s  '
+                'Tool result: compare_columns  col_a=%r col_b=%r ref_a=%r ref_b=%r filters=%s  '
                 'n_total=%s n_after_filter=%s n_compared=%s cramers_v=%s strength=%s',
-                col_a, col_b, filters,
+                col_a, col_b, proj_a.reference.name, proj_b.reference.name, filters,
                 result.get('n_total'), result.get('n_after_filter'), result.get('n_compared'),
                 result.get('cramers_v'), result.get('association_strength'),
             )
