@@ -20,6 +20,8 @@ import io
 logger = logging.getLogger(__name__)
 
 MAX_CELLS_PER_GROUP = 50_000
+MIN_CELLS_DE_HARD = 10   # below this, refuse to run
+MIN_CELLS_DE_SOFT = 50   # below this, include a warning
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +167,16 @@ def differential_expression(h5ad_path: Path, arrow_path: Path,
         return {'error': 'No cells match group_a predicate'}
     if n_b == 0:
         return {'error': 'No cells match group_b predicate'}
+    if n_a < MIN_CELLS_DE_HARD:
+        return {'error': f'Group A has only {n_a} cells; DE requires at least {MIN_CELLS_DE_HARD}'}
+    if n_b < MIN_CELLS_DE_HARD:
+        return {'error': f'Group B has only {n_b} cells; DE requires at least {MIN_CELLS_DE_HARD}'}
+
+    warnings = []
+    if n_a < MIN_CELLS_DE_SOFT:
+        warnings.append(f'Group A has only {n_a} cells; results are exploratory')
+    if n_b < MIN_CELLS_DE_SOFT:
+        warnings.append(f'Group B has only {n_b} cells; results are exploratory')
 
     adata = anndata.read_h5ad(h5ad_path, backed='r')
     X_a = _load_subset_expression(adata, mask_a)
@@ -211,7 +223,7 @@ def differential_expression(h5ad_path: Path, arrow_path: Path,
             if score_a[i] > 0 or score_b[i] > 0
         ]
 
-    return {
+    result = {
         'n_cells_a': n_a,
         'n_sampled_a': X_a.shape[0],
         'n_cells_b': n_b,
@@ -219,3 +231,6 @@ def differential_expression(h5ad_path: Path, arrow_path: Path,
         'genes_up_in_a': _gene_list(order_a),
         'genes_up_in_b': _gene_list(order_b),
     }
+    if warnings:
+        result['warnings'] = warnings
+    return result

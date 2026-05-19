@@ -198,7 +198,10 @@ TOOLS = [
             'Identify genes differentially expressed between two subsets of the user\'s cells '
             'using a Wilcoxon rank-sum test. Use this when asked to compare gene expression '
             'between cell types, clusters, conditions, or any other grouping. '
-            'Each group is defined by a predicate over the user\'s columns.'
+            'Each group is defined by a predicate over the user\'s columns. '
+            'The response includes n_cells_a and n_cells_b so you can report group sizes. '
+            'If a "warnings" field is present, include it prominently in your answer. '
+            'Groups with fewer than 10 cells return an error; 10–49 cells return a warning.'
         ),
         'input_schema': {
             'type': 'object',
