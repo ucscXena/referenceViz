@@ -1,0 +1,20 @@
+#!/bin/bash
+set -o nounset
+set -o errexit
+set -o xtrace
+
+HOST_ALIAS="becompute"
+HOST=$(ssh -G "$HOST_ALIAS" | grep -oP '(?<=^hostname ).*')
+USER=ubuntu
+DEPLOY_DIR=/opt/gene-expression-service
+RSYNC_OPTS=(-a --delete --exclude='.*.sw[opx]' --exclude='env/' --exclude='__pycache__/' -e "ssh -o StrictHostKeyChecking=no")
+
+rsync "${RSYNC_OPTS[@]}" ./ ${USER}@${HOST}:${DEPLOY_DIR}
+
+ssh -l${USER} ${HOST} <<-ENDSSH
+    set -o errexit
+    set -o xtrace
+    cd ${DEPLOY_DIR}
+    env/bin/pip install --no-cache-dir -r requirements.txt
+    sudo systemctl restart gene-expression
+ENDSSH

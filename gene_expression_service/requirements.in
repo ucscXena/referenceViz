@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+anndata
+scanpy
+boto3
+numpy
+scipy
+pyarrow
+pip-tools

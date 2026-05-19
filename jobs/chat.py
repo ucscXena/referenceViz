@@ -56,6 +56,44 @@ def _load_metadata():
     return _metadata_cache
 
 
+_FILTER_ITEM_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'column': {'type': 'string'},
+        'op': {
+            'type': 'string',
+            'enum': ['lt', 'le', 'gt', 'ge', 'eq', 'ne', 'is_null', 'is_not_null'],
+            'description': (
+                'lt=<  le=<=  gt=>  ge=>=  eq===  ne=!=  '
+                'is_null=unclassified/missing  is_not_null=classified only. '
+                'is_null and is_not_null do not require a value.'
+            ),
+        },
+        'value': {'description': 'Number or string to compare against (omit for is_null/is_not_null)'},
+    },
+    'required': ['column', 'op'],
+}
+
+# A predicate is a list of AND-groups that are OR'd together.
+# [[A, B], [C]] means (A AND B) OR C.  A flat list [A, B] means A AND B.
+_PREDICATE_SCHEMA = {
+    'type': 'array',
+    'description': (
+        'Cell subset predicate in disjunctive normal form: a list of condition groups '
+        'that are OR\'d together. Each group is a list of conditions that are AND\'d. '
+        'Example: [[{"column":"top1","op":"eq","value":"type X"},{"column":"quality","op":"eq","value":"high"}],'
+        '[{"column":"top1","op":"eq","value":"type Y"}]] selects cells that are '
+        '(type X AND high quality) OR type Y. '
+        'For a simple AND-only filter use a single group: [[cond1, cond2]]. '
+        'Column names and categorical values must match those listed in the system prompt exactly.'
+    ),
+    'items': {
+        'type': 'array',
+        'items': _FILTER_ITEM_SCHEMA,
+    },
+}
+
+
 TOOLS = [
     {
         'name': 'compare_columns',
@@ -129,6 +167,56 @@ TOOLS = [
             'required': ['col_a', 'col_b'],
         },
     },
+    {
+        'name': 'top_expressed_genes',
+        'description': (
+            'Return the most highly expressed genes in a subset of the user\'s cells. '
+            'Use this when asked what genes are expressed in a cell type, cluster, or any '
+            'other subset. The subset is defined by a predicate over the user\'s columns '
+            '(both original annotations and pipeline predictions). '
+            'Expression values are log1p-normalized counts per 10k (log1p CPM).'
+        ),
+        'input_schema': {
+            'type': 'object',
+            'properties': {
+                'subset': _PREDICATE_SCHEMA,
+                'n_genes': {
+                    'type': 'integer',
+                    'description': 'Number of top genes to return (default 20).',
+                },
+                'reference': {
+                    'type': 'string',
+                    'description': 'Reference atlas name, only needed when the job has multiple projections.',
+                },
+            },
+            'required': ['subset'],
+        },
+    },
+    {
+        'name': 'differential_expression',
+        'description': (
+            'Identify genes differentially expressed between two subsets of the user\'s cells '
+            'using a Wilcoxon rank-sum test. Use this when asked to compare gene expression '
+            'between cell types, clusters, conditions, or any other grouping. '
+            'Each group is defined by a predicate over the user\'s columns.'
+        ),
+        'input_schema': {
+            'type': 'object',
+            'properties': {
+                'group_a': _PREDICATE_SCHEMA,
+                'group_b': _PREDICATE_SCHEMA,
+                'n_genes': {
+                    'type': 'integer',
+                    'description': 'Number of top DE genes to return per group (default 20).',
+                },
+                'reference': {
+                    'type': 'string',
+                    'description': 'Reference atlas name, only needed when the job has multiple projections.',
+                },
+            },
+            'required': ['group_a', 'group_b'],
+        },
+    },
 ]
 
 
@@ -188,8 +276,83 @@ def _dispatch_tool(name, tool_input, job):
             logger.exception('compare_columns_stat failed for projection %s', proj.pk)
             return {'error': str(e)}
 
+    if name in ('top_expressed_genes', 'differential_expression'):
+        return _dispatch_gene_expression(name, tool_input, job)
+
     logger.warning('Unknown tool called: %r', name)
     return {'error': f'Unknown tool: {name!r}'}
+
+
+def _gene_expression_uris(job, reference_name):
+    """Return (h5ad_uri, arrow_uri) for a job, or raise ValueError."""
+    bucket = settings.AWS_S3_BUCKET
+    if not bucket or not job.s3_input_key:
+        raise ValueError('Input file URI not available for this job')
+    h5ad_uri = f's3://{bucket}/{job.s3_input_key}'
+
+    projections = list(
+        job.projections.filter(status='complete').select_related('reference').all()
+    )
+    if not projections:
+        raise ValueError('No complete projections available')
+    if reference_name:
+        proj = next((p for p in projections if p.reference.name == reference_name), None)
+        if proj is None:
+            raise ValueError(
+                f'Reference {reference_name!r} not found. '
+                f'Available: {[p.reference.name for p in projections]}'
+            )
+    else:
+        proj = projections[0]
+
+    arrow_uri = (proj.result or {}).get('s3_uri')
+    if not arrow_uri:
+        raise ValueError('Projection result file not available')
+    return h5ad_uri, arrow_uri
+
+
+def _dispatch_gene_expression(name, tool_input, job):
+    host = getattr(settings, 'GENE_EXPRESSION_HOST', '')
+    if not host:
+        return {'error': 'Gene expression service not configured'}
+
+    reference = tool_input.get('reference')
+    try:
+        h5ad_uri, arrow_uri = _gene_expression_uris(job, reference)
+    except ValueError as e:
+        return {'error': str(e)}
+
+    n_genes = tool_input.get('n_genes') or 20
+
+    if name == 'top_expressed_genes':
+        endpoint = 'top-expressed'
+        payload = {
+            'h5ad_uri': h5ad_uri,
+            'arrow_uri': arrow_uri,
+            'subset': tool_input['subset'],
+            'n_genes': n_genes,
+        }
+    else:  # differential_expression
+        endpoint = 'differential-expression'
+        payload = {
+            'h5ad_uri': h5ad_uri,
+            'arrow_uri': arrow_uri,
+            'group_a': tool_input['group_a'],
+            'group_b': tool_input['group_b'],
+            'n_genes': n_genes,
+        }
+
+    logger.debug('Gene expression request: %s  payload=%s', endpoint, payload)
+    try:
+        import requests as req_lib
+        resp = req_lib.post(f'{host}/{endpoint}', json=payload, timeout=120)
+        resp.raise_for_status()
+        result = resp.json()
+        logger.debug('Gene expression result: %s  keys=%s', endpoint, list(result.keys()))
+        return result
+    except Exception as e:
+        logger.exception('Gene expression service call failed: %s', endpoint)
+        return {'error': str(e)}
 
 
 def _strip_html(text):

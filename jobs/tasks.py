@@ -129,7 +129,6 @@ def check_job_result(job_id, attempt=0):
             timedelta(minutes=5), check_job_result, str(job_id), attempt + 1
         )
     elif status == 'complete':
-        delete_s3_key(s3_input_key)
         for projection in pending_projections:
             _submit_projection(projection, uce_s3_uri)
 

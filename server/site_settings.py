@@ -50,6 +50,8 @@ PROJ_SECONDS_PER_CELL = 169 / 10000  # per cell
 
 # Chatbot
 ANTHROPIC_API_KEY = ''
+# Gene expression compute service (separate EC2 instance); leave empty to disable the tools
+GENE_EXPRESSION_HOST = ''
 # Where sentence-transformers caches downloaded models.
 # Production: deploy script downloads here as ubuntu, then chmod a+rX so www-data can read.
 # Locally: override in site_settings_private.py if your st-models dir is elsewhere.

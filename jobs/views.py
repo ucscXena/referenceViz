@@ -431,10 +431,8 @@ def uce_callback(request):
                 return JsonResponse({'status': 'ignored'})
             job.status = 'complete'
             job.save()
-            s3_input_key = job.s3_input_key
             pending_projections = list(job.projections.filter(status='pending'))
 
-        delete_s3_key(s3_input_key)
         for projection in pending_projections:
             _submit_projection(projection, uce_s3_uri)
         return JsonResponse({'status': 'ok'})
