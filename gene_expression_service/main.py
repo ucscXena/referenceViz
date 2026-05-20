@@ -13,6 +13,7 @@ Configuration (environment variables):
 
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,12 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 cache = FileCache(os.environ.get('CACHE_DIR', '/tmp/ge_cache'))
+
+# Limit concurrent heavy analysis requests to avoid memory exhaustion.
+# S3 downloads (inside FileCache.get) are not counted — only the
+# CPU/memory-intensive analysis phase.
+MAX_CONCURRENT = int(os.environ.get('MAX_CONCURRENT', '2'))
+_analysis_semaphore = threading.Semaphore(MAX_CONCURRENT)
 
 
 # ---------------------------------------------------------------------------
@@ -70,11 +77,12 @@ class DifferentialExpressionRequest(BaseModel):
 def endpoint_top_expressed(req: TopExpressedRequest):
     h5ad_path = cache.get(req.h5ad_uri)
     arrow_path = cache.get(req.arrow_uri)
-    result = top_expressed_genes(
-        h5ad_path, arrow_path,
-        _predicate_to_dicts(req.subset),
-        req.n_genes,
-    )
+    with _analysis_semaphore:
+        result = top_expressed_genes(
+            h5ad_path, arrow_path,
+            _predicate_to_dicts(req.subset),
+            req.n_genes,
+        )
     if 'error' in result:
         raise HTTPException(status_code=400, detail=result['error'])
     return result
@@ -84,12 +92,13 @@ def endpoint_top_expressed(req: TopExpressedRequest):
 def endpoint_de(req: DifferentialExpressionRequest):
     h5ad_path = cache.get(req.h5ad_uri)
     arrow_path = cache.get(req.arrow_uri)
-    result = differential_expression(
-        h5ad_path, arrow_path,
-        _predicate_to_dicts(req.group_a),
-        _predicate_to_dicts(req.group_b),
-        req.n_genes,
-    )
+    with _analysis_semaphore:
+        result = differential_expression(
+            h5ad_path, arrow_path,
+            _predicate_to_dicts(req.group_a),
+            _predicate_to_dicts(req.group_b),
+            req.n_genes,
+        )
     if 'error' in result:
         raise HTTPException(status_code=400, detail=result['error'])
     return result
