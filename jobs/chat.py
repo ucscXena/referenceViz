@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 
 import anthropic
@@ -36,6 +37,58 @@ def retrieve_chunks(query, k=5):
         .annotate(distance=CosineDistance('embedding', embedding))
         .order_by('distance')[:k]
     )
+
+# ---------------------------------------------------------------------------
+# Marker genes — loaded per reference from jobs/marker_genes/<uuid>.marker_genes.jsonl
+# Cached as {reference_uuid: {(annotation_column, cell_type): [{publication, dataset_id, genes}]}}
+# Publication labels are joined from the reference metadata at load time.
+# ---------------------------------------------------------------------------
+
+_marker_genes_cache = {}
+
+
+def _load_marker_genes(reference_uuid):
+    """
+    Load marker genes for one reference from its JSONL file.
+    Returns {(annotation_column, cell_type): [{publication, dataset_id, genes}, ...]}
+    Publication labels come from the metadata join, not the JSONL file.
+    """
+    if reference_uuid in _marker_genes_cache:
+        return _marker_genes_cache[reference_uuid]
+
+    # Build dataset_id → publication label from reference metadata
+    metadata = _load_metadata()
+    ref_meta = metadata.get(reference_uuid, {})
+    ds_to_pub = {}
+    for pub in ref_meta.get('publication', []):
+        for rd in pub.get('raw_data', []):
+            ds_id = rd.get('dataset_id')
+            if ds_id:
+                ds_to_pub[ds_id] = pub['label']
+
+    data_dir = os.path.join(os.path.dirname(__file__), 'marker_genes')
+    index = {}
+    for suffix in (f'{reference_uuid}.marker_genes.jsonl', f'{reference_uuid}.jsonl'):
+        fpath = os.path.join(data_dir, suffix)
+        if not os.path.exists(fpath):
+            continue
+        with open(fpath) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                key = (rec['annotation_column'], rec['cell_type'])
+                index.setdefault(key, []).append({
+                    'publication': ds_to_pub.get(rec['dataset_id'], rec['dataset_id']),
+                    'dataset_id': rec['dataset_id'],
+                    'genes': rec['genes'],
+                })
+        break  # only load the first matching filename
+
+    _marker_genes_cache[reference_uuid] = index
+    return index
+
 
 _metadata_cache = None
 
@@ -220,6 +273,42 @@ TOOLS = [
             'required': ['group_a', 'group_b'],
         },
     },
+    {
+        'name': 'get_marker_genes',
+        'description': (
+            'Look up the known marker genes for one or more cell types in a reference atlas. '
+            'Use this when the user asks what genes define or characterize a cell type, '
+            'or to compare marker genes across cell types. '
+            'A reference is built from one or more publications; each publication may contain '
+            'one or more datasets. Marker genes are computed per dataset, so the same cell type '
+            'may have a different gene list in each dataset. '
+            'Results include a "publication" field identifying the source publication. '
+            'When results come from multiple publications, summarize genes shared across them '
+            'and note any differences, citing publications by name.'
+        ),
+        'input_schema': {
+            'type': 'object',
+            'properties': {
+                'cell_types': {
+                    'type': 'array',
+                    'items': {'type': 'string'},
+                    'description': 'Cell type names to look up. Use exact names from the system prompt.',
+                },
+                'annotation_column': {
+                    'type': 'string',
+                    'description': (
+                        'Which annotation column to use, e.g. "harmonized_cell_label" or "author_label". '
+                        'Omit to search all columns.'
+                    ),
+                },
+                'reference': {
+                    'type': 'string',
+                    'description': 'Reference atlas name, only needed when the job has multiple projections.',
+                },
+            },
+            'required': ['cell_types'],
+        },
+    },
 ]
 
 
@@ -281,6 +370,53 @@ def _dispatch_tool(name, tool_input, job):
 
     if name in ('top_expressed_genes', 'differential_expression'):
         return _dispatch_gene_expression(name, tool_input, job)
+
+    if name == 'get_marker_genes':
+        cell_types = tool_input['cell_types']
+        want_col = tool_input.get('annotation_column')
+        ref_name = tool_input.get('reference')
+
+        projections = list(
+            job.projections.filter(status='complete').select_related('reference').all()
+        )
+        if not projections:
+            return {'error': 'No complete projections available'}
+        if ref_name:
+            proj = next((p for p in projections if p.reference.name == ref_name), None)
+            if proj is None:
+                return {'error': f'Reference {ref_name!r} not found. '
+                        f'Available: {[p.reference.name for p in projections]}'}
+        else:
+            proj = projections[0]
+
+        reference_uuid = str(proj.reference_id)
+        index = _load_marker_genes(reference_uuid)
+
+        results = {}
+        for ct in cell_types:
+            matches = []
+            for (col, key_ct), entries in index.items():
+                if key_ct != ct:
+                    continue
+                if want_col and col != want_col:
+                    continue
+                for entry in entries:
+                    matches.append({
+                        'annotation_column': col,
+                        'publication': entry['publication'],
+                        'genes': entry['genes'],
+                    })
+            results[ct] = matches if matches else None
+
+        not_found = [ct for ct, v in results.items() if v is None]
+        if not_found:
+            available = sorted({ct for (_, ct) in index})
+            return {
+                'results': results,
+                'not_found': not_found,
+                'available_cell_types': available,
+            }
+        return {'results': results}
 
     logger.warning('Unknown tool called: %r', name)
     return {'error': f'Unknown tool: {name!r}'}
@@ -449,6 +585,15 @@ def _build_system_prompt(job, chunks=None):
 
         if meta.get('abstract'):
             lines.append(f"\n{_strip_html(meta['abstract'])[:1500]}")
+
+        if meta.get('publication'):
+            lines.append('\nPublications in this reference (DE and marker gene results are identified by dataset_id):')
+            for pub in meta['publication']:
+                for rd in pub.get('raw_data', []):
+                    ds_id = rd.get('dataset_id', '')
+                    cells = rd.get('cell_count')
+                    cell_str = f' — {cells:,} cells' if cells else ''
+                    lines.append(f"  {pub['label']} — dataset {ds_id}{cell_str}")
 
         if meta.get('cell_number'):
             lines.append(f"\nReference size: {meta['cell_number']:,} cells.")
