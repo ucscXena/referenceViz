@@ -73,7 +73,7 @@
   </table>
   {% endif %}
 
-  <h2 class="section-heading">Ask about this mapping</h2>
+  <h2 class="section-heading">Mapping summary</h2>
   <div class="chat-container">
     <div class="chat-messages" id="chat-messages"></div>
     <form class="chat-input-row" id="chat-form" autocomplete="off">
@@ -338,6 +338,12 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   gap: 5px;
   padding: 0.75rem 0.875rem;
 }
+.thinking-label {
+  font-size: 0.85rem;
+  color: #666;
+  font-style: normal;
+  margin-right: 2px;
+}
 .chat-bubble--thinking span {
   width: 7px;
   height: 7px;
@@ -435,20 +441,21 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     return div;
   }
 
-  function addThinkingBubble() {
+  function addThinkingBubble(label) {
     const div = document.createElement('div');
     div.className = 'chat-bubble chat-bubble--assistant chat-bubble--thinking';
-    div.innerHTML = '<span></span><span></span><span></span>';
+    div.innerHTML = (label ? `<em class="thinking-label">${label}</em>` : '') +
+                    '<span></span><span></span><span></span>';
     log.appendChild(div);
     div.scrollIntoView({behavior: 'smooth', block: 'nearest'});
     return div;
   }
 
-  function sendMessage(text) {
+  function sendMessage(text, {hidden = false} = {}) {
     btn.disabled = true;
-    messages.push({role: 'user', content: text});
-    addBubble('user', text);
-    const thinking = addThinkingBubble();
+    messages.push({role: 'user', content: text, hidden});
+    if (!hidden) addBubble('user', text);
+    const thinking = addThinkingBubble(hidden ? 'Summarizing projection results…' : null);
 
     const apiMessages = messages.map(m => ({
       role: m.role,
@@ -520,7 +527,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     try {
       const prior = JSON.parse(saved);
       prior.forEach(msg => {
-        if (msg.role === 'user') {
+        if (msg.role === 'user' && !msg.hidden) {
           addBubble('user', msg.content);
         } else if (msg.role === 'assistant') {
           const div = addBubble('assistant', '');
@@ -540,7 +547,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   }
 
   {% if job.status == 'complete' %}
-  if (!saved) sendMessage('What projected cell types are in my data?');
+  if (!saved) sendMessage('Summarize my mapping results.', {hidden: true});
   {% endif %}
 })();
 </script>
