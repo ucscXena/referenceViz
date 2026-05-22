@@ -17,6 +17,8 @@ import pyarrow.compute as pc
 import pyarrow.ipc as pa_ipc
 import io
 
+from gene_id_mapping import get_ensembl_mapping
+
 logger = logging.getLogger(__name__)
 
 MAX_CELLS_PER_GROUP = 50_000
@@ -129,7 +131,8 @@ def _load_subset_expression(adata: anndata.AnnData, cell_mask: np.ndarray) -> np
 # ---------------------------------------------------------------------------
 
 def top_expressed_genes(h5ad_path: Path, arrow_path: Path,
-                        predicate: list, n_genes: int = 20) -> dict:
+                        predicate: list, n_genes: int = 20,
+                        cache=None, uce_model_s3: str = '') -> dict:
     table = _load_arrow_table(arrow_path)
     mask = evaluate_predicate(table, predicate)
     n_cells = int(mask.sum())
@@ -137,8 +140,11 @@ def top_expressed_genes(h5ad_path: Path, arrow_path: Path,
         return {'error': 'No cells match the subset predicate'}
 
     adata = anndata.read_h5ad(h5ad_path, backed='r')
+    mapping = get_ensembl_mapping(adata, cache, uce_model_s3)
     X = _load_subset_expression(adata, mask)
     gene_names = adata.var_names.tolist()
+    if mapping:
+        gene_names = [mapping.get(g, g) for g in gene_names]
 
     mean_expr = X.mean(axis=0)
     order = np.argsort(-mean_expr)[:n_genes]
@@ -155,7 +161,8 @@ def top_expressed_genes(h5ad_path: Path, arrow_path: Path,
 
 def differential_expression(h5ad_path: Path, arrow_path: Path,
                              predicate_a: list, predicate_b: list,
-                             n_genes: int = 20) -> dict:
+                             n_genes: int = 20,
+                             cache=None, uce_model_s3: str = '') -> dict:
     from scipy.stats import mannwhitneyu
 
     table = _load_arrow_table(arrow_path)
@@ -179,9 +186,12 @@ def differential_expression(h5ad_path: Path, arrow_path: Path,
         warnings.append(f'Group B has only {n_b} cells; results are exploratory')
 
     adata = anndata.read_h5ad(h5ad_path, backed='r')
+    mapping = get_ensembl_mapping(adata, cache, uce_model_s3)
     X_a = _load_subset_expression(adata, mask_a)
     X_b = _load_subset_expression(adata, mask_b)
     gene_names = adata.var_names.tolist()
+    if mapping:
+        gene_names = [mapping.get(g, g) for g in gene_names]
     n_genes_total = len(gene_names)
 
     # Wilcoxon rank-sum (Mann-Whitney U) per gene

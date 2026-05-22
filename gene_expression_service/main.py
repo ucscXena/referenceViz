@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 cache = FileCache(os.environ.get('CACHE_DIR', '/tmp/ge_cache'))
+UCE_MODEL_S3 = os.environ.get('UCE_MODEL_S3', '')
 
 # Limit concurrent heavy analysis requests to avoid memory exhaustion.
 # S3 downloads (inside FileCache.get) are not counted — only the
@@ -82,6 +83,8 @@ def endpoint_top_expressed(req: TopExpressedRequest):
             h5ad_path, arrow_path,
             _predicate_to_dicts(req.subset),
             req.n_genes,
+            cache=cache,
+            uce_model_s3=UCE_MODEL_S3,
         )
     if 'error' in result:
         raise HTTPException(status_code=400, detail=result['error'])
@@ -98,6 +101,8 @@ def endpoint_de(req: DifferentialExpressionRequest):
             _predicate_to_dicts(req.group_a),
             _predicate_to_dicts(req.group_b),
             req.n_genes,
+            cache=cache,
+            uce_model_s3=UCE_MODEL_S3,
         )
     if 'error' in result:
         raise HTTPException(status_code=400, detail=result['error'])
