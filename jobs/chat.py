@@ -161,9 +161,18 @@ TOOLS = [
             'before comparing — QC filtering can substantially change results. '
             'Categorical QC columns must be filtered with op="eq" or op="ne" using their '
             'exact string label values (not numeric thresholds). '
-            'IMPORTANT: when this tool succeeds a dot plot is automatically rendered for '
-            'the user — do not say you are about to show a chart or include a duplicate '
-            'table. Describe the statistical findings only.'
+            'IMPORTANT: when this tool succeeds a dot plot is automatically rendered. '
+            'All charts appear in the response as collapsible panels — those with '
+            'open=true are shown expanded by default, others are collapsed. '
+            'If showing multiple charts only expand the ones most important to the analysis, '
+            'e.g. the strongest or most interesting. Set open=false for the others. '
+            'When referencing any chart in your response — whether open or collapsed — '
+            'use a markdown link with the exact column name strings you passed as col_a '
+            'and col_b: [→ label](#plot:col_a:col_b). '
+            'Example: if you called the tool with col_a="sex" and col_b="prediction_by_cell_type_top1", '
+            'write [→ sex vs prediction](#plot:sex:prediction_by_cell_type_top1). '
+            'Do not use plain → arrows without a link. '
+            'Call this tool when the user asks for a comparison.'
         ),
         'input_schema': {
             'type': 'object',
@@ -215,6 +224,14 @@ TOOLS = [
                     'description': (
                         'Flip the dot plot axes. By default the longer dimension is placed on '
                         'the Y axis. Set true if the user asks to flip or transpose the chart.'
+                    ),
+                },
+                'open': {
+                    'type': 'boolean',
+                    'description': (
+                        'Whether the chart panel should be expanded by default. '
+                        'Set false for supplementary charts the user does not need to see '
+                        'immediately to understand the response. Defaults to true.'
                     ),
                 },
             },
@@ -755,7 +772,10 @@ def _build_system_prompt(job, chunks=None):
         "include them only when there is a clear and specific next direction — skip the block "
         "entirely when the conversation is already focused. "
         "Ground each suggestion in the user's actual data: reference specific cell types, "
-        "proportions, or findings rather than generic questions.",
+        "proportions, or findings rather than generic questions. "
+        "Phrase suggestions in first person as the user would say them "
+        '(e.g. "How do my annotations break down by donor?" not '
+        '"How do your annotations break down by donor?").',
     ]
 
     return "\n".join(lines)
@@ -834,6 +854,7 @@ def chat(request, pk):
                             'type': 'dot_plot',
                             'col_a': result['col_a'],
                             'col_b': result['col_b'],
+                            'open': block.input.get('open', True),
                             'data': result['dot_plot'],
                         })
                     tool_results.append({

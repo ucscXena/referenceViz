@@ -318,19 +318,63 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
 .chat-send:disabled { background: #bdbdbd; cursor: default; }
 .chat-send:not(:disabled):hover { background: #1565c0; }
 
-.dot-plot-wrap {
-  overflow-x: auto;
-  margin-bottom: 0.75rem;
+.plot-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  align-self: stretch;
 }
-.dot-plot-wrap svg text {
-  font-family: inherit;
+.plot-item {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
 }
-.chart-more-note {
-  font-size: 0.8rem;
+.plot-item summary {
+  padding: 0.45rem 0.875rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #444;
+  cursor: pointer;
+  user-select: none;
+  background: #f8f9fa;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.plot-item summary::-webkit-details-marker { display: none; }
+.plot-item summary::before {
+  content: '▶';
+  font-size: 0.65em;
   color: #888;
-  margin: 0 0 0.75rem;
-  font-style: italic;
+  transition: transform 0.15s;
+  flex-shrink: 0;
 }
+.plot-item[open] summary::before { transform: rotate(90deg); }
+.plot-item summary:hover { background: #f0f2f5; }
+.plot-body {
+  padding: 0.75rem 0.75rem 0.5rem;
+  overflow-x: auto;
+}
+.plot-body svg text { font-family: inherit; }
+@keyframes plot-pulse {
+  0%, 100% { border-color: #e0e0e0; }
+  50% { border-color: #1976d2; box-shadow: 0 0 0 2px rgba(25,118,210,0.2); }
+}
+.plot-highlight { animation: plot-pulse 0.5s ease 0s 3; }
+.plot-ref-link {
+  background: none;
+  border: none;
+  color: #1976d2;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0;
+  text-decoration: underline;
+  line-height: inherit;
+}
+.plot-ref-link:hover { color: #1565c0; }
 
 .suggestion-chips {
   display: flex;
@@ -399,14 +443,16 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function renderDotPlot(chart) {
+  function renderDotPlotSvg(chart) {
     const { rows, cols, matrix, row_totals } = chart.data;
-    const cellSize = Math.max(28, Math.min(48, Math.floor(460 / cols.length)));
-    const maxRadius = cellSize / 2 - 2;
-    const maxColLen = Math.max(...cols.map(l => l.length));
     const maxRowLen = Math.max(...rows.map(l => l.length));
+    const maxColLen = Math.max(...cols.map(l => l.length));
     const rowLabelW = maxRowLen * 7 + 16;
     const colLabelH = Math.min(200, maxColLen * 5.5) + 16;
+    // Use available log width for cell sizing; fall back to 800px
+    const availGridW = Math.max(400, log.clientWidth - 32) - rowLabelW - 12;
+    const cellSize = Math.max(28, Math.min(56, Math.floor(availGridW / cols.length)));
+    const maxRadius = cellSize / 2 - 2;
     const gridW = cols.length * cellSize;
     const gridH = rows.length * cellSize;
     const W = rowLabelW + gridW + 12;
@@ -415,26 +461,21 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
 
     const parts = [];
 
-    // Alternating row backgrounds
     rows.forEach((_, i) => {
-      if (i % 2 === 0) {
+      if (i % 2 === 0)
         parts.push(`<rect x="${rowLabelW}" y="${colLabelH + i * cellSize}" width="${gridW}" height="${cellSize}" fill="#f5f7fa"/>`);
-      }
     });
 
-    // Row labels
     rows.forEach((label, i) => {
       const y = colLabelH + i * cellSize + cellSize / 2;
       parts.push(`<text x="${rowLabelW - 8}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="12" fill="#333">${escSvg(label)}</text>`);
     });
 
-    // Col labels (rotated -45deg, anchored at bottom of label area)
     cols.forEach((label, j) => {
       const x = rowLabelW + j * cellSize + cellSize / 2;
       parts.push(`<g transform="translate(${x},${colLabelH - 4}) rotate(-45)"><text text-anchor="start" dominant-baseline="auto" font-size="12" fill="#333">${escSvg(label)}</text></g>`);
     });
 
-    // Dots
     rows.forEach((_, i) => {
       cols.forEach((_, j) => {
         const count = matrix[i][j];
@@ -448,12 +489,62 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
       });
     });
 
-    // Axis titles
     const axisStyle = 'font-size:11px;fill:#777;font-style:italic';
     parts.push(`<text x="${rowLabelW + gridW / 2}" y="${H - 1}" text-anchor="middle" style="${axisStyle}">${escSvg(chart.col_b)}</text>`);
     parts.push(`<text transform="translate(8,${colLabelH + gridH / 2}) rotate(-90)" text-anchor="middle" style="${axisStyle}">${escSvg(chart.col_a)}</text>`);
 
-    return `<div class="dot-plot-wrap"><svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:block;overflow:visible">${parts.join('')}</svg></div>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:block;overflow:visible">${parts.join('')}</svg>`;
+  }
+
+  function renderPlotGroup(charts) {
+    const group = document.createElement('div');
+    group.className = 'plot-group';
+    charts.forEach(chart => {
+      const details = document.createElement('details');
+      details.className = 'plot-item';
+      details.dataset.colA = chart.col_a;
+      details.dataset.colB = chart.col_b;
+      if (chart.open !== false) details.open = true;
+
+      const summary = document.createElement('summary');
+      summary.textContent = chart.title || `${chart.col_a} × ${chart.col_b}`;
+      details.appendChild(summary);
+
+      const body = document.createElement('div');
+      body.className = 'plot-body';
+      body.innerHTML = renderDotPlotSvg(chart);
+      details.appendChild(body);
+
+      group.appendChild(details);
+    });
+    return group;
+  }
+
+  function expandAndScrollToPlot(colA, colB) {
+    const item = [...document.querySelectorAll('.plot-item')]
+      .find(el => el.dataset.colA === colA && el.dataset.colB === colB);
+    if (!item) return;
+    item.open = true;
+    item.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    item.classList.remove('plot-highlight');
+    void item.offsetWidth; // reflow to restart animation
+    item.classList.add('plot-highlight');
+    setTimeout(() => item.classList.remove('plot-highlight'), 1600);
+  }
+
+  function postProcessChartRefs(el) {
+    el.querySelectorAll('a[href*="#plot:"]').forEach(a => {
+      const hash = a.getAttribute('href').replace(/^.*#plot:/, '');
+      const sep = hash.indexOf(':');
+      if (sep === -1) return;
+      const colA = decodeURIComponent(hash.slice(0, sep));
+      const colB = decodeURIComponent(hash.slice(sep + 1));
+      const btn = document.createElement('button');
+      btn.className = 'plot-ref-link';
+      btn.textContent = a.textContent;
+      btn.addEventListener('click', () => expandAndScrollToPlot(colA, colB));
+      a.replaceWith(btn);
+    });
   }
 
   function addBubble(role, text) {
@@ -510,7 +601,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     const apiMessages = messages.map(m => ({
       role: m.role,
       content: m.charts?.length
-        ? m.charts.map(c => `[Dot plot rendered: ${c.col_a} (Y axis) vs ${c.col_b} (X axis)]`).join(' ') + '\n' + m.content
+        ? m.charts.map(c => `[Chart rendered (${c.open === false ? 'collapsed' : 'expanded'}): ${c.col_a} × ${c.col_b}]`).join(' ') + '\n' + m.content
         : m.content,
     }));
     fetch(CHAT_URL, {
@@ -525,22 +616,32 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
           thinking.textContent = 'Error: ' + data.error;
           messages.pop();
         } else {
-          thinking.classList.remove('chat-bubble--thinking');
           const charts = data.charts || [];
           const suggestions = data.suggestions || [];
-          let html = '';
-          if (charts.length > 0) {
-            html += renderDotPlot(charts[0]);
-            if (charts.length > 1) {
-              html += `<p class="chart-more-note">${charts.length - 1} more comparison${charts.length > 2 ? 's' : ''} computed — ask to see a specific one.</p>`;
-            }
+          const content = (data.content || '').trim();
+          if (!content && !charts.length) {
+            thinking.className = 'chat-bubble chat-bubble--error';
+            thinking.textContent = 'Empty response — please try again.';
+            messages.pop();
+            return;
           }
-          html += marked.parse(data.content);
-          thinking.innerHTML = html;
+          thinking.classList.remove('chat-bubble--thinking');
+          let afterEl = thinking;
+          if (content) {
+            thinking.innerHTML = marked.parse(data.content);
+            postProcessChartRefs(thinking);
+          } else {
+            thinking.style.display = 'none';
+          }
+          if (charts.length > 0) {
+            const plotGroup = renderPlotGroup(charts);
+            thinking.insertAdjacentElement('afterend', plotGroup);
+            afterEl = plotGroup;
+          }
           messages.push({role: 'assistant', content: data.content, charts, suggestions});
           sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
           sessionStorage.setItem(PROJ_KEY, JSON.stringify([...COMPLETE_PROJ_IDS]));
-          renderSuggestions(suggestions, thinking);
+          renderSuggestions(suggestions, afterEl);
         }
       })
       .catch(() => {
@@ -586,16 +687,15 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
           addBubble('user', msg.content);
         } else if (msg.role === 'assistant') {
           const div = addBubble('assistant', '');
-          let html = '';
+          div.innerHTML = marked.parse(msg.content);
+          postProcessChartRefs(div);
+          let afterEl = div;
           if (msg.charts && msg.charts.length > 0) {
-            html += renderDotPlot(msg.charts[0]);
-            if (msg.charts.length > 1) {
-              html += `<p class="chart-more-note">${msg.charts.length - 1} more comparison${msg.charts.length > 2 ? 's' : ''} computed — ask to see a specific one.</p>`;
-            }
+            const plotGroup = renderPlotGroup(msg.charts);
+            div.insertAdjacentElement('afterend', plotGroup);
+            afterEl = plotGroup;
           }
-          html += marked.parse(msg.content);
-          div.innerHTML = html;
-          if (idx === lastAssistantIdx) lastBubble = div;
+          if (idx === lastAssistantIdx) lastBubble = afterEl;
         }
       });
       messages.push(...prior);
