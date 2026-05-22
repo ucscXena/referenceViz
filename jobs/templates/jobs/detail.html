@@ -332,6 +332,27 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   font-style: italic;
 }
 
+.suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  max-width: 80%;
+}
+.suggestion-chip {
+  background: #fff;
+  border: 1px solid #1976d2;
+  color: #1976d2;
+  border-radius: 14px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-align: left;
+}
+.suggestion-chip:hover { background: #e3f2fd; }
+
 .chat-bubble--thinking {
   display: inline-flex;
   align-items: center;
@@ -365,6 +386,8 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   const CHAT_URL = '{% url "job_chat" job.pk %}';
   const CSRF = '{{ csrf_token }}';
   const STORAGE_KEY = 'chat_{{ job.pk }}';
+  const PROJ_KEY   = 'proj_{{ job.pk }}';
+  const COMPLETE_PROJ_IDS = new Set({{ complete_proj_ids|tojson }});
   const messages = [];
 
   const form = document.getElementById('chat-form');
@@ -441,6 +464,32 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     return div;
   }
 
+  function renderSuggestions(suggestions, afterEl) {
+    if (!suggestions || !suggestions.length) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'suggestion-chips';
+    suggestions.forEach(text => {
+      const btn = document.createElement('button');
+      btn.className = 'suggestion-chip';
+      btn.textContent = text;
+      btn.addEventListener('click', () => {
+        wrap.remove();
+        sendMessage(text);
+      });
+      wrap.appendChild(btn);
+    });
+    if (afterEl) {
+      afterEl.insertAdjacentElement('afterend', wrap);
+    } else {
+      log.appendChild(wrap);
+    }
+    return wrap;
+  }
+
+  function clearSuggestions() {
+    document.querySelectorAll('.suggestion-chips').forEach(el => el.remove());
+  }
+
   function addThinkingBubble(label) {
     const div = document.createElement('div');
     div.className = 'chat-bubble chat-bubble--assistant chat-bubble--thinking';
@@ -452,6 +501,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   }
 
   function sendMessage(text, {hidden = false} = {}) {
+    clearSuggestions();
     btn.disabled = true;
     messages.push({role: 'user', content: text, hidden});
     if (!hidden) addBubble('user', text);
@@ -477,6 +527,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
         } else {
           thinking.classList.remove('chat-bubble--thinking');
           const charts = data.charts || [];
+          const suggestions = data.suggestions || [];
           let html = '';
           if (charts.length > 0) {
             html += renderDotPlot(charts[0]);
@@ -486,8 +537,10 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
           }
           html += marked.parse(data.content);
           thinking.innerHTML = html;
-          messages.push({role: 'assistant', content: data.content, charts});
+          messages.push({role: 'assistant', content: data.content, charts, suggestions});
           sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+          sessionStorage.setItem(PROJ_KEY, JSON.stringify([...COMPLETE_PROJ_IDS]));
+          renderSuggestions(suggestions, thinking);
         }
       })
       .catch(() => {
@@ -526,7 +579,9 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   if (saved) {
     try {
       const prior = JSON.parse(saved);
-      prior.forEach(msg => {
+      const lastAssistantIdx = prior.reduce((acc, m, i) => m.role === 'assistant' ? i : acc, -1);
+      let lastBubble = null;
+      prior.forEach((msg, idx) => {
         if (msg.role === 'user' && !msg.hidden) {
           addBubble('user', msg.content);
         } else if (msg.role === 'assistant') {
@@ -540,9 +595,23 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
           }
           html += marked.parse(msg.content);
           div.innerHTML = html;
+          if (idx === lastAssistantIdx) lastBubble = div;
         }
       });
       messages.push(...prior);
+
+      // Show suggestions from the last assistant message
+      const lastMsg = prior[lastAssistantIdx];
+      if (lastMsg && lastMsg.suggestions && lastMsg.suggestions.length) {
+        renderSuggestions(lastMsg.suggestions, lastBubble);
+      }
+
+      // Detect new projections completed since last visit
+      const storedProjs = new Set(JSON.parse(sessionStorage.getItem(PROJ_KEY) || '[]'));
+      const hasNew = [...COMPLETE_PROJ_IDS].some(id => !storedProjs.has(id));
+      if (hasNew) {
+        renderSuggestions(['Summarize my new projection results.'], lastBubble);
+      }
     } catch (e) {}
   }
 

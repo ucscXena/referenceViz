@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+from typing import Optional
 
 import anthropic
 from django.conf import settings
@@ -364,8 +365,11 @@ def _dispatch_tool(name, tool_input, job):
                 result.get('cramers_v'), result.get('association_strength'),
             )
             return result
+        except ValueError as e:
+            logger.warning('compare_columns_stat bad input for projection %s: %s', proj_a.pk, e)
+            return {'error': str(e)}
         except Exception as e:
-            logger.exception('compare_columns_stat failed for projection %s', proj.pk)
+            logger.exception('compare_columns_stat failed for projection %s', proj_a.pk)
             return {'error': str(e)}
 
     if name in ('top_expressed_genes', 'differential_expression'):
@@ -743,9 +747,38 @@ def _build_system_prompt(job, chunks=None):
         "didn't explicitly request statistics. All columns, including any QC metrics, "
         "are stored as categories; compare_columns is the right tool for any pairwise "
         "analysis. Filters can be applied to restrict the analysis to a subset of cells.",
+        "",
+        "After your response, if there are specific follow-up questions worth surfacing, "
+        "append them as a suggestions block on the very last line, with no trailing text:\n"
+        "<suggestions>[\"Question one?\", \"Question two?\", \"Question three?\"]</suggestions>\n"
+        "For the initial summary, always include 3–4 suggestions. For subsequent responses, "
+        "include them only when there is a clear and specific next direction — skip the block "
+        "entirely when the conversation is already focused. "
+        "Ground each suggestion in the user's actual data: reference specific cell types, "
+        "proportions, or findings rather than generic questions.",
     ]
 
     return "\n".join(lines)
+
+
+_SUGGESTIONS_RE = re.compile(
+    r'\s*<suggestions>(\[.*?\])</suggestions>\s*$', re.DOTALL
+)
+
+
+def _extract_suggestions(text: str) -> tuple[str, list]:
+    """Strip a trailing <suggestions>[...]</suggestions> block from the response text.
+    Returns (cleaned_text, suggestions_list). suggestions_list is [] on parse failure."""
+    m = _SUGGESTIONS_RE.search(text)
+    if not m:
+        return text, []
+    try:
+        suggestions = json.loads(m.group(1))
+        if isinstance(suggestions, list):
+            return text[:m.start()].rstrip(), [str(s) for s in suggestions]
+    except (json.JSONDecodeError, ValueError):
+        pass
+    return text, []
 
 
 @login_required
@@ -814,9 +847,12 @@ def chat(request, pk):
             thread.append({'role': 'user', 'content': tool_results})
 
         text = next((b.text for b in response.content if hasattr(b, 'text')), '')
+        text, suggestions = _extract_suggestions(text)
         resp = {'content': text}
         if charts:
             resp['charts'] = charts
+        if suggestions:
+            resp['suggestions'] = suggestions
         return JsonResponse(resp)
 
     except anthropic.APIError as e:

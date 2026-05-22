@@ -217,7 +217,14 @@ def job_list(request):
 def job_detail(request, pk):
     job = get_object_or_404(Job, pk=str(pk), user=request.user)
     projections = job.projections.select_related('reference__group').all()
-    return render(request, 'jobs/detail.html', {'job': job, 'projections': projections})
+    complete_proj_ids = [
+        str(p.id) for p in projections if p.status == 'complete'
+    ]
+    return render(request, 'jobs/detail.html', {
+        'job': job,
+        'projections': projections,
+        'complete_proj_ids': complete_proj_ids,
+    })
 
 
 _QUEUED_BATCH_STATES = {'SUBMITTED', 'PENDING', 'RUNNABLE'}
