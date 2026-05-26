@@ -390,6 +390,19 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
 }
 .plot-flip-btn:hover { background: #e8f0fe; color: #1976d2; border-color: #1976d2; }
 .plot-flip-btn .material-icons { font-size: 16px; line-height: 1; }
+.plot-tooltip {
+  position: fixed;
+  background: rgba(30, 30, 30, 0.88);
+  color: #fff;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  padding: 0.3rem 0.55rem;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 1000;
+  display: none;
+}
 
 .suggestion-chips {
   display: flex;
@@ -487,12 +500,12 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
 
     rows.forEach((label, i) => {
       const y = colLabelH + i * cellSize + cellSize / 2;
-      parts.push(`<text x="${rowLabelW - 8}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="12" fill="#333">${escSvg(label)}</text>`);
+      parts.push(`<text data-ltype="row" data-idx="${i}" x="${rowLabelW - 8}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="12" fill="#333">${escSvg(label)}</text>`);
     });
 
     cols.forEach((label, j) => {
       const x = rowLabelW + j * cellSize + cellSize / 2;
-      parts.push(`<g transform="translate(${x},${colLabelH - 4}) rotate(-45)"><text text-anchor="start" dominant-baseline="auto" font-size="12" fill="#333">${escSvg(label)}</text></g>`);
+      parts.push(`<g data-ltype="col" data-idx="${j}" transform="translate(${x},${colLabelH - 4}) rotate(-45)"><text text-anchor="start" dominant-baseline="auto" font-size="12" fill="#333">${escSvg(label)}</text></g>`);
     });
 
     rows.forEach((_, i) => {
@@ -504,7 +517,19 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
         const cx = rowLabelW + j * cellSize + cellSize / 2;
         const cy = colLabelH + i * cellSize + cellSize / 2;
         const opacity = (0.15 + 0.85 * frac).toFixed(3);
-        parts.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#1565c0" fill-opacity="${opacity}"/>`);
+        parts.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#1565c0" fill-opacity="${opacity}" style="pointer-events:none"/>`);
+      });
+    });
+
+    // Uniform cell-sized hit targets rendered on top of dots
+    rows.forEach((_, i) => {
+      cols.forEach((_, j) => {
+        const count = matrix[i][j];
+        if (!count) return;
+        const frac = row_totals[i] > 0 ? count / row_totals[i] : 0;
+        const rx = rowLabelW + j * cellSize;
+        const ry = colLabelH + i * cellSize;
+        parts.push(`<rect x="${rx}" y="${ry}" width="${cellSize}" height="${cellSize}" fill="transparent" style="cursor:crosshair" data-row="${i}" data-col="${j}" data-count="${count}" data-total="${row_totals[i]}" data-frac="${frac.toFixed(4)}"/>`);
       });
     });
 
@@ -513,6 +538,61 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     parts.push(`<text transform="translate(8,${colLabelH + gridH / 2}) rotate(-90)" text-anchor="middle" style="${axisStyle}">${escSvg(chart.col_a)}</text>`);
 
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:block;overflow:visible">${parts.join('')}</svg>`;
+  }
+
+  const plotTooltip = document.createElement('div');
+  plotTooltip.className = 'plot-tooltip';
+  document.body.appendChild(plotTooltip);
+
+  function attachDotPlotEvents(body, data) {
+    const svg = body.querySelector('svg');
+    if (!svg) return;
+    const { rows, cols, row_totals } = data;
+
+    svg.addEventListener('mouseover', e => {
+      const dot = e.target;
+      if (dot.dataset.row === undefined) return;
+      const ri = +dot.dataset.row;
+      const ci = +dot.dataset.col;
+      const count = +dot.dataset.count;
+      const total = +dot.dataset.total;
+      const frac  = +dot.dataset.frac;
+
+      // Highlight row and col labels
+      svg.querySelectorAll('[data-ltype="row"]').forEach(el => el.setAttribute('fill', '#333'));
+      svg.querySelectorAll('[data-ltype="col"] text').forEach(el => el.setAttribute('fill', '#333'));
+      const rowLbl = svg.querySelector(`[data-ltype="row"][data-idx="${ri}"]`);
+      const colLbl = svg.querySelector(`[data-ltype="col"][data-idx="${ci}"] text`);
+      if (rowLbl) rowLbl.setAttribute('fill', '#1565c0');
+      if (colLbl) colLbl.setAttribute('fill', '#1565c0');
+
+      // Tooltip
+      const pct = (frac * 100).toFixed(1);
+      plotTooltip.innerHTML =
+        `<strong>${escSvg(rows[ri])}</strong> ∩ <strong>${escSvg(cols[ci])}</strong><br>` +
+        `${count.toLocaleString()} cells &nbsp;·&nbsp; ${pct}% of row (${total.toLocaleString()} total)`;
+      plotTooltip.style.display = 'block';
+    });
+
+    svg.addEventListener('mousemove', e => {
+      if (plotTooltip.style.display === 'none') return;
+      plotTooltip.style.left = (e.clientX + 14) + 'px';
+      plotTooltip.style.top  = (e.clientY - 40) + 'px';
+    });
+
+    svg.addEventListener('mouseleave', () => {
+      svg.querySelectorAll('[data-ltype="row"]').forEach(el => el.setAttribute('fill', '#333'));
+      svg.querySelectorAll('[data-ltype="col"] text').forEach(el => el.setAttribute('fill', '#333'));
+      plotTooltip.style.display = 'none';
+    });
+
+    svg.addEventListener('mouseout', e => {
+      if (e.target.dataset.row === undefined) return;
+      if (e.relatedTarget && e.relatedTarget.dataset.row !== undefined) return;
+      svg.querySelectorAll('[data-ltype="row"]').forEach(el => el.setAttribute('fill', '#333'));
+      svg.querySelectorAll('[data-ltype="col"] text').forEach(el => el.setAttribute('fill', '#333'));
+      plotTooltip.style.display = 'none';
+    });
   }
 
   function transposeChartData(data) {
@@ -564,6 +644,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
       function rerenderBody() {
         const data = transposed ? transposeChartData(chart.data) : chart.data;
         body.innerHTML = renderDotPlotSvg({...chart, data});
+        attachDotPlotEvents(body, data);
       }
       rerenderBody();
 
