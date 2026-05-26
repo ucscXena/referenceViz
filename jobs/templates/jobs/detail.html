@@ -375,6 +375,21 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   line-height: inherit;
 }
 .plot-ref-link:hover { color: #1565c0; }
+.plot-flip-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  padding: 0.1rem 0.2rem;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.plot-flip-btn:hover { background: #e8f0fe; color: #1976d2; border-color: #1976d2; }
+.plot-flip-btn .material-icons { font-size: 16px; line-height: 1; }
 
 .suggestion-chips {
   display: flex;
@@ -430,7 +445,8 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   const CHAT_URL = '{% url "job_chat" job.pk %}';
   const CSRF = '{{ csrf_token }}';
   const STORAGE_KEY = 'chat_{{ job.pk }}';
-  const PROJ_KEY   = 'proj_{{ job.pk }}';
+  const PROJ_KEY    = 'proj_{{ job.pk }}';
+  const ORIENT_KEY  = 'orient_{{ job.pk }}';
   const COMPLETE_PROJ_IDS = new Set({{ complete_proj_ids|tojson }});
   const messages = [];
 
@@ -499,7 +515,26 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:block;overflow:visible">${parts.join('')}</svg>`;
   }
 
+  function transposeChartData(data) {
+    const { rows, cols, matrix } = data;
+    const newMatrix = cols.map((_, j) => rows.map((_, i) => matrix[i][j]));
+    const newRowTotals = cols.map((_, j) => rows.reduce((sum, _, i) => sum + matrix[i][j], 0));
+    return { rows: cols, cols: rows, matrix: newMatrix, row_totals: newRowTotals };
+  }
+
+  function getOrientations() {
+    try { return JSON.parse(sessionStorage.getItem(ORIENT_KEY) || '{}'); } catch { return {}; }
+  }
+
+  function setOrientation(colA, colB, transposed) {
+    const o = getOrientations();
+    const key = colA + ':' + colB;
+    if (transposed) o[key] = true; else delete o[key];
+    sessionStorage.setItem(ORIENT_KEY, JSON.stringify(o));
+  }
+
   function renderPlotGroup(charts) {
+    const orientations = getOrientations();
     const group = document.createElement('div');
     group.className = 'plot-group';
     charts.forEach(chart => {
@@ -510,14 +545,37 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
       if (chart.open !== false) details.open = true;
 
       const summary = document.createElement('summary');
-      summary.textContent = chart.title || `${chart.col_a} × ${chart.col_b}`;
+      const titleSpan = document.createElement('span');
+      titleSpan.textContent = chart.title || `${chart.col_a} × ${chart.col_b}`;
+      summary.appendChild(titleSpan);
+
+      const flipBtn = document.createElement('button');
+      flipBtn.className = 'plot-flip-btn';
+      flipBtn.title = 'Flip axes';
+      flipBtn.innerHTML = '<span class="material-icons">swap_horiz</span>';
+      summary.appendChild(flipBtn);
       details.appendChild(summary);
 
       const body = document.createElement('div');
       body.className = 'plot-body';
-      body.innerHTML = renderDotPlotSvg(chart);
-      details.appendChild(body);
 
+      let transposed = !!orientations[chart.col_a + ':' + chart.col_b];
+
+      function rerenderBody() {
+        const data = transposed ? transposeChartData(chart.data) : chart.data;
+        body.innerHTML = renderDotPlotSvg({...chart, data});
+      }
+      rerenderBody();
+
+      flipBtn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        transposed = !transposed;
+        setOrientation(chart.col_a, chart.col_b, transposed);
+        rerenderBody();
+      });
+
+      details.appendChild(body);
       group.appendChild(details);
     });
     return group;
