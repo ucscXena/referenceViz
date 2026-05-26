@@ -449,9 +449,12 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     const maxColLen = Math.max(...cols.map(l => l.length));
     const rowLabelW = maxRowLen * 7 + 16;
     const colLabelH = Math.min(200, maxColLen * 5.5) + 16;
-    // Use available log width for cell sizing; fall back to 800px
+    // Width constraint: fit columns in available space
     const availGridW = Math.max(400, log.clientWidth - 32) - rowLabelW - 12;
-    const cellSize = Math.max(28, Math.min(56, Math.floor(availGridW / cols.length)));
+    const cellSizeByW = Math.floor(availGridW / cols.length);
+    // Height constraint: keep total chart height under ~480px
+    const cellSizeByH = Math.floor((480 - colLabelH - 12) / rows.length);
+    const cellSize = Math.max(20, Math.min(44, cellSizeByW, cellSizeByH));
     const maxRadius = cellSize / 2 - 2;
     const gridW = cols.length * cellSize;
     const gridH = rows.length * cellSize;
