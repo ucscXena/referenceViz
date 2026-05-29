@@ -581,20 +581,18 @@ def clone_job(request, token):
         status='complete',
         result=new_result,
     )
-    # Input file not copied — deleted after UCE completion on master branch.
-    # When chatbot branch is merged (input file is retained for analysis tools), uncomment:
-    # if original_job.s3_input_key:
-    #     new_input_key = f'uploads/{new_job_id}/{original_job.original_filename}'
-    #     try:
-    #         s3.copy_object(
-    #             Bucket=bucket,
-    #             CopySource={'Bucket': bucket, 'Key': original_job.s3_input_key},
-    #             Key=new_input_key,
-    #         )
-    #         new_job.s3_input_key = new_input_key
-    #         new_job.save(update_fields=['s3_input_key'])
-    #     except Exception:
-    #         logger.warning('Failed to copy input file for clone of job %s', original_job.id, exc_info=True)
+    if original_job.s3_input_key:
+        new_input_key = f'uploads/{new_job_id}/{original_job.original_filename}'
+        try:
+            s3.copy_object(
+                Bucket=bucket,
+                CopySource={'Bucket': bucket, 'Key': original_job.s3_input_key},
+                Key=new_input_key,
+            )
+            new_job.s3_input_key = new_input_key
+            new_job.save(update_fields=['s3_input_key'])
+        except Exception:
+            logger.warning('Failed to copy input file for clone of job %s', original_job.id, exc_info=True)
 
     # Clone complete projections
     for proj in original_job.projections.filter(status='complete').select_related('reference'):
