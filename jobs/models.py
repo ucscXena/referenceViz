@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 import uuid
 
 
+
 class UCEModel(models.Model):
     """A UCE embedding model version. Admin-managed; one row should have is_default=True."""
     name = models.CharField(max_length=100, unique=True)
@@ -159,3 +160,14 @@ class Projection(models.Model):
         group_title = self.reference.group.title
         version = self.reference.version_label
         return f'{file} → {group_title} {version}'
+
+
+class ShareToken(models.Model):
+    """A time-limited token that lets another authenticated user clone a Job."""
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='share_tokens')
+    token = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'ShareToken for Job {str(self.job_id)[:8]} (expires {self.expires_at:%Y-%m-%d})'

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Add to Your Mappings — UCSC Brain Explorer{% endblock %}
+{% block base_content %}
+<div class="base-container">
+
+{% if expired %}
+
+  <h1 class="base-h1">Link Expired</h1>
+  <p class="clone-note">This share link has expired. Ask the sender to generate a new one.</p>
+
+{% elif is_own_job %}
+
+  <h1 class="base-h1">That's your mapping</h1>
+  <p class="clone-note">You can't add your own mapping to your account.</p>
+  <a href="{% url 'job_list' %}" class="base-button">Back to mappings</a>
+
+{% else %}
+
+  <h1 class="base-h1">Add to Your Mappings</h1>
+  <p class="clone-note">Someone has shared a cell mapping with you:</p>
+
+  <table class="clone-table">
+    <tr><th>File</th><td>{{ original_job.original_filename }}</td></tr>
+    {% if original_job.cell_count %}<tr><th>Cells</th><td>{{ original_job.cell_count }}</td></tr>{% endif %}
+    <tr>
+      <th>Projections</th>
+      <td>{% if projections %}{% for proj in projections %}{{ proj.reference.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}None{% endif %}</td>
+    </tr>
+  </table>
+
+  <p class="clone-note">Clicking "Add to my mappings" will create a copy in your account.</p>
+
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" class="base-button">Add to my mappings</button>
+    <a href="{% url 'job_list' %}" class="clone-cancel">Cancel</a>
+  </form>
+
+{% endif %}
+
+</div>
+
+<style>
+.clone-note { color: #444; font-size: 0.9rem; margin: 0.75rem 0 1rem; }
+.clone-cancel { margin-left: 1rem; color: #555; font-size: 0.875rem; text-decoration: none; }
+.clone-cancel:hover { text-decoration: underline; }
+.clone-table {
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin: 1.25rem 0 1.5rem;
+}
+.clone-table th {
+  padding: 7px 20px 7px 0;
+  text-align: left;
+  font-weight: 500;
+  color: #444;
+  width: 6rem;
+}
+.clone-table td { padding: 7px 0; color: #333; }
+</style>
+{% endblock %}
