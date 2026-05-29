@@ -1,5 +1,9 @@
 import json
+import logging
 import os
+import secrets
+import uuid
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -12,8 +16,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .aws import boto_client, delete_s3_key, delete_s3_uri
-from .models import Job, Projection, Reference, ReferenceGroup, UCEModel
+from .models import Job, Projection, Reference, ReferenceGroup, ShareToken, UCEModel
 from .tasks import run_analysis, _submit_projection
+
+logger = logging.getLogger(__name__)
 
 
 @require_GET
@@ -502,6 +508,122 @@ def projection_callback(request):
         return JsonResponse({'status': 'ok'})
 
     return JsonResponse({'error': 'invalid status'}, status=400)
+
+
+@login_required
+@require_POST
+def create_share_token(request, job_id):
+    """Create a time-limited clone link for a complete job owned by the current user."""
+    job = get_object_or_404(Job, pk=str(job_id), user=request.user, status='complete')
+    now = timezone.now()
+    job.share_tokens.filter(expires_at__lte=now).delete()
+    token_str = secrets.token_urlsafe(32)
+    ShareToken.objects.create(job=job, token=token_str, expires_at=now + timedelta(days=30))
+    clone_url = request.build_absolute_uri(f'/jobs/clone/{token_str}/')
+    return JsonResponse({'url': clone_url})
+
+
+@login_required
+def clone_job(request, token):
+    """GET: confirmation page. POST: clone the job into the current user's account."""
+    now = timezone.now()
+    share_token = get_object_or_404(ShareToken, token=token)
+
+    if share_token.expires_at < now:
+        return render(request, 'jobs/clone_confirm.html', {'expired': True}, status=410)
+
+    original_job = share_token.job
+
+    if request.method == 'GET':
+        complete_projections = (
+            original_job.projections.filter(status='complete').select_related('reference__group')
+        )
+        return render(request, 'jobs/clone_confirm.html', {
+            'original_job': original_job,
+            'projections': complete_projections,
+            'token': token,
+            'is_own_job': original_job.user == request.user,
+        })
+
+    # POST: perform clone
+    if original_job.user == request.user:
+        return redirect('job_list')
+
+    s3 = boto_client('s3')
+    bucket = settings.AWS_S3_BUCKET
+    new_job_id = uuid.uuid4()
+
+    # Copy UCE result file
+    original_uce_uri = original_job.uce_s3_uri()
+    new_uce_uri = None
+    if original_uce_uri:
+        try:
+            _, orig_key = original_uce_uri.replace('s3://', '').split('/', 1)
+            new_uce_key = f'uce-results/{new_job_id}/output.h5ad'
+            s3.copy_object(
+                Bucket=bucket,
+                CopySource={'Bucket': bucket, 'Key': orig_key},
+                Key=new_uce_key,
+            )
+            new_uce_uri = f's3://{bucket}/{new_uce_key}'
+        except Exception:
+            logger.warning('Failed to copy UCE result for clone of job %s', original_job.id, exc_info=True)
+
+    new_result = {'uce_s3_uri': new_uce_uri} if new_uce_uri else {}
+    if original_job.result and original_job.result.get('cell_count'):
+        new_result['cell_count'] = original_job.result['cell_count']
+
+    new_job = Job.objects.create(
+        id=new_job_id,
+        user=request.user,
+        uce_model=original_job.uce_model,
+        original_filename=original_job.original_filename,
+        status='complete',
+        result=new_result,
+    )
+    # Input file not copied — deleted after UCE completion on master branch.
+    # When chatbot branch is merged (input file is retained for analysis tools), uncomment:
+    # if original_job.s3_input_key:
+    #     new_input_key = f'uploads/{new_job_id}/{original_job.original_filename}'
+    #     try:
+    #         s3.copy_object(
+    #             Bucket=bucket,
+    #             CopySource={'Bucket': bucket, 'Key': original_job.s3_input_key},
+    #             Key=new_input_key,
+    #         )
+    #         new_job.s3_input_key = new_input_key
+    #         new_job.save(update_fields=['s3_input_key'])
+    #     except Exception:
+    #         logger.warning('Failed to copy input file for clone of job %s', original_job.id, exc_info=True)
+
+    # Clone complete projections
+    for proj in original_job.projections.filter(status='complete').select_related('reference'):
+        proj_result = proj.result or {}
+        new_proj_result = {}
+        for src_key, dest_name in [('s3_uri', 'output.arrow'), ('predictions_s3_uri', 'predictions.tsv')]:
+            orig_uri = proj_result.get(src_key)
+            if not orig_uri:
+                continue
+            try:
+                _, orig_s3_key = orig_uri.replace('s3://', '').split('/', 1)
+                new_s3_key = f'mapping-results/{new_job_id}/{proj.reference_id}/{dest_name}'
+                s3.copy_object(
+                    Bucket=bucket,
+                    CopySource={'Bucket': bucket, 'Key': orig_s3_key},
+                    Key=new_s3_key,
+                )
+                new_proj_result[src_key] = f's3://{bucket}/{new_s3_key}'
+            except Exception:
+                logger.warning('Failed to copy projection file %s for clone', orig_uri, exc_info=True)
+        Projection.objects.create(
+            job=new_job,
+            reference=proj.reference,
+            status='complete',
+            public=False,
+            result=new_proj_result,
+        )
+
+    return redirect('job_list')
 
 
 def _delete_job_s3_files(job):

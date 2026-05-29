@@ -132,6 +132,12 @@ body.base-root {
   text-decoration: none;
 }
 
+.base-button:disabled {
+  background-color: #e0e0e0;
+  color: #aaa;
+  cursor: default;
+}
+
 .base-button.secondary {
   background-color: #e0e0e0;
   color: #000;
