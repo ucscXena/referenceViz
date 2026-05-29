@@ -23,7 +23,6 @@
         <th class="col-ref">Reference</th>
         <th class="col-pstatus">Status</th>
         <th class="col-actions">Actions</th>
-        <th class="col-public">Public</th>
       </tr>
     </thead>
     <tbody>
@@ -60,17 +59,14 @@
         <td class="proj-download-cell" data-proj-id="{{ proj.id }}">
           {% if proj.status == 'complete' and proj.result.s3_uri %}
             <div class="action-icons">
-				{# <a href="{% url 'job_detail' job.pk %}" class="icon-btn" title="View report"><span class="material-icons">topic</span></a> #}
               <a href="{% url 'download_projection' proj.pk %}" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>
+              <div class="action-sep"></div>
               <a href="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" class="icon-btn" title="View in explorer"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" class="viz-icon" aria-hidden="true"><circle cx="3" cy="4" r="2" fill="#8b5e3c"/><circle cx="7" cy="13" r="2.5" fill="#d4955a"/><circle cx="5" cy="8" r="1.5" fill="#60c0d8"/><circle cx="11" cy="5" r="2" fill="#3db0a0"/><circle cx="15.5" cy="3" r="2.5" fill="#4878c0"/><circle cx="17" cy="10.5" r="2" fill="#5aaa30"/><circle cx="14" cy="16.5" r="1.5" fill="#c8b818"/><circle cx="9" cy="16" r="2" fill="#8a4820"/></svg></a>
+              <button type="button" class="icon-btn share-btn{% if proj.public %} share-btn--active{% endif %}" data-proj-id="{{ proj.id }}" data-viz-url="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" data-public="{{ proj.public|yesno:'true,false' }}" title="{% if proj.public %}Shared — click for options{% else %}Share visualization{% endif %}"><span class="material-icons">link</span></button>
             </div>
           {% else %}
             —
           {% endif %}
-        </td>
-        <td class="col-public proj-public-cell{% if proj.status == 'complete' %} is-complete{% endif %}" data-proj-id="{{ proj.id }}">
-          <input type="checkbox" class="public-checkbox" data-proj-id="{{ proj.id }}"{% if proj.public %} checked{% endif %} title="Allow URL sharing">
-          <span class="public-dash">—</span>
         </td>
         {% else %}
         {% if forloop.first %}
@@ -83,7 +79,6 @@
             <span class="status-pending">Pending</span>
           {% endif %}
         </td>
-        <td rowspan="{{ pcount }}">—</td>
         <td rowspan="{{ pcount }}">—</td>
         {% endif %}
         {% endif %}
@@ -108,14 +103,13 @@
           {% endif %}
         </td>
         <td class="no-projections">—</td>
-        <td class="no-projections">—</td>
       </tr>
       {% endfor %}
 
       {% endwith %}
       {% endwith %}
     {% empty %}
-      <tr><td colspan="7" class="empty-row">No mappings yet.</td></tr>
+      <tr><td colspan="6" class="empty-row">No mappings yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -244,25 +238,105 @@ document.getElementById('job-list-form').onsubmit = function(e) {
   };
 })();
 
-// Public toggle
+// Share button
 const csrfToken = '{{ csrf_token }}';
-document.querySelectorAll('.public-checkbox').forEach(cb => {
-  cb.addEventListener('change', function() {
-    const projId = this.dataset.projId;
-    const checked = this.checked;
-    this.disabled = true;
-    fetch(`/jobs/projections/${projId}/set-public/`, {
+
+const sharePopover = document.createElement('div');
+sharePopover.className = 'share-popover';
+sharePopover.innerHTML =
+  `<button type="button" class="popover-btn popover-copy"><span class="material-icons">content_copy</span>Copy link</button>` +
+  `<button type="button" class="popover-btn popover-stop"><span class="material-icons">link_off</span>Stop sharing</button>`;
+document.body.appendChild(sharePopover);
+
+let activeShareBtn = null;
+
+function setShareActive(btn, active) {
+  btn.dataset.public = active ? 'true' : 'false';
+  btn.classList.toggle('share-btn--active', active);
+  btn.title = active ? 'Shared — click for options' : 'Share visualization';
+}
+
+function copyVizLink(btn) {
+  const url = window.location.origin + btn.dataset.vizUrl;
+  navigator.clipboard.writeText(url).catch(() => {
+    const inp = document.createElement('input');
+    inp.value = url;
+    document.body.appendChild(inp);
+    inp.select();
+    document.execCommand('copy');
+    inp.remove();
+  });
+  const icon = btn.querySelector('.material-icons');
+  icon.textContent = 'check';
+  btn.classList.add('share-btn--copied');
+
+  // Pop up "Copied to clipboard" tooltip to the right of the button
+  const toast = document.createElement('span');
+  toast.className = 'copy-toast';
+  toast.textContent = 'Copied to clipboard';
+  const rect = btn.getBoundingClientRect();
+  toast.style.top  = (rect.top  + window.scrollY + rect.height / 2) + 'px';
+  toast.style.left = (rect.right + window.scrollX + 8) + 'px';
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('copy-toast--visible'));
+
+  setTimeout(() => {
+    icon.textContent = 'link';
+    btn.classList.remove('share-btn--copied');
+    toast.classList.remove('copy-toast--visible');
+    toast.addEventListener('transitionend', () => toast.remove(), {once: true});
+  }, 1800);
+}
+
+function hideSharePopover() {
+  sharePopover.style.display = '';
+  activeShareBtn = null;
+}
+
+sharePopover.querySelector('.popover-copy').addEventListener('click', () => {
+  if (activeShareBtn) copyVizLink(activeShareBtn);
+  hideSharePopover();
+});
+
+sharePopover.querySelector('.popover-stop').addEventListener('click', () => {
+  const btn = activeShareBtn;
+  hideSharePopover();
+  if (!btn) return;
+  fetch(`/jobs/projections/${btn.dataset.projId}/set-public/`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+    body: JSON.stringify({public: false}),
+  }).then(r => { if (r.ok) setShareActive(btn, false); });
+});
+
+document.addEventListener('click', e => {
+  if (activeShareBtn && !sharePopover.contains(e.target) && e.target !== activeShareBtn) {
+    hideSharePopover();
+  }
+}, true);
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.share-btn');
+  if (!btn) return;
+  e.stopPropagation();
+  if (btn.dataset.public !== 'true') {
+    // Enable sharing, then copy URL
+    btn.disabled = true;
+    fetch(`/jobs/projections/${btn.dataset.projId}/set-public/`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-      body: JSON.stringify({public: checked}),
+      body: JSON.stringify({public: true}),
     }).then(r => {
-      if (!r.ok) this.checked = !checked; // revert on error
-    }).catch(() => {
-      this.checked = !checked;
-    }).finally(() => {
-      this.disabled = false;
-    });
-  });
+      if (r.ok) { setShareActive(btn, true); copyVizLink(btn); }
+    }).finally(() => { btn.disabled = false; });
+  } else {
+    // Show popover
+    activeShareBtn = btn;
+    sharePopover.style.display = 'flex';
+    const rect = btn.getBoundingClientRect();
+    sharePopover.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+    sharePopover.style.left = rect.left + 'px';
+  }
 });
 
 // Status polling
@@ -381,14 +455,11 @@ document.querySelectorAll('.public-checkbox').forEach(cb => {
             if (downloadCell && proj.status === 'complete' && proj.has_download) {
               const vizUrl = `/visualization/${proj.reference_id}/?overlay=${encodeURIComponent(proj.s3_uri)}`;
               downloadCell.innerHTML = `<div class="action-icons">` +
-                //`<a href="/jobs/${jobId}/" class="icon-btn" title="View report"><span class="material-icons">topic</span></a>` +
                 `<a href="/jobs/projections/${proj.id}/download/" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>` +
+                `<div class="action-sep"></div>` +
                 `<a href="${vizUrl}" class="icon-btn" title="View in explorer">${VIZ_ICON_SVG}</a>` +
+                `<button type="button" class="icon-btn share-btn" data-proj-id="${proj.id}" data-viz-url="${vizUrl}" data-public="false" title="Share visualization"><span class="material-icons">link</span></button>` +
                 `</div>`;
-            }
-            if (proj.status === 'complete') {
-              document.querySelector(`.proj-public-cell[data-proj-id="${proj.id}"]`)
-                ?.classList.add('is-complete');
             }
           });
 
@@ -468,13 +539,10 @@ tr.job-row-alt td {
 .col-date    { white-space: nowrap; color: #555; width: 11rem; }
 .col-ref     { min-width: 8rem; }
 .col-pstatus { width: 6rem; }
-.col-public  { width: 56px; text-align: center; }
-.proj-public-cell .public-checkbox { display: none; }
-.proj-public-cell.is-complete .public-checkbox { display: inline-block; }
-.proj-public-cell.is-complete .public-dash { display: none; }
 .cell-count  { font-size: 0.8rem; color: #888; }
 .ref-version-label { font-size: 0.8rem; color: #888; }
-.col-actions { width: 96px; }
+.col-actions { width: 120px; }
+.action-sep  { width: 1px; height: 16px; background: #e0e0e0; margin: 0 2px; flex-shrink: 0; }
 .no-projections { color: #bbb; }
 
 .status-complete { color: #2e7d32; font-weight: 500; }
@@ -501,6 +569,53 @@ tr.job-row-alt td {
 .viz-icon { display: block; transition: filter 0.15s; }
 .icon-btn:hover .viz-icon { filter: brightness(0.82) saturate(1.3); }
 .ref-thumb { width: 20px; height: 20px; border-radius: 2px; object-fit: cover; display: block; }
+.share-btn { border: none; background: none; cursor: pointer; padding: 0; }
+.share-btn .material-icons { color: #aaa; transition: color 0.15s; }
+.share-btn--active .material-icons { color: #1976d2; }
+.share-btn--copied .material-icons { color: #2e7d32; }
+.copy-toast {
+  position: absolute;
+  font-size: 0.78rem;
+  color: #2e7d32;
+  padding: 3px 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 0.15s;
+  z-index: 300;
+}
+.copy-toast--visible { opacity: 1; }
+.share-popover {
+  position: absolute;
+  display: none;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  overflow: hidden;
+  z-index: 200;
+  min-width: 148px;
+}
+.popover-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #333;
+  white-space: nowrap;
+  text-align: left;
+}
+.popover-btn:hover { background: #f5f5f5; }
+.popover-btn .material-icons { font-size: 16px; color: #666; }
+.popover-stop { color: #c62828; }
+.popover-stop:hover { background: #ffebee; }
+.popover-stop .material-icons { color: #c62828; }
 
 .list-footer { margin-top: 1rem; }
 .btn-delete {
