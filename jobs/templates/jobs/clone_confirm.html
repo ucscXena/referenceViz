@@ -30,17 +30,36 @@
 
   <p class="clone-note">Clicking "Add to my mappings" will create a copy in your account.</p>
 
-  <form method="post">
+  <form method="post" id="clone-form">
     {% csrf_token %}
-    <button type="submit" class="base-button">Add to my mappings</button>
+    <button type="submit" class="base-button" id="clone-btn">Add to my mappings</button>
     <a href="{% url 'job_list' %}" class="clone-cancel">Cancel</a>
   </form>
+
+<script>
+document.getElementById('clone-form').addEventListener('submit', function() {
+  const btn = document.getElementById('clone-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="clone-spinner"></span>Adding to your mappings…';
+});
+</script>
 
 {% endif %}
 
 </div>
 
 <style>
+.clone-spinner {
+  display: inline-block;
+  width: 13px; height: 13px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 .clone-note { color: #444; font-size: 0.9rem; margin: 0.75rem 0 1rem; }
 .clone-cancel { margin-left: 1rem; color: #555; font-size: 0.875rem; text-decoration: none; }
 .clone-cancel:hover { text-decoration: underline; }
