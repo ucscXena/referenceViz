@@ -34,7 +34,7 @@
       <tr>
         <th>Reference</th>
         <th>Status</th>
-        <th>Download</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -46,7 +46,11 @@
       </td>
       <td>
         {% if proj.status == 'complete' and proj.result.s3_uri %}
-          <a href="{% url 'download_projection' proj.pk %}" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>
+          <div class="action-icons">
+            <a href="{% url 'download_projection' proj.pk %}" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>
+            <div class="action-sep"></div>
+            <a href="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" class="icon-btn" title="View in explorer"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" class="viz-icon" aria-hidden="true"><circle cx="3" cy="4" r="2" fill="#8b5e3c"/><circle cx="7" cy="13" r="2.5" fill="#d4955a"/><circle cx="5" cy="8" r="1.5" fill="#60c0d8"/><circle cx="11" cy="5" r="2" fill="#3db0a0"/><circle cx="15.5" cy="3" r="2.5" fill="#4878c0"/><circle cx="17" cy="10.5" r="2" fill="#5aaa30"/><circle cx="14" cy="16.5" r="1.5" fill="#c8b818"/><circle cx="9" cy="16" r="2" fill="#8a4820"/></svg></a>
+          </div>
         {% else %}
           —
         {% endif %}
@@ -94,6 +98,7 @@ document.querySelectorAll('time[datetime]').forEach(el => {
 
 {% if job.status == 'pending' or job.status == 'running' or projections %}
 <script>
+const VIZ_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" class="viz-icon" aria-hidden="true"><circle cx="3" cy="4" r="2" fill="#8b5e3c"/><circle cx="7" cy="13" r="2.5" fill="#d4955a"/><circle cx="5" cy="8" r="1.5" fill="#60c0d8"/><circle cx="11" cy="5" r="2" fill="#3db0a0"/><circle cx="15.5" cy="3" r="2.5" fill="#4878c0"/><circle cx="17" cy="10.5" r="2" fill="#5aaa30"/><circle cx="14" cy="16.5" r="1.5" fill="#c8b818"/><circle cx="9" cy="16" r="2" fill="#8a4820"/></svg>`;
 (function() {
   const TERMINAL = new Set(['complete', 'error']);
   const QUEUED_BATCH = new Set(['SUBMITTED', 'PENDING', 'RUNNABLE']);
@@ -119,7 +124,13 @@ document.querySelectorAll('time[datetime]').forEach(el => {
           }
           const dlCell = row.cells[2];
           if (dlCell && proj.status === 'complete' && proj.has_download) {
-            dlCell.innerHTML = `<a href="/jobs/projections/${proj.id}/download/" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>`;
+            const vizUrl = `/visualization/${proj.reference_id}/?overlay=${encodeURIComponent(proj.s3_uri)}`;
+            dlCell.innerHTML =
+              `<div class="action-icons">` +
+              `<a href="/jobs/projections/${proj.id}/download/" class="icon-btn" title="Download results"><span class="material-icons">download</span></a>` +
+              `<div class="action-sep"></div>` +
+              `<a href="${vizUrl}" class="icon-btn" title="View in explorer">${VIZ_ICON_SVG}</a>` +
+              `</div>`;
           }
         });
 
@@ -184,6 +195,8 @@ document.querySelectorAll('time[datetime]').forEach(el => {
 .status-pending  { color: #888; }
 .status-error    { color: #c62828; font-weight: 500; }
 
+.action-icons { display: flex; align-items: center; gap: 2px; }
+.action-sep  { width: 1px; height: 16px; background: #e0e0e0; margin: 0 2px; flex-shrink: 0; }
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -197,6 +210,8 @@ document.querySelectorAll('time[datetime]').forEach(el => {
 }
 .icon-btn:hover { background: #e8f0fe; color: #1976d2; }
 .icon-btn .material-icons { font-size: 20px; line-height: 1; }
+.viz-icon { display: block; transition: filter 0.15s; }
+.icon-btn:hover .viz-icon { filter: brightness(0.82) saturate(1.3); }
 
 .result-box {
   border-radius: 4px;
