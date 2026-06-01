@@ -17,7 +17,7 @@
 {% else %}
 
   <h1 class="base-h1">Add to Your Mappings</h1>
-  <p class="clone-note">Someone has shared a cell mapping with you:</p>
+  <p class="clone-note">{{ original_job.user.get_full_name|default:original_job.user.username }} has shared a cell mapping with you:</p>
 
   <table class="clone-table">
     <tr><th>File</th><td>{{ original_job.original_filename }}</td></tr>
