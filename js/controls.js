@@ -76,6 +76,14 @@ export default el(class extends PureComponent {
 		this.setState({tab: value});
 	};
 
+	componentDidUpdate(prevProps) {
+		var wasOverlay = !!overlayVariables(prevProps.state.overlay).length,
+			isOverlay = !!overlayVariables(this.props.state.overlay).length;
+		if (!wasOverlay && isOverlay) {
+			this.setState({tab: 2});
+		}
+	}
+
 	onLayer = ev => {
 		var layer = ev.target.value;
 		this.props.onState(state => merge(state, {layer, hidden: [], legendSort: null}));

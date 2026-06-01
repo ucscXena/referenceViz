@@ -185,6 +185,8 @@ var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters =
 class TiledScatterplot extends PureComponent {
 	static displayName = 'TiledScatterplot';
 	getScale = memoize1(phenotypeScale);
+	_initialViewState = null;
+	_views = new OrthographicView({far: -1, near: 1});
 
 	onTooltip = ev => {
 		if (ev.index >= 0 && ev.tile) {
@@ -212,16 +214,17 @@ class TiledScatterplot extends PureComponent {
 			adj = (1 << imageState.levels - 1),
 			modelMatrix = getM(scale / adj, offset.map(c => c / adj));
 
-		var views = new OrthographicView({far: -1, near: 1}),
-			{levels, size: [iwidth, iheight],
-				fileformat = 'png'} = imageState,
-			zoom = initialZoom(props),
-			viewState = {
+		var {levels, size: [iwidth, iheight], fileformat = 'png'} = imageState;
+
+		if (!this._initialViewState) {
+			var zoom = initialZoom(props);
+			this._initialViewState = {
 				zoom,
 				minZoom: zoom,
 				maxZoom: levels,
 				target: [iwidth / 2, iheight / 2]
 			};
+		}
 
 		return deckGL({
 			ref: this.props.onDeck,
@@ -247,11 +250,11 @@ class TiledScatterplot extends PureComponent {
 				...(overlay ? [overlayLayer({data: overlay, visible: !hideOverlay,
 					overlayRadius, modelMatrix, overlayFilters})] : [])
 			],
-			views,
+			views: this._views,
 			controller: true,
 			coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
 			getCursor: () => 'inherit',
-			initialViewState: props.viewState || viewState,
+			initialViewState: this._initialViewState,
 			onClick: this.onTooltip,
 			style: {backgroundColor: '#FFFFFF'}
 		});
