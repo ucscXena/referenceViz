@@ -835,7 +835,8 @@ def chat(request, pk):
         charts = []
         for _ in range(5):  # allow up to 5 tool-call rounds
             response = client.messages.create(
-                model='claude-haiku-4-5-20251001',
+#                model='claude-haiku-4-5-20251001',
+                model='claude-sonnet-4-6',
                 max_tokens=1024,
                 system=system_prompt,
                 messages=thread,
