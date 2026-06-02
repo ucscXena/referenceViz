@@ -765,6 +765,8 @@ def _build_system_prompt(job, chunks=None):
         "are stored as categories; compare_columns is the right tool for any pairwise "
         "analysis. Filters can be applied to restrict the analysis to a subset of cells.",
         "",
+        "Do not use strikethrough formatting (~~text~~) in your responses.",
+        "",
         "After your response, if there are specific follow-up questions worth surfacing, "
         "append them as a suggestions block on the very last line, with no trailing text:\n"
         "<suggestions>[\"Question one?\", \"Question two?\", \"Question three?\"]</suggestions>\n"
@@ -790,14 +792,20 @@ def _extract_suggestions(text: str) -> tuple[str, list]:
     """Strip a trailing <suggestions>[...]</suggestions> block from the response text.
     Returns (cleaned_text, suggestions_list). suggestions_list is [] on parse failure."""
     m = _SUGGESTIONS_RE.search(text)
-    if not m:
-        return text, []
-    try:
-        suggestions = json.loads(m.group(1))
-        if isinstance(suggestions, list):
-            return text[:m.start()].rstrip(), [str(s) for s in suggestions]
-    except (json.JSONDecodeError, ValueError):
-        pass
+    if m:
+        try:
+            suggestions = json.loads(m.group(1))
+            if isinstance(suggestions, list):
+                return text[:m.start()].rstrip(), [str(s) for s in suggestions]
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # Truncated response: <suggestions> opened but </suggestions> never written.
+    # Strip from the opening tag to end of string so it doesn't leak into content.
+    partial = re.search(r'\s*<suggestions>', text)
+    if partial:
+        return text[:partial.start()].rstrip(), []
+
     return text, []
 
 
@@ -837,7 +845,7 @@ def chat(request, pk):
             response = client.messages.create(
 #                model='claude-haiku-4-5-20251001',
                 model='claude-sonnet-4-6',
-                max_tokens=1024,
+                max_tokens=4096,
                 system=system_prompt,
                 messages=thread,
                 tools=TOOLS,
