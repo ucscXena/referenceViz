@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from .aws import boto_client
-from .models import Job, JobEvent, Projection, ProjectionEvent, Reference, ReferenceGroup, UCEModel
+from .models import ConversationMessage, Job, JobEvent, Projection, ProjectionEvent, Reference, ReferenceGroup, UCEModel
 
 
 def _presigned_link(s3_uri, label):
@@ -297,3 +297,25 @@ class ProjectionAdmin(admin.ModelAdmin):
         url = f'/visualization/{obj.reference_id}/?overlay={quote(s3_uri, safe="")}'
         return format_html('<a href="{}" target="_blank">Open visualization</a>', url)
     viz_link.short_description = 'Visualization'
+
+
+@admin.register(ConversationMessage)
+class ConversationMessageAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'job_link', 'generation', 'role', 'hidden', 'content_preview')
+    list_filter = ('role', 'hidden', 'generation')
+    readonly_fields = ('job', 'generation', 'role', 'hidden', 'content', 'charts', 'suggestions', 'created_at')
+    ordering = ('-created_at',)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('job__user')
+
+    def job_link(self, obj):
+        label = f'{str(obj.job_id)[:8]} · {obj.job.user.username}'
+        url = reverse('admin:jobs_job_change', args=[obj.job_id])
+        return format_html('<a href="{}">{}</a>', url, label)
+    job_link.short_description = 'Job'
+    job_link.admin_order_field = 'job'
+
+    def content_preview(self, obj):
+        return obj.content[:80] + '…' if len(obj.content) > 80 else obj.content
+    content_preview.short_description = 'Content'

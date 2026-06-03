@@ -77,7 +77,10 @@
   </table>
   {% endif %}
 
-  <h2 class="section-heading">Mapping summary</h2>
+  <div class="chat-heading-row">
+    <h2 class="section-heading">Mapping summary</h2>
+    <button class="chat-reset-btn" id="chat-reset-btn" title="Reset conversation">Reset</button>
+  </div>
   <div class="chat-container">
     <div class="chat-messages" id="chat-messages"></div>
     <form class="chat-input-row" id="chat-form" autocomplete="off">
@@ -332,6 +335,21 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
 }
 .chat-send:disabled { background: #bdbdbd; cursor: default; }
 .chat-send:not(:disabled):hover { background: #1565c0; }
+.chat-heading-row {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+.chat-reset-btn {
+  font-size: 0.75rem;
+  color: #888;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+.chat-reset-btn:hover { color: #333; }
 
 .plot-group {
   display: flex;
@@ -470,12 +488,11 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
 (function() {
-  const CHAT_URL = '{% url "job_chat" job.pk %}';
+  const CHAT_URL  = '{% url "job_chat" job.pk %}';
+  const RESET_URL = '{% url "job_chat_reset" job.pk %}';
   const CSRF = '{{ csrf_token }}';
-  const STORAGE_KEY = 'chat_{{ job.pk }}';
-  const PROJ_KEY    = 'proj_{{ job.pk }}';
-  const ORIENT_KEY  = 'orient_{{ job.pk }}';
-  const COMPLETE_PROJ_IDS = new Set({{ complete_proj_ids|tojson }});
+  const ORIENT_KEY = 'orient_{{ job.pk }}';
+  const JOB_COMPLETE = {{ job.status|yesno:"true,false" }};
   const messages = [];
 
   const form = document.getElementById('chat-form');
@@ -748,63 +765,89 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     return div;
   }
 
+  function renderConversation(msgs) {
+    log.innerHTML = '';
+    const lastAssistantIdx = msgs.reduce((acc, m, i) => m.role === 'assistant' ? i : acc, -1);
+    let lastEl = null;
+    msgs.forEach((msg, idx) => {
+      if (msg.role === 'user' && !msg.hidden) {
+        lastEl = addBubble('user', msg.content);
+      } else if (msg.role === 'assistant') {
+        const div = addBubble('assistant', '');
+        div.innerHTML = marked.parse(msg.content || '');
+        postProcessChartRefs(div);
+        lastEl = div;
+        if (msg.charts && msg.charts.length) {
+          const pg = renderPlotGroup(msg.charts);
+          div.insertAdjacentElement('afterend', pg);
+          lastEl = pg;
+        }
+        if (idx === lastAssistantIdx && msg.suggestions && msg.suggestions.length) {
+          renderSuggestions(msg.suggestions, lastEl);
+        }
+      }
+    });
+    if (lastEl) lastEl.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }
+
   function sendMessage(text, {hidden = false} = {}) {
     clearSuggestions();
     btn.disabled = true;
-    messages.push({role: 'user', content: text, hidden});
+    const prevCount = messages.length;
+
     if (!hidden) addBubble('user', text);
     const thinking = addThinkingBubble(hidden ? 'Summarizing projection results…' : null);
+    thinking.scrollIntoView({behavior: 'smooth', block: 'nearest'});
 
-    const apiMessages = messages.map(m => ({
-      role: m.role,
-      content: m.charts?.length
-        ? m.charts.map(c => `[Chart rendered (${c.open === false ? 'collapsed' : 'expanded'}): ${c.col_a} × ${c.col_b}]`).join(' ') + '\n' + m.content
-        : m.content,
-    }));
     fetch(CHAT_URL, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
-      body: JSON.stringify({messages: apiMessages}),
+      body: JSON.stringify({message: text, hidden}),
     })
       .then(r => r.json())
       .then(data => {
         if (data.error) {
           thinking.className = 'chat-bubble chat-bubble--error';
           thinking.textContent = 'Error: ' + data.error;
-          messages.pop();
+          return;
+        }
+        const content = (data.content || '').trim();
+        const charts = data.charts || [];
+        if (!content && !charts.length) {
+          thinking.className = 'chat-bubble chat-bubble--error';
+          thinking.textContent = 'Empty response — please try again.';
+          return;
+        }
+
+        messages.length = 0;
+        messages.push(...data.messages);
+
+        // Full re-render if another tab added messages, otherwise incremental
+        if (messages.length !== prevCount + 2) {
+          thinking.remove();
+          renderConversation(messages);
         } else {
-          const charts = data.charts || [];
-          const suggestions = data.suggestions || [];
-          const content = (data.content || '').trim();
-          if (!content && !charts.length) {
-            thinking.className = 'chat-bubble chat-bubble--error';
-            thinking.textContent = 'Empty response — please try again.';
-            messages.pop();
-            return;
-          }
+          const assistantMsg = messages[messages.length - 1];
           thinking.classList.remove('chat-bubble--thinking');
           let afterEl = thinking;
           if (content) {
-            thinking.innerHTML = marked.parse(data.content);
+            thinking.innerHTML = marked.parse(content);
             postProcessChartRefs(thinking);
           } else {
             thinking.style.display = 'none';
           }
-          if (charts.length > 0) {
-            const plotGroup = renderPlotGroup(charts);
-            thinking.insertAdjacentElement('afterend', plotGroup);
-            afterEl = plotGroup;
+          if (charts.length) {
+            const pg = renderPlotGroup(charts);
+            thinking.insertAdjacentElement('afterend', pg);
+            afterEl = pg;
           }
-          messages.push({role: 'assistant', content: data.content, charts, suggestions});
-          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-          sessionStorage.setItem(PROJ_KEY, JSON.stringify([...COMPLETE_PROJ_IDS]));
-          renderSuggestions(suggestions, afterEl);
+          afterEl.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+          renderSuggestions(assistantMsg.suggestions || [], afterEl);
         }
       })
       .catch(() => {
         thinking.className = 'chat-bubble chat-bubble--error';
         thinking.textContent = 'Network error — please try again.';
-        messages.pop();
       })
       .finally(() => { btn.disabled = false; });
   }
@@ -832,49 +875,36 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     sendMessage(text);
   });
 
-  // Restore saved session
-  const saved = sessionStorage.getItem(STORAGE_KEY);
-  if (saved) {
-    try {
-      const prior = JSON.parse(saved);
-      const lastAssistantIdx = prior.reduce((acc, m, i) => m.role === 'assistant' ? i : acc, -1);
-      let lastBubble = null;
-      prior.forEach((msg, idx) => {
-        if (msg.role === 'user' && !msg.hidden) {
-          addBubble('user', msg.content);
-        } else if (msg.role === 'assistant') {
-          const div = addBubble('assistant', '');
-          div.innerHTML = marked.parse(msg.content);
-          postProcessChartRefs(div);
-          let afterEl = div;
-          if (msg.charts && msg.charts.length > 0) {
-            const plotGroup = renderPlotGroup(msg.charts);
-            div.insertAdjacentElement('afterend', plotGroup);
-            afterEl = plotGroup;
-          }
-          if (idx === lastAssistantIdx) lastBubble = afterEl;
-        }
+  // Reset button
+  document.getElementById('chat-reset-btn').addEventListener('click', () => {
+    if (!confirm('Reset this conversation? The history will be cleared.')) return;
+    fetch(RESET_URL, {method: 'POST', headers: {'X-CSRFToken': CSRF}})
+      .then(() => {
+        messages.length = 0;
+        log.innerHTML = '';
+        clearSuggestions();
+        if (JOB_COMPLETE) sendMessage('Summarize my mapping results.', {hidden: true});
       });
-      messages.push(...prior);
+  });
 
-      // Show suggestions from the last assistant message
-      const lastMsg = prior[lastAssistantIdx];
-      if (lastMsg && lastMsg.suggestions && lastMsg.suggestions.length) {
-        renderSuggestions(lastMsg.suggestions, lastBubble);
+  // Load conversation from server
+  fetch(CHAT_URL, {headers: {'X-CSRFToken': CSRF}})
+    .then(r => r.json())
+    .then(data => {
+      if (data.messages && data.messages.length) {
+        messages.push(...data.messages);
+        renderConversation(messages);
+        if (data.has_new_projections) {
+          const lastEl = log.lastElementChild;
+          renderSuggestions(['Summarize my new projection results.'], lastEl);
+        }
+      } else if (JOB_COMPLETE) {
+        sendMessage('Summarize my mapping results.', {hidden: true});
       }
-
-      // Detect new projections completed since last visit
-      const storedProjs = new Set(JSON.parse(sessionStorage.getItem(PROJ_KEY) || '[]'));
-      const hasNew = [...COMPLETE_PROJ_IDS].some(id => !storedProjs.has(id));
-      if (hasNew) {
-        renderSuggestions(['Summarize my new projection results.'], lastBubble);
-      }
-    } catch (e) {}
-  }
-
-  {% if job.status == 'complete' %}
-  if (!saved) sendMessage('Summarize my mapping results.', {hidden: true});
-  {% endif %}
+    })
+    .catch(() => {
+      if (JOB_COMPLETE) sendMessage('Summarize my mapping results.', {hidden: true});
+    });
 })();
 </script>
 {% endblock %}

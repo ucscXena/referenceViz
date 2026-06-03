@@ -77,6 +77,7 @@ class Job(models.Model):
     s3_output_key = models.CharField(max_length=500, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     result = models.JSONField(null=True, blank=True)
+    current_conversation = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -189,3 +190,20 @@ class ShareToken(models.Model):
 
     def __str__(self):
         return f'ShareToken for Job {str(self.job_id)[:8]} (expires {self.expires_at:%Y-%m-%d})'
+
+
+class ConversationMessage(models.Model):
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='conversation_messages')
+    generation = models.PositiveSmallIntegerField(default=0)
+    role = models.CharField(max_length=10)   # 'user' | 'assistant'
+    content = models.TextField()
+    charts = models.JSONField(default=list)
+    suggestions = models.JSONField(default=list)
+    hidden = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f'[{self.role}] Job {str(self.job_id)[:8]} gen={self.generation}'

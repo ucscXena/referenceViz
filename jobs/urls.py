@@ -1,7 +1,7 @@
 from django.urls import path
 
 from . import views
-from .chat import chat
+from .chat import chat, reset_chat
 
 urlpatterns = [
     path('', views.job_list, name='job_list'),
@@ -13,6 +13,7 @@ urlpatterns = [
     path('<uuid:pk>/', views.job_detail, name='job_detail'),
     path('<uuid:pk>/status/', views.job_status, name='job_status'),
     path('<uuid:pk>/chat/', chat, name='job_chat'),
+    path('<uuid:pk>/chat/reset/', reset_chat, name='job_chat_reset'),
     path('<uuid:pk>/download/', views.download_result, name='download_result'),
     path('<uuid:job_id>/abort/', views.abort_upload, name='abort_upload'),
     path('<uuid:job_id>/confirm/', views.confirm_upload, name='confirm_upload'),

@@ -9,10 +9,10 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from pgvector.django import CosineDistance
 
-from .models import DocumentChunk, Job
+from .models import ConversationMessage, DocumentChunk, Job, Projection
 from .projection_summary import compare_columns_stat, compute_projection_summary
 
 logger = logging.getLogger(__name__)
@@ -809,41 +809,95 @@ def _extract_suggestions(text: str) -> tuple[str, list]:
     return text, []
 
 
+def _serialize_messages(db_messages):
+    result = []
+    for msg in db_messages:
+        d = {'role': msg.role, 'content': msg.content, 'hidden': msg.hidden}
+        if msg.charts:
+            d['charts'] = msg.charts
+        if msg.suggestions:
+            d['suggestions'] = msg.suggestions
+        result.append(d)
+    return result
+
+
+def _db_to_api_messages(db_messages):
+    """Convert DB messages to Claude API format, folding chart data into text."""
+    result = []
+    for msg in db_messages:
+        if msg.role == 'user':
+            result.append({'role': 'user', 'content': msg.content})
+        else:
+            content = msg.content
+            if msg.charts:
+                descs = ' '.join(
+                    f"[Chart rendered ({'collapsed' if c.get('open') is False else 'expanded'}): "
+                    f"{c['col_a']} × {c['col_b']}]"
+                    for c in msg.charts
+                )
+                content = descs + ('\n' + content if content else '')
+            result.append({'role': 'assistant', 'content': content})
+    return result
+
+
+def _has_new_projections(job):
+    """True if any projection completed after the most recent conversation message."""
+    last = ConversationMessage.objects.filter(
+        job=job, generation=job.current_conversation
+    ).order_by('-created_at').first()
+    if not last:
+        return False
+    return Projection.objects.filter(
+        job=job, status='complete', updated_at__gt=last.created_at
+    ).exists()
+
+
+@require_http_methods(['GET', 'POST'])
 @login_required
-@require_POST
 def chat(request, pk):
     job = get_object_or_404(Job, pk=pk)
     if job.user != request.user and not request.user.is_staff:
         return JsonResponse({'error': 'Forbidden'}, status=403)
 
+    gen = job.current_conversation
+
+    if request.method == 'GET':
+        msgs = ConversationMessage.objects.filter(job=job, generation=gen)
+        return JsonResponse({
+            'messages': _serialize_messages(msgs),
+            'has_new_projections': _has_new_projections(job),
+        })
+
+    # POST — receive a single new user message
     try:
         body = json.loads(request.body)
-        messages = body.get('messages', [])
+        user_text = body.get('message', '').strip()
+        hidden = bool(body.get('hidden', False))
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'error': 'Invalid request body'}, status=400)
 
-    if not messages or not isinstance(messages, list):
-        return JsonResponse({'error': 'messages must be a non-empty list'}, status=400)
+    if not user_text:
+        return JsonResponse({'error': 'message is required'}, status=400)
 
     api_key = getattr(settings, 'ANTHROPIC_API_KEY', '')
     if not api_key:
         return JsonResponse({'error': 'Chatbot not configured'}, status=503)
 
+    user_msg = ConversationMessage.objects.create(
+        job=job, generation=gen, role='user', content=user_text, hidden=hidden,
+    )
+
+    db_messages = ConversationMessage.objects.filter(job=job, generation=gen)
+    chunks = retrieve_chunks(user_text)
+    system_prompt = _build_system_prompt(job, chunks)
     client = anthropic.Anthropic(api_key=api_key)
 
-    last_user_message = next(
-        (m['content'] for m in reversed(messages) if m.get('role') == 'user'), ''
-    )
-    chunks = retrieve_chunks(last_user_message)
-    system_prompt = _build_system_prompt(job, chunks)
-
     try:
-        thread = list(messages)
+        thread = _db_to_api_messages(db_messages)
         response = None
         charts = []
-        for _ in range(5):  # allow up to 5 tool-call rounds
+        for _ in range(5):
             response = client.messages.create(
-#                model='claude-haiku-4-5-20251001',
                 model='claude-sonnet-4-6',
                 max_tokens=4096,
                 system=system_prompt,
@@ -878,7 +932,17 @@ def chat(request, pk):
 
         text = next((b.text for b in response.content if hasattr(b, 'text')), '')
         text, suggestions = _extract_suggestions(text)
-        resp = {'content': text}
+
+        ConversationMessage.objects.create(
+            job=job, generation=gen, role='assistant',
+            content=text, charts=charts, suggestions=suggestions,
+        )
+
+        all_msgs = ConversationMessage.objects.filter(job=job, generation=gen)
+        resp = {
+            'content': text,
+            'messages': _serialize_messages(all_msgs),
+        }
         if charts:
             resp['charts'] = charts
         if suggestions:
@@ -886,4 +950,17 @@ def chat(request, pk):
         return JsonResponse(resp)
 
     except anthropic.APIError as e:
+        user_msg.delete()
         return JsonResponse({'error': str(e)}, status=502)
+
+
+@require_POST
+@login_required
+def reset_chat(request, pk):
+    job = get_object_or_404(Job, pk=pk)
+    if job.user != request.user and not request.user.is_staff:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+    from django.db.models import F
+    job.current_conversation = F('current_conversation') + 1
+    job.save(update_fields=['current_conversation'])
+    return JsonResponse({})
