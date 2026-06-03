@@ -1,0 +1,6 @@
+DBFORWARD=true python manage.py dumpdata \
+  auth.user jobs.reference jobs.referencegroup jobs.ucemodel jobs.job jobs.projection \
+  --natural-foreign --natural-primary \
+  --exclude jobs.documentchunk --exclude jobs.sharetoken \
+  --indent 2 \
+  > jobs/fixtures/dev_sample.json

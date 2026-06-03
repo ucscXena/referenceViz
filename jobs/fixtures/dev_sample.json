@@ -1,0 +1,3281 @@
+[
+  {
+    "model": "auth.user",
+    "fields": {
+      "password": "!",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "brian",
+      "first_name": "Brian",
+      "last_name": "Craft",
+      "email": "brian@example.com",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2025-11-19T18:08:39.065Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "fields": {
+      "password": "!",
+      "last_login": null,
+      "is_superuser": true,
+      "username": "jingchun",
+      "first_name": "Jingchun",
+      "last_name": "Zhu",
+      "email": "jingchun@example.com",
+      "is_staff": true,
+      "is_active": true,
+      "date_joined": "2025-11-19T20:12:32Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "jobs.reference",
+    "pk": "09f51fc0-39dd-46a9-86e7-fe56950eb14c",
+    "fields": {
+      "group": "d7fb56ac-6398-46df-8761-08319fb60a39",
+      "uce_model": 1,
+      "s3_uri": "s3://latentbrain/HNOCA_Extended_scRNAseq",
+      "version_label": "version 1 scRNAseq",
+      "notes": "v2/v3/Drop-seq\r\nPCA50 projected out v2/v3 mean diff direction\r\nsupervised PUMAP with target_weight=0.5",
+      "is_active": true,
+      "created_at": "2026-05-06T06:51:50.744Z"
+    }
+  },
+  {
+    "model": "jobs.reference",
+    "pk": "510965c8-ad3c-49ae-8777-b4b4c888db82",
+    "fields": {
+      "group": "d7fb56ac-6398-46df-8761-08319fb60a39",
+      "uce_model": 1,
+      "s3_uri": "s3://latentbrain/HNOCA_Extended_10x3_scRNAseq",
+      "version_label": "version 1 scRNA-seq 10x3'v3",
+      "notes": "",
+      "is_active": true,
+      "created_at": "2026-04-10T22:20:13.019Z"
+    }
+  },
+  {
+    "model": "jobs.reference",
+    "pk": "7b31dcca-b245-417d-866f-0b2042bb22b2",
+    "fields": {
+      "group": "b8a6db34-35fd-4746-bfd5-42c2cf8ecae8",
+      "uce_model": 1,
+      "s3_uri": "s3://latentbrain/HumanDevelopmental_v2_shuffled",
+      "version_label": "version 2",
+      "notes": "bf16 on AWS",
+      "is_active": true,
+      "created_at": "2026-04-09T20:46:47.806Z"
+    }
+  },
+  {
+    "model": "jobs.reference",
+    "pk": "b3a873b2-7981-4088-afb9-b4e8b8e05dca",
+    "fields": {
+      "group": "6651ae8b-e637-4cce-9e8b-3998bb76eeef",
+      "uce_model": 1,
+      "s3_uri": "s3://latentbrain/combined_UCE_5neuro",
+      "version_label": "version 1",
+      "notes": "",
+      "is_active": true,
+      "created_at": "2026-03-11T16:43:03.158Z"
+    }
+  },
+  {
+    "model": "jobs.reference",
+    "pk": "f5e9258a-113f-442f-841d-e689f105a8e4",
+    "fields": {
+      "group": "b8a6db34-35fd-4746-bfd5-42c2cf8ecae8",
+      "uce_model": 1,
+      "s3_uri": "s3://latentbrain/Wang2025Nature",
+      "version_label": "version 1",
+      "notes": "",
+      "is_active": true,
+      "created_at": "2026-03-17T17:41:14.522Z"
+    }
+  },
+  {
+    "model": "jobs.reference",
+    "pk": "ff9982c2-06cc-4376-930b-186fcbc1fd82",
+    "fields": {
+      "group": "d7fb56ac-6398-46df-8761-08319fb60a39",
+      "uce_model": 1,
+      "s3_uri": "s3://latentbrain/HNOCA_Extended",
+      "version_label": "version 1",
+      "notes": "",
+      "is_active": true,
+      "created_at": "2026-03-16T21:50:27.743Z"
+    }
+  },
+  {
+    "model": "jobs.referencegroup",
+    "pk": "6651ae8b-e637-4cce-9e8b-3998bb76eeef",
+    "fields": {
+      "title": "Adult human brain",
+      "default_version": "b3a873b2-7981-4088-afb9-b4e8b8e05dca",
+      "created_at": "2026-04-07T17:35:01.116Z"
+    }
+  },
+  {
+    "model": "jobs.referencegroup",
+    "pk": "b8a6db34-35fd-4746-bfd5-42c2cf8ecae8",
+    "fields": {
+      "title": "Developing human brain",
+      "default_version": "7b31dcca-b245-417d-866f-0b2042bb22b2",
+      "created_at": "2026-04-07T17:35:01.130Z"
+    }
+  },
+  {
+    "model": "jobs.referencegroup",
+    "pk": "d7fb56ac-6398-46df-8761-08319fb60a39",
+    "fields": {
+      "title": "Human brain organoid",
+      "default_version": "09f51fc0-39dd-46a9-86e7-fe56950eb14c",
+      "created_at": "2026-04-07T17:35:01.126Z"
+    }
+  },
+  {
+    "model": "jobs.ucemodel",
+    "pk": 1,
+    "fields": {
+      "name": "UCE 2023",
+      "model_url": "s3://ucsc-brainexplorer/uce_model_files",
+      "is_default": true,
+      "notes": "\"label\": \"UCE 2023\",\r\n\"file\": \"UCE 33l_8ep_1024t_1280.torch\",\r\n\"uri\": \"https://figshare.com/articles/dataset/Universal_Cell_Embedding_Model_Files/24320806?file=43423236\"",
+      "created_at": "2026-04-07T17:35:01.108Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "482281fe-e5ad-4ec7-a407-dcfa233b140e",
+    "fields": {
+      "user": [
+        "brian"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "",
+      "original_filename": "Jorstad_MTG_10K.h5ad",
+      "s3_input_key": "",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "cell_count": 10000,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/482281fe-e5ad-4ec7-a407-dcfa233b140e/output.h5ad"
+      },
+      "created_at": "2026-05-29T22:34:21.525Z",
+      "updated_at": "2026-05-29T22:34:21.525Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "64a45407-9748-46f0-86bb-dddbe92b68ce",
+    "fields": {
+      "user": [
+        "brian"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "",
+      "original_filename": "10k_pbmcs_proc.h5ad",
+      "s3_input_key": "",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "cell_count": 11990,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/64a45407-9748-46f0-86bb-dddbe92b68ce/output.h5ad"
+      },
+      "created_at": "2026-05-29T22:53:41.379Z",
+      "updated_at": "2026-05-29T22:53:41.379Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "6534aaf0-f7a4-4317-a628-6ab254d4ac0d",
+    "fields": {
+      "user": [
+        "jingchun"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "",
+      "original_filename": "BG_Macaque_50KMacaque_HMBA_basalganglia_AIT_pre-print_50K_uce_adata.h5ad",
+      "s3_input_key": "uploads/6534aaf0-f7a4-4317-a628-6ab254d4ac0d/BG_Macaque_50KMacaque_HMBA_basalganglia_AIT_pre-print_50K_uce_adata.h5ad",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "num_gpus": 4,
+        "cell_count": 50000,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/6534aaf0-f7a4-4317-a628-6ab254d4ac0d/output.h5ad"
+      },
+      "created_at": "2026-03-22T17:41:22.524Z",
+      "updated_at": "2026-03-22T18:43:34.220Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "67b23280-19fb-4103-998a-9604b796e21c",
+    "fields": {
+      "user": [
+        "jingchun"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "",
+      "original_filename": "aa369999-a034-4ad9-b459-8a93c86ea77b.h5ad",
+      "s3_input_key": "uploads/67b23280-19fb-4103-998a-9604b796e21c/aa369999-a034-4ad9-b459-8a93c86ea77b.h5ad",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "num_gpus": 4,
+        "cell_count": 232328,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/67b23280-19fb-4103-998a-9604b796e21c/output.h5ad",
+        "cells_per_second": 36.12125459340443
+      },
+      "created_at": "2026-04-02T05:22:31.355Z",
+      "updated_at": "2026-04-02T07:02:01.695Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "774a01e8-e2f5-4d28-855c-4199affcafd9",
+    "fields": {
+      "user": [
+        "jingchun"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "",
+      "original_filename": "Bowles_2021_20K.h5ad",
+      "s3_input_key": "uploads/774a01e8-e2f5-4d28-855c-4199affcafd9/Bowles_2021_20K.h5ad",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "num_gpus": 4,
+        "cell_count": 20000,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/774a01e8-e2f5-4d28-855c-4199affcafd9/output.h5ad",
+        "cells_per_second": 14.809093731444126
+      },
+      "created_at": "2026-03-25T07:22:57.432Z",
+      "updated_at": "2026-03-25T07:52:12.021Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "82c05152-d5ef-4dd7-9862-3b2dcb5330ed",
+    "fields": {
+      "user": [
+        "jingchun"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "",
+      "original_filename": "rhn_27_30_annotated_10K.h5ad",
+      "s3_input_key": "uploads/82c05152-d5ef-4dd7-9862-3b2dcb5330ed/rhn_27_30_annotated_10K.h5ad",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "cell_count": 10000,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/82c05152-d5ef-4dd7-9862-3b2dcb5330ed/output.h5ad"
+      },
+      "created_at": "2026-03-17T17:46:04.283Z",
+      "updated_at": "2026-03-17T17:59:56.288Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "856368d1-3d16-4226-982c-28077d66284d",
+    "fields": {
+      "user": [
+        "brian"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "",
+      "original_filename": "example_input.h5ad",
+      "s3_input_key": "",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "cell_count": 301,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/856368d1-3d16-4226-982c-28077d66284d/output.h5ad"
+      },
+      "created_at": "2026-05-29T22:46:59.508Z",
+      "updated_at": "2026-05-29T22:46:59.508Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "90eea19b-0680-4c76-aa99-f058ab3447e9",
+    "fields": {
+      "user": [
+        "jingchun"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "",
+      "original_filename": "53ce2631-3646-4172-bbd9-38b0a44d8214.h5ad",
+      "s3_input_key": "uploads/90eea19b-0680-4c76-aa99-f058ab3447e9/53ce2631-3646-4172-bbd9-38b0a44d8214.h5ad",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "num_gpus": 4,
+        "cell_count": 45549,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/90eea19b-0680-4c76-aa99-f058ab3447e9/output.h5ad",
+        "cells_per_second": 36.51015064392803
+      },
+      "created_at": "2026-03-30T23:10:58.023Z",
+      "updated_at": "2026-03-30T23:34:24.383Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "a09ed0ab-1fe6-4b26-b513-d6d0a48cee41",
+    "fields": {
+      "user": [
+        "jingchun"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "21d2e611-d9f5-4de9-9492-b3f2a03a1686",
+      "original_filename": "rhn_27_30_annotated_day105.h5ad",
+      "s3_input_key": "uploads/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/rhn_27_30_annotated_day105.h5ad",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "num_gpus": 4,
+        "cell_count": 106316,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/output.h5ad",
+        "cells_per_second": 35.87265548898763
+      },
+      "created_at": "2026-04-13T20:12:46.935Z",
+      "updated_at": "2026-04-13T21:55:58.848Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "acb3a626-72b4-427b-b845-fee2dfade640",
+    "fields": {
+      "user": [
+        "jingchun"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "",
+      "original_filename": "53ce2631-3646-4172-bbd9-38b0a44d8214_symbols.h5ad",
+      "s3_input_key": "uploads/acb3a626-72b4-427b-b845-fee2dfade640/53ce2631-3646-4172-bbd9-38b0a44d8214_symbols.h5ad",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "num_gpus": 4,
+        "cell_count": 45549,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/acb3a626-72b4-427b-b845-fee2dfade640/output.h5ad",
+        "cells_per_second": 15.096534768460284
+      },
+      "created_at": "2026-03-31T18:05:39.434Z",
+      "updated_at": "2026-03-31T19:00:15.935Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "ae81a792-d8c3-4c8e-8aa7-fa8ab30ae73f",
+    "fields": {
+      "user": [
+        "jingchun"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "6878d6b1-ef77-4389-85fc-0c91192d527a",
+      "original_filename": "HCcHO_05_BA9-FC_21A_cell_annotation_test_with_mmc_and_cellbender.h5ad",
+      "s3_input_key": "uploads/ae81a792-d8c3-4c8e-8aa7-fa8ab30ae73f/HCcHO_05_BA9-FC_21A_cell_annotation_test_with_mmc_and_cellbender.h5ad",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "num_gpus": 4,
+        "cell_count": 20185,
+        "started_at": "2026-05-08T20:05:26.493022+00:00",
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/ae81a792-d8c3-4c8e-8aa7-fa8ab30ae73f/output.h5ad",
+        "batch_status": "RUNNING",
+        "cells_per_second": 59.316378757067845
+      },
+      "created_at": "2026-05-08T20:00:14.633Z",
+      "updated_at": "2026-05-08T20:09:01.164Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "b66905af-9292-4262-b808-6475aade3244",
+    "fields": {
+      "user": [
+        "jingchun"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "",
+      "original_filename": "Fleck_2022_feature_name.h5ad",
+      "s3_input_key": "uploads/b66905af-9292-4262-b808-6475aade3244/Fleck_2022_feature_name.h5ad",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "num_gpus": 4,
+        "cell_count": 32278,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/b66905af-9292-4262-b808-6475aade3244/output.h5ad",
+        "cells_per_second": 15.010429551351628
+      },
+      "created_at": "2026-03-24T19:18:53.993Z",
+      "updated_at": "2026-03-24T20:02:13.151Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "bdd2d041-98ff-49a3-8d20-2d40c7f8cddc",
+    "fields": {
+      "user": [
+        "jingchun"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "",
+      "original_filename": "Fleck_2022_no_feature_name_1k.h5ad",
+      "s3_input_key": "uploads/bdd2d041-98ff-49a3-8d20-2d40c7f8cddc/Fleck_2022_no_feature_name_1k.h5ad",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "num_gpus": 4,
+        "cell_count": 1000,
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/bdd2d041-98ff-49a3-8d20-2d40c7f8cddc/output.h5ad",
+        "cells_per_second": 14.938262068898164
+      },
+      "created_at": "2026-03-24T22:24:13.830Z",
+      "updated_at": "2026-03-24T22:30:52.318Z"
+    }
+  },
+  {
+    "model": "jobs.job",
+    "pk": "e49b3fc2-febe-4f4a-a410-83409dbbfc07",
+    "fields": {
+      "user": [
+        "jingchun"
+      ],
+      "uce_model": 1,
+      "batch_job_id": "0f0c53b2-832c-4a00-9e2b-4a78607385e9",
+      "original_filename": "example_input.h5ad",
+      "s3_input_key": "uploads/e49b3fc2-febe-4f4a-a410-83409dbbfc07/example_input.h5ad",
+      "s3_output_key": "",
+      "status": "complete",
+      "result": {
+        "num_gpus": 4,
+        "cell_count": 301,
+        "started_at": "2026-05-18T22:55:01.869385+00:00",
+        "uce_s3_uri": "s3://ucsc-brainexplorer/uce-results/e49b3fc2-febe-4f4a-a410-83409dbbfc07/output.h5ad",
+        "batch_status": "RUNNING",
+        "cells_per_second": 36.43891891338267
+      },
+      "created_at": "2026-05-18T22:49:52.307Z",
+      "updated_at": "2026-05-18T22:55:32.928Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "092362b9-4270-4968-a74f-14b0091884c0",
+    "fields": {
+      "job": "a09ed0ab-1fe6-4b26-b513-d6d0a48cee41",
+      "reference": "510965c8-ad3c-49ae-8777-b4b4c888db82",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "0a26a51d-3712-4c76-ae23-3781243c922a",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/510965c8-ad3c-49ae-8777-b4b4c888db82/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/510965c8-ad3c-49ae-8777-b4b4c888db82/predictions.tsv"
+      },
+      "created_at": "2026-04-13T22:48:39.580Z",
+      "updated_at": "2026-04-13T22:53:18.512Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "16a957e9-f0a9-44d2-8e01-2e94783eff1a",
+    "fields": {
+      "job": "67b23280-19fb-4103-998a-9604b796e21c",
+      "reference": "f5e9258a-113f-442f-841d-e689f105a8e4",
+      "status": "complete",
+      "public": true,
+      "batch_job_id": "cc09dec8-5011-4fe6-828c-7270d736cbbe",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/67b23280-19fb-4103-998a-9604b796e21c/f5e9258a-113f-442f-841d-e689f105a8e4/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/67b23280-19fb-4103-998a-9604b796e21c/f5e9258a-113f-442f-841d-e689f105a8e4/predictions.tsv"
+      },
+      "created_at": "2026-04-02T05:26:10.960Z",
+      "updated_at": "2026-04-02T15:29:59.443Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "19186c38-69ad-4f46-8daa-58367eb5cc72",
+    "fields": {
+      "job": "64a45407-9748-46f0-86bb-dddbe92b68ce",
+      "reference": "b3a873b2-7981-4088-afb9-b4e8b8e05dca",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/64a45407-9748-46f0-86bb-dddbe92b68ce/b3a873b2-7981-4088-afb9-b4e8b8e05dca/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/64a45407-9748-46f0-86bb-dddbe92b68ce/b3a873b2-7981-4088-afb9-b4e8b8e05dca/predictions.tsv"
+      },
+      "created_at": "2026-05-29T22:53:41.793Z",
+      "updated_at": "2026-05-29T22:53:41.793Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "23b6856f-d318-4d6f-9427-47496ce50f2b",
+    "fields": {
+      "job": "ae81a792-d8c3-4c8e-8aa7-fa8ab30ae73f",
+      "reference": "b3a873b2-7981-4088-afb9-b4e8b8e05dca",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "549de0cc-43db-4af5-a137-1a11b04e17b7",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/ae81a792-d8c3-4c8e-8aa7-fa8ab30ae73f/b3a873b2-7981-4088-afb9-b4e8b8e05dca/output.arrow",
+        "summary": {
+          "columns": {
+            "leiden": [
+              {
+                "pct": 21.9,
+                "count": 4419,
+                "label": "1"
+              },
+              {
+                "pct": 15.6,
+                "count": 3148,
+                "label": "4"
+              },
+              {
+                "pct": 13.7,
+                "count": 2761,
+                "label": "0"
+              },
+              {
+                "pct": 12.1,
+                "count": 2448,
+                "label": "7"
+              },
+              {
+                "pct": 11.9,
+                "count": 2393,
+                "label": "6"
+              },
+              {
+                "pct": 8.8,
+                "count": 1786,
+                "label": "2"
+              },
+              {
+                "pct": 4.7,
+                "count": 952,
+                "label": "8"
+              },
+              {
+                "pct": 4.1,
+                "count": 837,
+                "label": "5"
+              },
+              {
+                "pct": 3.2,
+                "count": 648,
+                "label": "9"
+              },
+              {
+                "pct": 2.3,
+                "count": 468,
+                "label": "10"
+              },
+              {
+                "pct": 0.8,
+                "count": 170,
+                "label": "11"
+              },
+              {
+                "pct": 0.7,
+                "count": 139,
+                "label": "12"
+              },
+              {
+                "pct": 0.1,
+                "count": 16,
+                "label": "3"
+              }
+            ],
+            "star_IsCell": [
+              {
+                "pct": 78.1,
+                "count": 15765,
+                "label": "False"
+              },
+              {
+                "pct": 21.9,
+                "count": 4420,
+                "label": "True"
+              }
+            ],
+            "cluster_label": [
+              {
+                "pct": 12.3,
+                "count": 2473,
+                "label": "CS202210140_405"
+              },
+              {
+                "pct": 9.1,
+                "count": 1846,
+                "label": "CS202210140_132"
+              },
+              {
+                "pct": 8.6,
+                "count": 1736,
+                "label": "CS202210140_129"
+              },
+              {
+                "pct": 6.3,
+                "count": 1269,
+                "label": "CS202210140_134"
+              },
+              {
+                "pct": 5.5,
+                "count": 1119,
+                "label": "CS202210140_139"
+              },
+              {
+                "pct": 3.5,
+                "count": 711,
+                "label": "CS202210140_189"
+              },
+              {
+                "pct": 3.4,
+                "count": 693,
+                "label": "CS202210140_136"
+              },
+              {
+                "pct": 3.1,
+                "count": 616,
+                "label": "CS202210140_164"
+              },
+              {
+                "pct": 2.3,
+                "count": 460,
+                "label": "CS202210140_48"
+              },
+              {
+                "pct": 1.9,
+                "count": 378,
+                "label": "CS202210140_124"
+              },
+              {
+                "pct": 1.8,
+                "count": 372,
+                "label": "CS202210140_53"
+              },
+              {
+                "pct": 1.8,
+                "count": 371,
+                "label": "CS202210140_109"
+              },
+              {
+                "pct": 1.8,
+                "count": 371,
+                "label": "CS202210140_121"
+              },
+              {
+                "pct": 1.5,
+                "count": 303,
+                "label": "CS202210140_108"
+              },
+              {
+                "pct": 1.4,
+                "count": 291,
+                "label": "CS202210140_126"
+              }
+            ],
+            "doublet_score": [
+              {
+                "pct": 13.8,
+                "count": 2792,
+                "label": "0.0\u20130.1"
+              },
+              {
+                "pct": 4.4,
+                "count": 887,
+                "label": "0.1\u20130.2"
+              },
+              {
+                "pct": 1.6,
+                "count": 330,
+                "label": "0.2\u20130.3"
+              },
+              {
+                "pct": 0.6,
+                "count": 126,
+                "label": "0.3\u20130.4"
+              },
+              {
+                "pct": 0.5,
+                "count": 91,
+                "label": "0.5\u20130.6"
+              },
+              {
+                "pct": 0.4,
+                "count": 72,
+                "label": "0.4\u20130.5"
+              },
+              {
+                "pct": 0.3,
+                "count": 61,
+                "label": "0.6\u20130.7"
+              },
+              {
+                "pct": 0.2,
+                "count": 35,
+                "label": "0.7\u20130.8"
+              },
+              {
+                "pct": 0.1,
+                "count": 24,
+                "label": "0.8\u20130.9"
+              },
+              {
+                "pct": 0.0,
+                "count": 2,
+                "label": "0.9\u20131.0"
+              }
+            ],
+            "cell_probability": [
+              {
+                "pct": 95.4,
+                "count": 19260,
+                "label": "0.95\u20131.00"
+              },
+              {
+                "pct": 1.4,
+                "count": 274,
+                "label": "0.90\u20130.95"
+              },
+              {
+                "pct": 0.6,
+                "count": 124,
+                "label": "0.85\u20130.90"
+              },
+              {
+                "pct": 0.6,
+                "count": 113,
+                "label": "0.80\u20130.85"
+              },
+              {
+                "pct": 0.4,
+                "count": 81,
+                "label": "0.65\u20130.70"
+              },
+              {
+                "pct": 0.4,
+                "count": 81,
+                "label": "0.75\u20130.80"
+              },
+              {
+                "pct": 0.4,
+                "count": 72,
+                "label": "0.70\u20130.75"
+              },
+              {
+                "pct": 0.3,
+                "count": 69,
+                "label": "0.60\u20130.65"
+              },
+              {
+                "pct": 0.3,
+                "count": 59,
+                "label": "0.50\u20130.55"
+              },
+              {
+                "pct": 0.3,
+                "count": 52,
+                "label": "0.55\u20130.60"
+              }
+            ],
+            "subcluster_alias": [
+              {
+                "pct": 66.9,
+                "count": 13494,
+                "label": "2500\u20133000"
+              },
+              {
+                "pct": 10.5,
+                "count": 2111,
+                "label": "3000\u20133500"
+              },
+              {
+                "pct": 7.9,
+                "count": 1595,
+                "label": "2000\u20132500"
+              },
+              {
+                "pct": 7.5,
+                "count": 1509,
+                "label": "0\u2013500"
+              },
+              {
+                "pct": 3.9,
+                "count": 781,
+                "label": "500\u20131000"
+              },
+              {
+                "pct": 3.1,
+                "count": 632,
+                "label": "1500\u20132000"
+              },
+              {
+                "pct": 0.3,
+                "count": 63,
+                "label": "1000\u20131500"
+              }
+            ],
+            "subcluster_label": [
+              {
+                "pct": 12.3,
+                "count": 2473,
+                "label": "CS202210140_3195"
+              },
+              {
+                "pct": 5.4,
+                "count": 1080,
+                "label": "CS202210140_3087"
+              },
+              {
+                "pct": 3.3,
+                "count": 675,
+                "label": "CS202210140_2789"
+              },
+              {
+                "pct": 3.3,
+                "count": 663,
+                "label": "CS202210140_3189"
+              },
+              {
+                "pct": 2.3,
+                "count": 456,
+                "label": "CS202210140_3517"
+              },
+              {
+                "pct": 1.8,
+                "count": 359,
+                "label": "CS202210140_3273"
+              },
+              {
+                "pct": 1.7,
+                "count": 341,
+                "label": "CS202210140_3279"
+              },
+              {
+                "pct": 1.6,
+                "count": 331,
+                "label": "CS202210140_3269"
+              },
+              {
+                "pct": 1.6,
+                "count": 326,
+                "label": "CS202210140_3579"
+              },
+              {
+                "pct": 1.4,
+                "count": 292,
+                "label": "CS202210140_3277"
+              },
+              {
+                "pct": 1.4,
+                "count": 290,
+                "label": "CS202210140_3235"
+              },
+              {
+                "pct": 1.4,
+                "count": 277,
+                "label": "CS202210140_3185"
+              },
+              {
+                "pct": 1.4,
+                "count": 276,
+                "label": "CS202210140_3071"
+              },
+              {
+                "pct": 1.3,
+                "count": 259,
+                "label": "CS202210140_3067"
+              },
+              {
+                "pct": 1.2,
+                "count": 242,
+                "label": "CS202210140_3188"
+              }
+            ],
+            "supercluster_name": [
+              {
+                "pct": 40.1,
+                "count": 8085,
+                "label": "Upper-layer intratelencephalic"
+              },
+              {
+                "pct": 16.0,
+                "count": 3239,
+                "label": "Miscellaneous"
+              },
+              {
+                "pct": 10.6,
+                "count": 2141,
+                "label": "Deep-layer corticothalamic and 6b"
+              },
+              {
+                "pct": 7.8,
+                "count": 1582,
+                "label": "Hippocampal CA1-3"
+              },
+              {
+                "pct": 4.4,
+                "count": 898,
+                "label": "Oligodendrocyte"
+              },
+              {
+                "pct": 4.3,
+                "count": 868,
+                "label": "Splatter"
+              },
+              {
+                "pct": 4.0,
+                "count": 800,
+                "label": "MGE interneuron"
+              },
+              {
+                "pct": 2.7,
+                "count": 543,
+                "label": "Astrocyte"
+              },
+              {
+                "pct": 2.0,
+                "count": 411,
+                "label": "CGE interneuron"
+              },
+              {
+                "pct": 1.9,
+                "count": 374,
+                "label": "Upper rhombic lip"
+              },
+              {
+                "pct": 1.8,
+                "count": 358,
+                "label": "Amygdala excitatory"
+              },
+              {
+                "pct": 0.9,
+                "count": 172,
+                "label": "Microglia"
+              },
+              {
+                "pct": 0.8,
+                "count": 169,
+                "label": "Oligodendrocyte precursor"
+              },
+              {
+                "pct": 0.7,
+                "count": 132,
+                "label": "LAMP5-LHX6 and Chandelier"
+              },
+              {
+                "pct": 0.6,
+                "count": 124,
+                "label": "Committed oligodendrocyte precursor"
+              }
+            ],
+            "reads_per_fragment": [
+              {
+                "pct": 99.8,
+                "count": 20146,
+                "label": "1.0\u20131.5"
+              },
+              {
+                "pct": 0.2,
+                "count": 38,
+                "label": "1.5\u20132.0"
+              },
+              {
+                "pct": 0.0,
+                "count": 1,
+                "label": "4.5\u20135.0"
+              }
+            ],
+            "reads_per_molecule": [
+              {
+                "pct": 88.4,
+                "count": 17850,
+                "label": "0\u201310"
+              },
+              {
+                "pct": 11.6,
+                "count": 2334,
+                "label": "10\u201320"
+              },
+              {
+                "pct": 0.0,
+                "count": 1,
+                "label": "70\u201380"
+              }
+            ],
+            "supercluster_label": [
+              {
+                "pct": 40.1,
+                "count": 8085,
+                "label": "CS202210140_476"
+              },
+              {
+                "pct": 16.0,
+                "count": 3239,
+                "label": "CS202210140_463"
+              },
+              {
+                "pct": 10.6,
+                "count": 2141,
+                "label": "CS202210140_474"
+              },
+              {
+                "pct": 7.8,
+                "count": 1582,
+                "label": "CS202210140_475"
+              },
+              {
+                "pct": 4.4,
+                "count": 898,
+                "label": "CS202210140_469"
+              },
+              {
+                "pct": 4.3,
+                "count": 868,
+                "label": "CS202210140_483"
+              },
+              {
+                "pct": 4.0,
+                "count": 800,
+                "label": "CS202210140_484"
+              },
+              {
+                "pct": 2.7,
+                "count": 543,
+                "label": "CS202210140_470"
+              },
+              {
+                "pct": 2.0,
+                "count": 411,
+                "label": "CS202210140_486"
+              },
+              {
+                "pct": 1.9,
+                "count": 374,
+                "label": "CS202210140_487"
+              },
+              {
+                "pct": 1.8,
+                "count": 358,
+                "label": "CS202210140_478"
+              },
+              {
+                "pct": 0.9,
+                "count": 172,
+                "label": "CS202210140_464"
+              },
+              {
+                "pct": 0.8,
+                "count": 169,
+                "label": "CS202210140_467"
+              },
+              {
+                "pct": 0.7,
+                "count": 132,
+                "label": "CS202210140_485"
+              },
+              {
+                "pct": 0.6,
+                "count": 124,
+                "label": "CS202210140_468"
+              }
+            ],
+            "n_mitochondrial_genes": [
+              {
+                "pct": 19.4,
+                "count": 3911,
+                "label": "10"
+              },
+              {
+                "pct": 15.8,
+                "count": 3196,
+                "label": "11"
+              },
+              {
+                "pct": 12.0,
+                "count": 2422,
+                "label": "9"
+              },
+              {
+                "pct": 9.0,
+                "count": 1816,
+                "label": "12"
+              },
+              {
+                "pct": 7.1,
+                "count": 1427,
+                "label": "8"
+              },
+              {
+                "pct": 6.1,
+                "count": 1230,
+                "label": "7"
+              },
+              {
+                "pct": 5.8,
+                "count": 1166,
+                "label": "6"
+              },
+              {
+                "pct": 5.3,
+                "count": 1066,
+                "label": "5"
+              },
+              {
+                "pct": 4.8,
+                "count": 963,
+                "label": "4"
+              },
+              {
+                "pct": 4.7,
+                "count": 945,
+                "label": "13"
+              },
+              {
+                "pct": 4.3,
+                "count": 864,
+                "label": "3"
+              },
+              {
+                "pct": 3.3,
+                "count": 664,
+                "label": "2"
+              },
+              {
+                "pct": 1.9,
+                "count": 380,
+                "label": "1"
+              },
+              {
+                "pct": 0.7,
+                "count": 135,
+                "label": "0"
+              }
+            ],
+            "fragments_per_molecule": [
+              {
+                "pct": 64.2,
+                "count": 12953,
+                "label": "0\u20132"
+              },
+              {
+                "pct": 18.5,
+                "count": 3743,
+                "label": "2\u20134"
+              },
+              {
+                "pct": 8.1,
+                "count": 1644,
+                "label": "8\u201310"
+              },
+              {
+                "pct": 4.5,
+                "count": 918,
+                "label": "6\u20138"
+              },
+              {
+                "pct": 3.2,
+                "count": 639,
+                "label": "4\u20136"
+              },
+              {
+                "pct": 1.4,
+                "count": 285,
+                "label": "10\u201312"
+              },
+              {
+                "pct": 0.0,
+                "count": 2,
+                "label": "12\u201314"
+              },
+              {
+                "pct": 0.0,
+                "count": 1,
+                "label": "14\u201316"
+              }
+            ],
+            "genomic_read_quality_mean": [
+              {
+                "pct": 57.4,
+                "count": 11580,
+                "label": "36.0\u201336.1"
+              },
+              {
+                "pct": 27.4,
+                "count": 5540,
+                "label": "35.9\u201336.0"
+              },
+              {
+                "pct": 10.4,
+                "count": 2106,
+                "label": "36.1\u201336.2"
+              },
+              {
+                "pct": 2.8,
+                "count": 572,
+                "label": "35.8\u201335.9"
+              },
+              {
+                "pct": 1.0,
+                "count": 206,
+                "label": "36.2\u201336.3"
+              },
+              {
+                "pct": 0.6,
+                "count": 113,
+                "label": "35.7\u201335.8"
+              },
+              {
+                "pct": 0.1,
+                "count": 29,
+                "label": "35.6\u201335.7"
+              },
+              {
+                "pct": 0.1,
+                "count": 23,
+                "label": "36.3\u201336.4"
+              },
+              {
+                "pct": 0.1,
+                "count": 15,
+                "label": "35.5\u201335.6"
+              },
+              {
+                "pct": 0.0,
+                "count": 1,
+                "label": "35.4\u201335.5"
+              }
+            ],
+            "pct_mitochondrial_molecules": [
+              {
+                "pct": 60.9,
+                "count": 12300,
+                "label": "0\u20132"
+              },
+              {
+                "pct": 33.6,
+                "count": 6774,
+                "label": "2\u20134"
+              },
+              {
+                "pct": 4.9,
+                "count": 996,
+                "label": "4\u20136"
+              },
+              {
+                "pct": 0.5,
+                "count": 97,
+                "label": "6\u20138"
+              },
+              {
+                "pct": 0.1,
+                "count": 16,
+                "label": "8\u201310"
+              },
+              {
+                "pct": 0.0,
+                "count": 1,
+                "label": "10\u201312"
+              },
+              {
+                "pct": 0.0,
+                "count": 1,
+                "label": "14\u201316"
+              }
+            ],
+            "genomic_read_quality_variance": [
+              {
+                "pct": 74.1,
+                "count": 14948,
+                "label": "2\u20133"
+              },
+              {
+                "pct": 20.2,
+                "count": 4083,
+                "label": "3\u20134"
+              },
+              {
+                "pct": 4.2,
+                "count": 853,
+                "label": "1\u20132"
+              },
+              {
+                "pct": 1.2,
+                "count": 242,
+                "label": "4\u20135"
+              },
+              {
+                "pct": 0.2,
+                "count": 44,
+                "label": "5\u20136"
+              },
+              {
+                "pct": 0.0,
+                "count": 8,
+                "label": "6\u20137"
+              },
+              {
+                "pct": 0.0,
+                "count": 3,
+                "label": "0\u20131"
+              },
+              {
+                "pct": 0.0,
+                "count": 3,
+                "label": "7\u20138"
+              },
+              {
+                "pct": 0.0,
+                "count": 1,
+                "label": "9\u201310"
+              }
+            ],
+            "cluster_bootstrapping_probability": [
+              {
+                "pct": 18.7,
+                "count": 3779,
+                "label": "0.9\u20131.0"
+              },
+              {
+                "pct": 18.5,
+                "count": 3744,
+                "label": "0.3\u20130.4"
+              },
+              {
+                "pct": 18.1,
+                "count": 3647,
+                "label": "0.4\u20130.5"
+              },
+              {
+                "pct": 14.0,
+                "count": 2821,
+                "label": "0.2\u20130.3"
+              },
+              {
+                "pct": 12.9,
+                "count": 2601,
+                "label": "0.5\u20130.6"
+              },
+              {
+                "pct": 8.6,
+                "count": 1731,
+                "label": "0.6\u20130.7"
+              },
+              {
+                "pct": 4.0,
+                "count": 813,
+                "label": "0.7\u20130.8"
+              },
+              {
+                "pct": 3.7,
+                "count": 753,
+                "label": "0.8\u20130.9"
+              },
+              {
+                "pct": 1.5,
+                "count": 296,
+                "label": "0.1\u20130.2"
+              }
+            ],
+            "subcluster_bootstrapping_probability": [
+              {
+                "pct": 30.4,
+                "count": 6136,
+                "label": "0.9\u20131.0"
+              },
+              {
+                "pct": 16.9,
+                "count": 3412,
+                "label": "0.5\u20130.6"
+              },
+              {
+                "pct": 14.6,
+                "count": 2943,
+                "label": "0.4\u20130.5"
+              },
+              {
+                "pct": 10.9,
+                "count": 2196,
+                "label": "0.6\u20130.7"
+              },
+              {
+                "pct": 10.4,
+                "count": 2108,
+                "label": "0.3\u20130.4"
+              },
+              {
+                "pct": 7.0,
+                "count": 1406,
+                "label": "0.7\u20130.8"
+              },
+              {
+                "pct": 5.6,
+                "count": 1135,
+                "label": "0.8\u20130.9"
+              },
+              {
+                "pct": 4.1,
+                "count": 837,
+                "label": "0.2\u20130.3"
+              },
+              {
+                "pct": 0.1,
+                "count": 12,
+                "label": "0.1\u20130.2"
+              }
+            ],
+            "supercluster_bootstrapping_probability": [
+              {
+                "pct": 21.4,
+                "count": 4315,
+                "label": "0.3\u20130.4"
+              },
+              {
+                "pct": 19.1,
+                "count": 3865,
+                "label": "0.4\u20130.5"
+              },
+              {
+                "pct": 15.3,
+                "count": 3079,
+                "label": "0.2\u20130.3"
+              },
+              {
+                "pct": 13.5,
+                "count": 2733,
+                "label": "0.9\u20131.0"
+              },
+              {
+                "pct": 13.1,
+                "count": 2654,
+                "label": "0.5\u20130.6"
+              },
+              {
+                "pct": 9.1,
+                "count": 1844,
+                "label": "0.6\u20130.7"
+              },
+              {
+                "pct": 4.6,
+                "count": 938,
+                "label": "0.7\u20130.8"
+              },
+              {
+                "pct": 3.2,
+                "count": 654,
+                "label": "0.8\u20130.9"
+              },
+              {
+                "pct": 0.5,
+                "count": 103,
+                "label": "0.1\u20130.2"
+              }
+            ],
+            "prediction_by_harmonized_cell_label_top1": [
+              {
+                "pct": 47.6,
+                "count": 9602,
+                "label": "Upper-layer intratelencephalic"
+              },
+              {
+                "pct": 15.5,
+                "count": 3128,
+                "label": "L2/3-6 intratelencephalic projecting glutamatergic cortical neuron"
+              },
+              {
+                "pct": 8.2,
+                "count": 1657,
+                "label": "Deep-layer intratelencephalic"
+              },
+              {
+                "pct": 6.1,
+                "count": 1229,
+                "label": "Miscellaneous"
+              },
+              {
+                "pct": 4.2,
+                "count": 838,
+                "label": "Oligo OPALIN"
+              },
+              {
+                "pct": 2.6,
+                "count": 522,
+                "label": "Astrocyte"
+              },
+              {
+                "pct": 2.1,
+                "count": 421,
+                "label": "Splatter"
+              },
+              {
+                "pct": 1.9,
+                "count": 384,
+                "label": "microglial cell"
+              },
+              {
+                "pct": 1.5,
+                "count": 309,
+                "label": "MGE interneuron"
+              },
+              {
+                "pct": 1.4,
+                "count": 273,
+                "label": "Oligodendrocyte"
+              },
+              {
+                "pct": 1.3,
+                "count": 266,
+                "label": "SN SOX6 Dopa"
+              },
+              {
+                "pct": 1.1,
+                "count": 220,
+                "label": "CGE interneuron"
+              },
+              {
+                "pct": 1.1,
+                "count": 213,
+                "label": "Deep-layer corticothalamic and 6b"
+              },
+              {
+                "pct": 0.7,
+                "count": 135,
+                "label": "Oligodendrocyte precursor"
+              },
+              {
+                "pct": 0.7,
+                "count": 135,
+                "label": "Microglia"
+              }
+            ],
+            "prediction_by_harmonized_cell_label_top2": [
+              {
+                "pct": 13.7,
+                "count": 2764,
+                "label": "Deep-layer intratelencephalic"
+              },
+              {
+                "pct": 13.5,
+                "count": 2715,
+                "label": "Upper-layer intratelencephalic"
+              },
+              {
+                "pct": 10.6,
+                "count": 2144,
+                "label": ""
+              },
+              {
+                "pct": 9.4,
+                "count": 1888,
+                "label": "Hippocampal dentate gyrus"
+              },
+              {
+                "pct": 8.3,
+                "count": 1676,
+                "label": "L2/3-6 intratelencephalic projecting glutamatergic cortical neuron"
+              },
+              {
+                "pct": 8.0,
+                "count": 1623,
+                "label": "Miscellaneous"
+              },
+              {
+                "pct": 5.8,
+                "count": 1179,
+                "label": "Splatter"
+              },
+              {
+                "pct": 4.2,
+                "count": 842,
+                "label": "Amygdala excitatory"
+              },
+              {
+                "pct": 3.9,
+                "count": 778,
+                "label": "Upper rhombic lip"
+              },
+              {
+                "pct": 2.5,
+                "count": 513,
+                "label": "vip GABAergic cortical interneuron"
+              },
+              {
+                "pct": 2.0,
+                "count": 405,
+                "label": "Oligodendrocyte"
+              },
+              {
+                "pct": 1.6,
+                "count": 326,
+                "label": "microglial cell"
+              },
+              {
+                "pct": 1.5,
+                "count": 310,
+                "label": "Lower rhombic lip"
+              },
+              {
+                "pct": 1.5,
+                "count": 306,
+                "label": "Oligo PLEKHG1"
+              },
+              {
+                "pct": 1.1,
+                "count": 232,
+                "label": "oligodendrocyte precursor cell"
+              }
+            ],
+            "cell_barcode_fraction_bases_above_30_mean": [
+              {
+                "pct": 85.9,
+                "count": 17347,
+                "label": "0.95\u20131.00"
+              },
+              {
+                "pct": 13.9,
+                "count": 2799,
+                "label": "0.90\u20130.95"
+              },
+              {
+                "pct": 0.2,
+                "count": 33,
+                "label": "0.85\u20130.90"
+              },
+              {
+                "pct": 0.0,
+                "count": 5,
+                "label": "0.80\u20130.85"
+              },
+              {
+                "pct": 0.0,
+                "count": 1,
+                "label": "0.70\u20130.75"
+              }
+            ],
+            "cell_barcode_fraction_bases_above_30_variance": [
+              {
+                "pct": 59.7,
+                "count": 12044,
+                "label": "0.006\u20130.008"
+              },
+              {
+                "pct": 21.7,
+                "count": 4373,
+                "label": "0.008\u20130.010"
+              },
+              {
+                "pct": 14.9,
+                "count": 3013,
+                "label": "0.004\u20130.006"
+              },
+              {
+                "pct": 2.7,
+                "count": 549,
+                "label": "0.010\u20130.012"
+              },
+              {
+                "pct": 0.5,
+                "count": 94,
+                "label": "0.012\u20130.014"
+              },
+              {
+                "pct": 0.3,
+                "count": 66,
+                "label": "0.002\u20130.004"
+              },
+              {
+                "pct": 0.2,
+                "count": 38,
+                "label": "0.014\u20130.016"
+              },
+              {
+                "pct": 0.0,
+                "count": 7,
+                "label": "0.016\u20130.018"
+              },
+              {
+                "pct": 0.0,
+                "count": 1,
+                "label": "0.018\u20130.020"
+              }
+            ],
+            "molecule_barcode_fraction_bases_above_30_mean": [
+              {
+                "pct": 78.5,
+                "count": 15851,
+                "label": "0.95\u20131.00"
+              },
+              {
+                "pct": 21.1,
+                "count": 4258,
+                "label": "0.90\u20130.95"
+              },
+              {
+                "pct": 0.2,
+                "count": 46,
+                "label": "0.85\u20130.90"
+              },
+              {
+                "pct": 0.1,
+                "count": 13,
+                "label": "0.80\u20130.85"
+              },
+              {
+                "pct": 0.0,
+                "count": 8,
+                "label": "0.75\u20130.80"
+              },
+              {
+                "pct": 0.0,
+                "count": 5,
+                "label": "0.70\u20130.75"
+              },
+              {
+                "pct": 0.0,
+                "count": 2,
+                "label": "0.60\u20130.65"
+              },
+              {
+                "pct": 0.0,
+                "count": 2,
+                "label": "0.65\u20130.70"
+              }
+            ],
+            "prediction_by_harmonized_cell_label_top1_score": [
+              {
+                "pct": 32.7,
+                "count": 6593,
+                "label": "0.9\u20131.0"
+              },
+              {
+                "pct": 18.7,
+                "count": 3778,
+                "label": "0.8\u20130.9"
+              },
+              {
+                "pct": 12.1,
+                "count": 2440,
+                "label": "0.7\u20130.8"
+              },
+              {
+                "pct": 10.7,
+                "count": 2160,
+                "label": "0.6\u20130.7"
+              },
+              {
+                "pct": 9.5,
+                "count": 1918,
+                "label": "0.5\u20130.6"
+              },
+              {
+                "pct": 7.8,
+                "count": 1567,
+                "label": "0.4\u20130.5"
+              },
+              {
+                "pct": 5.6,
+                "count": 1136,
+                "label": "0.3\u20130.4"
+              },
+              {
+                "pct": 2.6,
+                "count": 527,
+                "label": "0.2\u20130.3"
+              },
+              {
+                "pct": 0.3,
+                "count": 66,
+                "label": "0.1\u20130.2"
+              }
+            ],
+            "prediction_by_harmonized_cell_label_top2_score": [
+              {
+                "pct": 21.3,
+                "count": 4301,
+                "label": "0.05\u20130.10"
+              },
+              {
+                "pct": 18.1,
+                "count": 3655,
+                "label": "0.00\u20130.05"
+              },
+              {
+                "pct": 11.3,
+                "count": 2274,
+                "label": "0.15\u20130.20"
+              },
+              {
+                "pct": 10.4,
+                "count": 2101,
+                "label": "0.10\u20130.15"
+              },
+              {
+                "pct": 8.8,
+                "count": 1776,
+                "label": "0.20\u20130.25"
+              },
+              {
+                "pct": 7.5,
+                "count": 1517,
+                "label": "0.25\u20130.30"
+              },
+              {
+                "pct": 5.1,
+                "count": 1029,
+                "label": "0.30\u20130.35"
+              },
+              {
+                "pct": 3.8,
+                "count": 765,
+                "label": "0.35\u20130.40"
+              },
+              {
+                "pct": 2.1,
+                "count": 429,
+                "label": "0.40\u20130.45"
+              },
+              {
+                "pct": 1.0,
+                "count": 194,
+                "label": "0.45\u20130.50"
+              }
+            ],
+            "molecule_barcode_fraction_bases_above_30_variance": [
+              {
+                "pct": 86.8,
+                "count": 17515,
+                "label": "0.005\u20130.010"
+              },
+              {
+                "pct": 12.2,
+                "count": 2472,
+                "label": "0.010\u20130.015"
+              },
+              {
+                "pct": 0.4,
+                "count": 84,
+                "label": "0.015\u20130.020"
+              },
+              {
+                "pct": 0.3,
+                "count": 57,
+                "label": "0.000\u20130.005"
+              },
+              {
+                "pct": 0.2,
+                "count": 35,
+                "label": "0.020\u20130.025"
+              },
+              {
+                "pct": 0.1,
+                "count": 11,
+                "label": "0.025\u20130.030"
+              },
+              {
+                "pct": 0.0,
+                "count": 10,
+                "label": "0.030\u20130.035"
+              },
+              {
+                "pct": 0.0,
+                "count": 1,
+                "label": "0.035\u20130.040"
+              }
+            ],
+            "genomic_reads_fraction_bases_quality_above_30_mean": [
+              {
+                "pct": 51.0,
+                "count": 10304,
+                "label": "0.940\u20130.945"
+              },
+              {
+                "pct": 33.6,
+                "count": 6773,
+                "label": "0.935\u20130.940"
+              },
+              {
+                "pct": 9.6,
+                "count": 1929,
+                "label": "0.945\u20130.950"
+              },
+              {
+                "pct": 3.7,
+                "count": 747,
+                "label": "0.930\u20130.935"
+              },
+              {
+                "pct": 1.1,
+                "count": 216,
+                "label": "0.950\u20130.955"
+              },
+              {
+                "pct": 0.7,
+                "count": 136,
+                "label": "0.925\u20130.930"
+              },
+              {
+                "pct": 0.2,
+                "count": 35,
+                "label": "0.920\u20130.925"
+              },
+              {
+                "pct": 0.1,
+                "count": 30,
+                "label": "0.955\u20130.960"
+              },
+              {
+                "pct": 0.1,
+                "count": 11,
+                "label": "0.915\u20130.920"
+              },
+              {
+                "pct": 0.0,
+                "count": 4,
+                "label": "0.910\u20130.915"
+              }
+            ],
+            "genomic_reads_fraction_bases_quality_above_30_variance": [
+              {
+                "pct": 67.6,
+                "count": 13638,
+                "label": "0.006\u20130.008"
+              },
+              {
+                "pct": 24.1,
+                "count": 4869,
+                "label": "0.008\u20130.010"
+              },
+              {
+                "pct": 6.3,
+                "count": 1263,
+                "label": "0.004\u20130.006"
+              },
+              {
+                "pct": 1.6,
+                "count": 318,
+                "label": "0.010\u20130.012"
+              },
+              {
+                "pct": 0.3,
+                "count": 60,
+                "label": "0.012\u20130.014"
+              },
+              {
+                "pct": 0.1,
+                "count": 20,
+                "label": "0.002\u20130.004"
+              },
+              {
+                "pct": 0.1,
+                "count": 13,
+                "label": "0.014\u20130.016"
+              },
+              {
+                "pct": 0.0,
+                "count": 3,
+                "label": "0.016\u20130.018"
+              },
+              {
+                "pct": 0.0,
+                "count": 1,
+                "label": "0.018\u20130.020"
+              }
+            ]
+          },
+          "total_cells": 20185
+        },
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/ae81a792-d8c3-4c8e-8aa7-fa8ab30ae73f/b3a873b2-7981-4088-afb9-b4e8b8e05dca/predictions.tsv"
+      },
+      "created_at": "2026-05-08T20:00:26.279Z",
+      "updated_at": "2026-05-29T23:26:42.545Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "3aa87984-038f-4782-a842-3e22b0e159da",
+    "fields": {
+      "job": "482281fe-e5ad-4ec7-a407-dcfa233b140e",
+      "reference": "b3a873b2-7981-4088-afb9-b4e8b8e05dca",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/482281fe-e5ad-4ec7-a407-dcfa233b140e/b3a873b2-7981-4088-afb9-b4e8b8e05dca/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/482281fe-e5ad-4ec7-a407-dcfa233b140e/b3a873b2-7981-4088-afb9-b4e8b8e05dca/predictions.tsv"
+      },
+      "created_at": "2026-05-29T22:34:21.937Z",
+      "updated_at": "2026-05-29T22:34:21.937Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "43dd2de0-d598-4003-bbf5-3a7380f33c51",
+    "fields": {
+      "job": "774a01e8-e2f5-4d28-855c-4199affcafd9",
+      "reference": "7b31dcca-b245-417d-866f-0b2042bb22b2",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "5d0aa6bd-28b7-41c4-ac6b-f69ec7235f75",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/774a01e8-e2f5-4d28-855c-4199affcafd9/7b31dcca-b245-417d-866f-0b2042bb22b2/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/774a01e8-e2f5-4d28-855c-4199affcafd9/7b31dcca-b245-417d-866f-0b2042bb22b2/predictions.tsv"
+      },
+      "created_at": "2026-04-09T20:48:06.801Z",
+      "updated_at": "2026-05-08T04:52:23.799Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "5a628630-aec6-4e55-a840-9add33a086ad",
+    "fields": {
+      "job": "82c05152-d5ef-4dd7-9862-3b2dcb5330ed",
+      "reference": "7b31dcca-b245-417d-866f-0b2042bb22b2",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "d202a641-49dc-4b3c-8225-6e693bf2b374",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/82c05152-d5ef-4dd7-9862-3b2dcb5330ed/7b31dcca-b245-417d-866f-0b2042bb22b2/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/82c05152-d5ef-4dd7-9862-3b2dcb5330ed/7b31dcca-b245-417d-866f-0b2042bb22b2/predictions.tsv"
+      },
+      "created_at": "2026-04-13T19:59:54.812Z",
+      "updated_at": "2026-04-13T20:02:45.929Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "6053c968-80e0-469e-a891-5b09af88eb27",
+    "fields": {
+      "job": "a09ed0ab-1fe6-4b26-b513-d6d0a48cee41",
+      "reference": "7b31dcca-b245-417d-866f-0b2042bb22b2",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "70d9ec3b-45e7-494c-b8f2-7e5209a5ff58",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/7b31dcca-b245-417d-866f-0b2042bb22b2/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/7b31dcca-b245-417d-866f-0b2042bb22b2/predictions.tsv"
+      },
+      "created_at": "2026-04-13T20:19:39.011Z",
+      "updated_at": "2026-04-13T22:02:51.626Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "6851df8c-3b3a-4399-98e4-7e557567fb8e",
+    "fields": {
+      "job": "a09ed0ab-1fe6-4b26-b513-d6d0a48cee41",
+      "reference": "ff9982c2-06cc-4376-930b-186fcbc1fd82",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "b5697d84-9571-4efc-a969-839871f6fd5c",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/ff9982c2-06cc-4376-930b-186fcbc1fd82/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/ff9982c2-06cc-4376-930b-186fcbc1fd82/predictions.tsv"
+      },
+      "created_at": "2026-04-13T22:50:48.574Z",
+      "updated_at": "2026-04-13T22:59:57.280Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "8a9be08d-637a-42df-be51-38045f4ac494",
+    "fields": {
+      "job": "acb3a626-72b4-427b-b845-fee2dfade640",
+      "reference": "b3a873b2-7981-4088-afb9-b4e8b8e05dca",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "71b9a80e-95fe-490d-a6f8-0d9d59815af9",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/acb3a626-72b4-427b-b845-fee2dfade640/b3a873b2-7981-4088-afb9-b4e8b8e05dca/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/acb3a626-72b4-427b-b845-fee2dfade640/b3a873b2-7981-4088-afb9-b4e8b8e05dca/predictions.tsv"
+      },
+      "created_at": "2026-04-07T07:40:43.794Z",
+      "updated_at": "2026-04-07T07:48:39.328Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "8b4ab02e-c96b-46af-a529-2b1e637b7f63",
+    "fields": {
+      "job": "a09ed0ab-1fe6-4b26-b513-d6d0a48cee41",
+      "reference": "f5e9258a-113f-442f-841d-e689f105a8e4",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "60ece63c-34bb-445c-b2c6-5852c78f7fbf",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/f5e9258a-113f-442f-841d-e689f105a8e4/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/f5e9258a-113f-442f-841d-e689f105a8e4/predictions.tsv"
+      },
+      "created_at": "2026-04-13T22:50:00.561Z",
+      "updated_at": "2026-04-13T22:56:52.692Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "97f1a687-b0dd-4da1-a1b3-fd827c46f5f1",
+    "fields": {
+      "job": "6534aaf0-f7a4-4317-a628-6ab254d4ac0d",
+      "reference": "b3a873b2-7981-4088-afb9-b4e8b8e05dca",
+      "status": "complete",
+      "public": true,
+      "batch_job_id": "10c9a694-00b2-4b87-ae0a-61c3f216919d",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/6534aaf0-f7a4-4317-a628-6ab254d4ac0d/b3a873b2-7981-4088-afb9-b4e8b8e05dca/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/6534aaf0-f7a4-4317-a628-6ab254d4ac0d/b3a873b2-7981-4088-afb9-b4e8b8e05dca/predictions.tsv"
+      },
+      "created_at": "2026-03-22T17:44:34.089Z",
+      "updated_at": "2026-03-22T18:55:44.709Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "9b2e2cc9-9a22-489f-9d92-0f652133f700",
+    "fields": {
+      "job": "82c05152-d5ef-4dd7-9862-3b2dcb5330ed",
+      "reference": "ff9982c2-06cc-4376-930b-186fcbc1fd82",
+      "status": "complete",
+      "public": true,
+      "batch_job_id": "a50f669a-b738-44fe-80e2-b932af68963f",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/82c05152-d5ef-4dd7-9862-3b2dcb5330ed/ff9982c2-06cc-4376-930b-186fcbc1fd82/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/82c05152-d5ef-4dd7-9862-3b2dcb5330ed/ff9982c2-06cc-4376-930b-186fcbc1fd82/predictions.tsv"
+      },
+      "created_at": "2026-03-17T21:33:46.461Z",
+      "updated_at": "2026-03-24T21:36:15.955Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "9c7ada26-4dd2-4fce-9436-722a7b0e70e4",
+    "fields": {
+      "job": "90eea19b-0680-4c76-aa99-f058ab3447e9",
+      "reference": "f5e9258a-113f-442f-841d-e689f105a8e4",
+      "status": "complete",
+      "public": true,
+      "batch_job_id": "dbae0807-f7af-4f3e-9102-8773ab3d94b3",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/90eea19b-0680-4c76-aa99-f058ab3447e9/f5e9258a-113f-442f-841d-e689f105a8e4/output.arrow",
+        "summary": {
+          "columns": {
+            "sex": [
+              {
+                "pct": 53.4,
+                "count": 24303,
+                "label": "female"
+              },
+              {
+                "pct": 46.6,
+                "count": 21246,
+                "label": "male"
+              }
+            ],
+            "batch": [
+              {
+                "pct": 39.8,
+                "count": 18140,
+                "label": "1"
+              },
+              {
+                "pct": 35.9,
+                "count": 16350,
+                "label": "3"
+              },
+              {
+                "pct": 24.3,
+                "count": 11059,
+                "label": "2"
+              }
+            ],
+            "tissue": [
+              {
+                "pct": 68.5,
+                "count": 31213,
+                "label": "dorsolateral prefrontal cortex"
+              },
+              {
+                "pct": 31.5,
+                "count": 14336,
+                "label": "cortical plate"
+              }
+            ],
+            "donor_id": [
+              {
+                "pct": 12.9,
+                "count": 5855,
+                "label": "Adult2"
+              },
+              {
+                "pct": 11.9,
+                "count": 5418,
+                "label": "Child1"
+              },
+              {
+                "pct": 11.2,
+                "count": 5112,
+                "label": "Adol2"
+              },
+              {
+                "pct": 10.4,
+                "count": 4754,
+                "label": "LaFet2"
+              },
+              {
+                "pct": 8.1,
+                "count": 3693,
+                "label": "Child2"
+              },
+              {
+                "pct": 8.1,
+                "count": 3683,
+                "label": "Inf2"
+              },
+              {
+                "pct": 8.1,
+                "count": 3679,
+                "label": "EaFet2"
+              },
+              {
+                "pct": 7.0,
+                "count": 3188,
+                "label": "Adol1"
+              },
+              {
+                "pct": 6.8,
+                "count": 3102,
+                "label": "LaFet1"
+              },
+              {
+                "pct": 6.1,
+                "count": 2801,
+                "label": "EaFet1"
+              },
+              {
+                "pct": 6.0,
+                "count": 2723,
+                "label": "Inf1"
+              },
+              {
+                "pct": 3.4,
+                "count": 1541,
+                "label": "Adult1"
+              }
+            ],
+            "age_group": [
+              {
+                "pct": 20.0,
+                "count": 9111,
+                "label": "childhood"
+              },
+              {
+                "pct": 18.2,
+                "count": 8300,
+                "label": "adolescence"
+              },
+              {
+                "pct": 17.2,
+                "count": 7856,
+                "label": "late fetal"
+              },
+              {
+                "pct": 16.2,
+                "count": 7396,
+                "label": "adulthood"
+              },
+              {
+                "pct": 14.2,
+                "count": 6480,
+                "label": "early fetal"
+              },
+              {
+                "pct": 14.1,
+                "count": 6406,
+                "label": "infancy"
+              }
+            ],
+            "cell_type": [
+              {
+                "pct": 28.9,
+                "count": 13146,
+                "label": "glutamatergic neuron"
+              },
+              {
+                "pct": 13.7,
+                "count": 6245,
+                "label": "astrocyte"
+              },
+              {
+                "pct": 12.0,
+                "count": 5459,
+                "label": "oligodendrocyte"
+              },
+              {
+                "pct": 10.7,
+                "count": 4896,
+                "label": "oligodendrocyte precursor cell"
+              },
+              {
+                "pct": 9.9,
+                "count": 4528,
+                "label": "microglial cell"
+              },
+              {
+                "pct": 7.6,
+                "count": 3479,
+                "label": "inhibitory interneuron"
+              },
+              {
+                "pct": 5.2,
+                "count": 2386,
+                "label": "medial ganglionic eminence derived interneuron"
+              },
+              {
+                "pct": 4.1,
+                "count": 1888,
+                "label": "caudal ganglionic eminence derived cortical interneuron"
+              },
+              {
+                "pct": 2.9,
+                "count": 1322,
+                "label": "radial glial cell"
+              },
+              {
+                "pct": 1.7,
+                "count": 754,
+                "label": "endothelial cell"
+              },
+              {
+                "pct": 1.5,
+                "count": 677,
+                "label": "pericyte"
+              },
+              {
+                "pct": 0.9,
+                "count": 414,
+                "label": "neural progenitor cell"
+              },
+              {
+                "pct": 0.8,
+                "count": 355,
+                "label": "vascular associated smooth muscle cell"
+              }
+            ],
+            "author_cell_type": [
+              {
+                "pct": 14.2,
+                "count": 6477,
+                "label": "EN-fetal-late"
+              },
+              {
+                "pct": 13.7,
+                "count": 6245,
+                "label": "Astrocytes"
+              },
+              {
+                "pct": 12.0,
+                "count": 5459,
+                "label": "Oligodendrocytes"
+              },
+              {
+                "pct": 10.7,
+                "count": 4896,
+                "label": "OPC"
+              },
+              {
+                "pct": 9.9,
+                "count": 4528,
+                "label": "Microglia"
+              },
+              {
+                "pct": 9.0,
+                "count": 4096,
+                "label": "EN"
+              },
+              {
+                "pct": 7.6,
+                "count": 3479,
+                "label": "IN-fetal"
+              },
+              {
+                "pct": 5.6,
+                "count": 2573,
+                "label": "EN-fetal-early"
+              },
+              {
+                "pct": 5.2,
+                "count": 2386,
+                "label": "IN-MGE"
+              },
+              {
+                "pct": 4.1,
+                "count": 1888,
+                "label": "IN-CGE"
+              },
+              {
+                "pct": 2.9,
+                "count": 1322,
+                "label": "RG"
+              },
+              {
+                "pct": 1.7,
+                "count": 754,
+                "label": "Endothelial"
+              },
+              {
+                "pct": 1.5,
+                "count": 677,
+                "label": "Pericytes"
+              },
+              {
+                "pct": 0.9,
+                "count": 414,
+                "label": "IPC"
+              },
+              {
+                "pct": 0.8,
+                "count": 355,
+                "label": "VSMC"
+              }
+            ],
+            "development_stage": [
+              {
+                "pct": 18.2,
+                "count": 8300,
+                "label": "14-year-old stage"
+              },
+              {
+                "pct": 14.1,
+                "count": 6406,
+                "label": "infant stage"
+              },
+              {
+                "pct": 12.9,
+                "count": 5855,
+                "label": "39-year-old stage"
+              },
+              {
+                "pct": 11.9,
+                "count": 5418,
+                "label": "4-year-old stage"
+              },
+              {
+                "pct": 10.4,
+                "count": 4754,
+                "label": "24th week post-fertilization stage"
+              },
+              {
+                "pct": 8.1,
+                "count": 3693,
+                "label": "6-year-old stage"
+              },
+              {
+                "pct": 8.1,
+                "count": 3679,
+                "label": "19th week post-fertilization stage"
+              },
+              {
+                "pct": 6.8,
+                "count": 3102,
+                "label": "23rd week post-fertilization stage"
+              },
+              {
+                "pct": 6.1,
+                "count": 2801,
+                "label": "18th week post-fertilization stage"
+              },
+              {
+                "pct": 3.4,
+                "count": 1541,
+                "label": "20-year-old stage"
+              }
+            ],
+            "predicted_cell_label": [
+              {
+                "pct": 11.3,
+                "count": 5137,
+                "label": "oligodendrocyte"
+              },
+              {
+                "pct": 10.9,
+                "count": 4948,
+                "label": "oligodendrocyte precursor cell"
+              },
+              {
+                "pct": 10.5,
+                "count": 4764,
+                "label": "astrocyte"
+              },
+              {
+                "pct": 9.2,
+                "count": 4186,
+                "label": "intratelencephalic-projecting glutamatergic cortical neuron"
+              },
+              {
+                "pct": 8.7,
+                "count": 3971,
+                "label": "glutamatergic neuron"
+              },
+              {
+                "pct": 8.4,
+                "count": 3820,
+                "label": "microglial cell"
+              },
+              {
+                "pct": 4.0,
+                "count": 1837,
+                "label": "immature astrocyte"
+              },
+              {
+                "pct": 4.0,
+                "count": 1805,
+                "label": "brain vascular cell"
+              },
+              {
+                "pct": 3.7,
+                "count": 1704,
+                "label": "sst GABAergic interneuron"
+              },
+              {
+                "pct": 3.2,
+                "count": 1442,
+                "label": "L6 intratelencephalic projecting glutamatergic neuron"
+              },
+              {
+                "pct": 2.6,
+                "count": 1165,
+                "label": "pvalb GABAergic interneuron"
+              },
+              {
+                "pct": 2.5,
+                "count": 1156,
+                "label": "L4 intratelencephalic projecting glutamatergic neuron"
+              },
+              {
+                "pct": 2.5,
+                "count": 1116,
+                "label": "L2/3 intratelencephalic projecting glutamatergic neuron"
+              },
+              {
+                "pct": 2.2,
+                "count": 1010,
+                "label": "neural progenitor cell"
+              },
+              {
+                "pct": 2.1,
+                "count": 946,
+                "label": "VIP GABAergic interneuron"
+              }
+            ],
+            "sex_ontology_term_id": [
+              {
+                "pct": 53.4,
+                "count": 24303,
+                "label": "PATO:0000383"
+              },
+              {
+                "pct": 46.6,
+                "count": 21246,
+                "label": "PATO:0000384"
+              }
+            ],
+            "tissue_ontology_term_id": [
+              {
+                "pct": 68.5,
+                "count": 31213,
+                "label": "UBERON:0009834"
+              },
+              {
+                "pct": 31.5,
+                "count": 14336,
+                "label": "UBERON:0005343"
+              }
+            ],
+            "cell_type_ontology_term_id": [
+              {
+                "pct": 28.9,
+                "count": 13146,
+                "label": "CL:0000679"
+              },
+              {
+                "pct": 13.7,
+                "count": 6245,
+                "label": "CL:0000127"
+              },
+              {
+                "pct": 12.0,
+                "count": 5459,
+                "label": "CL:0000128"
+              },
+              {
+                "pct": 10.7,
+                "count": 4896,
+                "label": "CL:0002453"
+              },
+              {
+                "pct": 9.9,
+                "count": 4528,
+                "label": "CL:0000129"
+              },
+              {
+                "pct": 7.6,
+                "count": 3479,
+                "label": "CL:0000498"
+              },
+              {
+                "pct": 5.2,
+                "count": 2386,
+                "label": "CL:4023063"
+              },
+              {
+                "pct": 4.1,
+                "count": 1888,
+                "label": "CL:4023064"
+              },
+              {
+                "pct": 2.9,
+                "count": 1322,
+                "label": "CL:0000681"
+              },
+              {
+                "pct": 1.7,
+                "count": 754,
+                "label": "CL:0000115"
+              },
+              {
+                "pct": 1.5,
+                "count": 677,
+                "label": "CL:0000669"
+              },
+              {
+                "pct": 0.9,
+                "count": 414,
+                "label": "CL:0011020"
+              },
+              {
+                "pct": 0.8,
+                "count": 355,
+                "label": "CL:0000359"
+              }
+            ],
+            "development_stage_ontology_term_id": [
+              {
+                "pct": 18.2,
+                "count": 8300,
+                "label": "HsapDv:0000108"
+              },
+              {
+                "pct": 14.1,
+                "count": 6406,
+                "label": "HsapDv:0000261"
+              },
+              {
+                "pct": 12.9,
+                "count": 5855,
+                "label": "HsapDv:0000133"
+              },
+              {
+                "pct": 11.9,
+                "count": 5418,
+                "label": "HsapDv:0000098"
+              },
+              {
+                "pct": 10.4,
+                "count": 4754,
+                "label": "HsapDv:0000061"
+              },
+              {
+                "pct": 8.1,
+                "count": 3693,
+                "label": "HsapDv:0000100"
+              },
+              {
+                "pct": 8.1,
+                "count": 3679,
+                "label": "HsapDv:0000056"
+              },
+              {
+                "pct": 6.8,
+                "count": 3102,
+                "label": "HsapDv:0000060"
+              },
+              {
+                "pct": 6.1,
+                "count": 2801,
+                "label": "HsapDv:0000055"
+              },
+              {
+                "pct": 3.4,
+                "count": 1541,
+                "label": "HsapDv:0000114"
+              }
+            ]
+          },
+          "total_cells": 45549
+        },
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/90eea19b-0680-4c76-aa99-f058ab3447e9/f5e9258a-113f-442f-841d-e689f105a8e4/predictions.tsv"
+      },
+      "created_at": "2026-03-30T23:12:34.866Z",
+      "updated_at": "2026-03-31T07:53:14.892Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "9dd29620-cc98-4ed1-aa3f-efaec8342b9d",
+    "fields": {
+      "job": "e49b3fc2-febe-4f4a-a410-83409dbbfc07",
+      "reference": "b3a873b2-7981-4088-afb9-b4e8b8e05dca",
+      "status": "complete",
+      "public": true,
+      "batch_job_id": "4ccaf9ff-8388-476e-a34a-f0b9d23989a8",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/e49b3fc2-febe-4f4a-a410-83409dbbfc07/b3a873b2-7981-4088-afb9-b4e8b8e05dca/output.arrow",
+        "summary": {
+          "columns": {
+            "sex": {
+              "type": "user_label",
+              "entries": [
+                {
+                  "pct": 53.5,
+                  "count": 161,
+                  "label": "male"
+                },
+                {
+                  "pct": 46.5,
+                  "count": 140,
+                  "label": "female"
+                }
+              ],
+              "unclassified": 0
+            },
+            "donor_id": {
+              "type": "user_label",
+              "entries": [
+                {
+                  "pct": 4.0,
+                  "count": 12,
+                  "label": "H16.06.008"
+                },
+                {
+                  "pct": 3.7,
+                  "count": 11,
+                  "label": "H15.03.003"
+                },
+                {
+                  "pct": 3.7,
+                  "count": 11,
+                  "label": "H18.03.002"
+                },
+                {
+                  "pct": 3.3,
+                  "count": 10,
+                  "label": "H19.06.356"
+                },
+                {
+                  "pct": 3.0,
+                  "count": 9,
+                  "label": "H19.26.404"
+                },
+                {
+                  "pct": 2.7,
+                  "count": 8,
+                  "label": "H18.26.403"
+                },
+                {
+                  "pct": 2.3,
+                  "count": 7,
+                  "label": "H16.06.012"
+                },
+                {
+                  "pct": 2.3,
+                  "count": 7,
+                  "label": "H20.03.303"
+                },
+                {
+                  "pct": 2.3,
+                  "count": 7,
+                  "label": "H18.06.362"
+                },
+                {
+                  "pct": 2.3,
+                  "count": 7,
+                  "label": "H19.03.314"
+                },
+                {
+                  "pct": 2.3,
+                  "count": 7,
+                  "label": "H18.06.368"
+                },
+                {
+                  "pct": 2.0,
+                  "count": 6,
+                  "label": "H18.06.005"
+                },
+                {
+                  "pct": 2.0,
+                  "count": 6,
+                  "label": "H17.06.013"
+                },
+                {
+                  "pct": 2.0,
+                  "count": 6,
+                  "label": "H17.06.012"
+                },
+                {
+                  "pct": 2.0,
+                  "count": 6,
+                  "label": "H17.03.002"
+                }
+              ],
+              "unclassified": 0
+            },
+            "Supertype": {
+              "type": "user_label",
+              "entries": [
+                {
+                  "pct": 51.2,
+                  "count": 154,
+                  "label": "Sst Chodl_2"
+                },
+                {
+                  "pct": 48.8,
+                  "count": 147,
+                  "label": "Sst Chodl_1"
+                }
+              ],
+              "unclassified": 0
+            },
+            "Age at death": {
+              "type": "user_label",
+              "entries": [
+                {
+                  "pct": 47.5,
+                  "count": 143,
+                  "label": "18 to 40 years old"
+                },
+                {
+                  "pct": 31.2,
+                  "count": 94,
+                  "label": "41 to 62 years old"
+                },
+                {
+                  "pct": 21.3,
+                  "count": 64,
+                  "label": "63+ years old"
+                }
+              ],
+              "unclassified": 0
+            },
+            "Number of UMIs": {
+              "type": "user_label",
+              "entries": [
+                {
+                  "pct": 51.8,
+                  "count": 156,
+                  "label": "0\u201320000"
+                },
+                {
+                  "pct": 41.2,
+                  "count": 124,
+                  "label": "20000\u201340000"
+                },
+                {
+                  "pct": 5.0,
+                  "count": 15,
+                  "label": "40000\u201360000"
+                },
+                {
+                  "pct": 1.7,
+                  "count": 5,
+                  "label": "60000\u201380000"
+                },
+                {
+                  "pct": 0.3,
+                  "count": 1,
+                  "label": "100000\u2013120000"
+                }
+              ],
+              "unclassified": 0
+            },
+            "Fraction mitochrondrial UMIs": {
+              "type": "user_label",
+              "entries": [
+                {
+                  "pct": 97.0,
+                  "count": 292,
+                  "label": "0.00\u20130.05"
+                },
+                {
+                  "pct": 1.0,
+                  "count": 3,
+                  "label": "0.10\u20130.15"
+                },
+                {
+                  "pct": 0.7,
+                  "count": 2,
+                  "label": "0.05\u20130.10"
+                },
+                {
+                  "pct": 0.3,
+                  "count": 1,
+                  "label": "0.15\u20130.20"
+                },
+                {
+                  "pct": 0.3,
+                  "count": 1,
+                  "label": "0.30\u20130.35"
+                },
+                {
+                  "pct": 0.3,
+                  "count": 1,
+                  "label": "0.35\u20130.40"
+                },
+                {
+                  "pct": 0.3,
+                  "count": 1,
+                  "label": "0.40\u20130.45"
+                }
+              ],
+              "unclassified": 0
+            },
+            "prediction_by_harmonized_cell_label_top1": {
+              "rank": 1,
+              "type": "prediction",
+              "entries": [
+                {
+                  "pct": 78.4,
+                  "count": 236,
+                  "label": "sst GABAergic cortical interneuron"
+                },
+                {
+                  "pct": 16.9,
+                  "count": 51,
+                  "label": "STR SST-CHODL GABA"
+                },
+                {
+                  "pct": 1.7,
+                  "count": 5,
+                  "label": "STR FS PTHLH-PVALB GABA"
+                },
+                {
+                  "pct": 0.7,
+                  "count": 2,
+                  "label": "MGE interneuron"
+                },
+                {
+                  "pct": 0.7,
+                  "count": 2,
+                  "label": "STRd Cholinergic GABA"
+                },
+                {
+                  "pct": 0.7,
+                  "count": 2,
+                  "label": "Splatter"
+                },
+                {
+                  "pct": 0.7,
+                  "count": 2,
+                  "label": "pvalb GABAergic cortical interneuron"
+                },
+                {
+                  "pct": 0.3,
+                  "count": 1,
+                  "label": "vip GABAergic cortical interneuron"
+                }
+              ],
+              "unclassified": 0,
+              "reference_column": "harmonized_cell_label"
+            },
+            "prediction_by_harmonized_cell_label_top2": {
+              "rank": 2,
+              "type": "prediction",
+              "entries": [
+                {
+                  "pct": 51.8,
+                  "count": 156,
+                  "label": "STR SST-CHODL GABA"
+                },
+                {
+                  "pct": 16.3,
+                  "count": 49,
+                  "label": "sst GABAergic cortical interneuron"
+                },
+                {
+                  "pct": 3.3,
+                  "count": 10,
+                  "label": "pvalb GABAergic cortical interneuron"
+                },
+                {
+                  "pct": 2.0,
+                  "count": 6,
+                  "label": "STR SST-RSPO2 GABA"
+                },
+                {
+                  "pct": 1.3,
+                  "count": 4,
+                  "label": "MGE interneuron"
+                },
+                {
+                  "pct": 1.0,
+                  "count": 3,
+                  "label": "GPe MEIS2-SOX6 GABA"
+                },
+                {
+                  "pct": 1.0,
+                  "count": 3,
+                  "label": "GPe-NDB-SI LHX6-LHX8-GBX1 GABA"
+                },
+                {
+                  "pct": 1.0,
+                  "count": 3,
+                  "label": "Splatter"
+                },
+                {
+                  "pct": 0.3,
+                  "count": 1,
+                  "label": "GPi Core"
+                }
+              ],
+              "unclassified": 66,
+              "reference_column": "harmonized_cell_label"
+            },
+            "prediction_by_harmonized_cell_label_top1_score": {
+              "rank": 1,
+              "type": "prediction_score",
+              "entries": [
+                {
+                  "pct": 34.6,
+                  "count": 104,
+                  "label": "0.9\u20131.0"
+                },
+                {
+                  "pct": 16.9,
+                  "count": 51,
+                  "label": "0.6\u20130.7"
+                },
+                {
+                  "pct": 16.3,
+                  "count": 49,
+                  "label": "0.5\u20130.6"
+                },
+                {
+                  "pct": 14.6,
+                  "count": 44,
+                  "label": "0.8\u20130.9"
+                },
+                {
+                  "pct": 13.6,
+                  "count": 41,
+                  "label": "0.7\u20130.8"
+                },
+                {
+                  "pct": 2.7,
+                  "count": 8,
+                  "label": "0.4\u20130.5"
+                },
+                {
+                  "pct": 1.3,
+                  "count": 4,
+                  "label": "0.3\u20130.4"
+                }
+              ],
+              "unclassified": 0,
+              "reference_column": "harmonized_cell_label"
+            },
+            "prediction_by_harmonized_cell_label_top2_score": {
+              "rank": 2,
+              "type": "prediction_score",
+              "entries": [
+                {
+                  "pct": 9.0,
+                  "count": 27,
+                  "label": "0.35\u20130.40"
+                },
+                {
+                  "pct": 8.6,
+                  "count": 26,
+                  "label": "0.00\u20130.05"
+                },
+                {
+                  "pct": 8.6,
+                  "count": 26,
+                  "label": "0.20\u20130.25"
+                },
+                {
+                  "pct": 8.3,
+                  "count": 25,
+                  "label": "0.15\u20130.20"
+                },
+                {
+                  "pct": 8.3,
+                  "count": 25,
+                  "label": "0.40\u20130.45"
+                },
+                {
+                  "pct": 8.0,
+                  "count": 24,
+                  "label": "0.25\u20130.30"
+                },
+                {
+                  "pct": 8.0,
+                  "count": 24,
+                  "label": "0.30\u20130.35"
+                },
+                {
+                  "pct": 6.6,
+                  "count": 20,
+                  "label": "0.10\u20130.15"
+                },
+                {
+                  "pct": 6.3,
+                  "count": 19,
+                  "label": "0.05\u20130.10"
+                },
+                {
+                  "pct": 6.3,
+                  "count": 19,
+                  "label": "0.45\u20130.50"
+                }
+              ],
+              "unclassified": 66,
+              "reference_column": "harmonized_cell_label"
+            }
+          },
+          "total_cells": 301
+        },
+        "column_notes": "# Analysis of Single-Cell RNA-seq File\n\n**Quality Control Metrics & Filtering:**\n'Number of UMIs' and 'Fraction mitochondrial UMIs' are standard QC metrics. Filtering may be warranted: the high proportion of cells with low UMI counts (51.8% with 0\u201320000 UMIs) could indicate shallow sequencing or dropouts, and the small population with elevated mitochondrial fractions (>0.15% = 1.6% of cells) may represent stressed or dying cells worth excluding.\n\n**Analysis Platform:**\nThis file was generated by the **UCSC Cell Browser** pipeline or a compatible scRNA-seq processing workflow (likely 10x Genomics Chromium data based on the UMI nomenclature and categorical binning conventions).\n\n**User-Defined Annotations:**\nThe user-supplied metadata includes 'Supertype' (cell type classification: Sst Chodl_1 vs. Sst Chodl_2), 'Age at death', 'donor_id', and 'sex'\u2014biological and demographic covariates for downstream association analyses.",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/e49b3fc2-febe-4f4a-a410-83409dbbfc07/b3a873b2-7981-4088-afb9-b4e8b8e05dca/predictions.tsv"
+      },
+      "created_at": "2026-05-18T22:49:55.450Z",
+      "updated_at": "2026-05-29T23:27:30.441Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "ab05d7af-ce28-4197-8984-65e949970e84",
+    "fields": {
+      "job": "b66905af-9292-4262-b808-6475aade3244",
+      "reference": "f5e9258a-113f-442f-841d-e689f105a8e4",
+      "status": "complete",
+      "public": true,
+      "batch_job_id": "b37b2f02-354f-4341-8c79-66142707b090",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/b66905af-9292-4262-b808-6475aade3244/f5e9258a-113f-442f-841d-e689f105a8e4/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/b66905af-9292-4262-b808-6475aade3244/f5e9258a-113f-442f-841d-e689f105a8e4/predictions.tsv"
+      },
+      "created_at": "2026-03-24T19:21:05.639Z",
+      "updated_at": "2026-03-24T21:35:55.238Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "b3fb4c66-f61b-4ba3-8c89-66431645f3a6",
+    "fields": {
+      "job": "bdd2d041-98ff-49a3-8d20-2d40c7f8cddc",
+      "reference": "f5e9258a-113f-442f-841d-e689f105a8e4",
+      "status": "complete",
+      "public": true,
+      "batch_job_id": "adb46652-c736-44b7-adfc-412bb633c656",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/bdd2d041-98ff-49a3-8d20-2d40c7f8cddc/f5e9258a-113f-442f-841d-e689f105a8e4/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/bdd2d041-98ff-49a3-8d20-2d40c7f8cddc/f5e9258a-113f-442f-841d-e689f105a8e4/predictions.tsv"
+      },
+      "created_at": "2026-03-24T22:24:19.971Z",
+      "updated_at": "2026-03-24T22:34:48.550Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "d8eac42d-13b0-48e1-8217-4b9e91330db5",
+    "fields": {
+      "job": "acb3a626-72b4-427b-b845-fee2dfade640",
+      "reference": "f5e9258a-113f-442f-841d-e689f105a8e4",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "886641d9-31d2-4971-a8b4-a6c738043029",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/acb3a626-72b4-427b-b845-fee2dfade640/f5e9258a-113f-442f-841d-e689f105a8e4/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/acb3a626-72b4-427b-b845-fee2dfade640/f5e9258a-113f-442f-841d-e689f105a8e4/predictions.tsv"
+      },
+      "created_at": "2026-03-31T18:06:03.847Z",
+      "updated_at": "2026-03-31T19:03:02.012Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "e630da28-1a06-4001-b90e-f517d0b6dcd8",
+    "fields": {
+      "job": "a09ed0ab-1fe6-4b26-b513-d6d0a48cee41",
+      "reference": "b3a873b2-7981-4088-afb9-b4e8b8e05dca",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "3f567194-644d-4c5f-bac6-4d5246c35c66",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/b3a873b2-7981-4088-afb9-b4e8b8e05dca/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/a09ed0ab-1fe6-4b26-b513-d6d0a48cee41/b3a873b2-7981-4088-afb9-b4e8b8e05dca/predictions.tsv"
+      },
+      "created_at": "2026-04-13T22:49:16.253Z",
+      "updated_at": "2026-04-13T23:00:46.380Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "e7fd76e6-7c3b-414f-8f1d-5bdace6aad11",
+    "fields": {
+      "job": "856368d1-3d16-4226-982c-28077d66284d",
+      "reference": "b3a873b2-7981-4088-afb9-b4e8b8e05dca",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/856368d1-3d16-4226-982c-28077d66284d/b3a873b2-7981-4088-afb9-b4e8b8e05dca/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/856368d1-3d16-4226-982c-28077d66284d/b3a873b2-7981-4088-afb9-b4e8b8e05dca/predictions.tsv"
+      },
+      "created_at": "2026-05-29T22:46:59.760Z",
+      "updated_at": "2026-05-29T22:46:59.760Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "f8395e48-42c1-4739-b95a-5cf124aef8e5",
+    "fields": {
+      "job": "b66905af-9292-4262-b808-6475aade3244",
+      "reference": "7b31dcca-b245-417d-866f-0b2042bb22b2",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "9c34831c-f8a8-43ef-9ef3-397313821cd4",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/b66905af-9292-4262-b808-6475aade3244/7b31dcca-b245-417d-866f-0b2042bb22b2/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/b66905af-9292-4262-b808-6475aade3244/7b31dcca-b245-417d-866f-0b2042bb22b2/predictions.tsv"
+      },
+      "created_at": "2026-05-08T05:00:41.863Z",
+      "updated_at": "2026-05-08T05:05:55.681Z"
+    }
+  },
+  {
+    "model": "jobs.projection",
+    "pk": "fad7b9f9-1505-440a-a574-806d841ca6e2",
+    "fields": {
+      "job": "774a01e8-e2f5-4d28-855c-4199affcafd9",
+      "reference": "f5e9258a-113f-442f-841d-e689f105a8e4",
+      "status": "complete",
+      "public": false,
+      "batch_job_id": "9aa7bbe4-8ba0-4f9c-86e0-b553e501b388",
+      "result": {
+        "s3_uri": "s3://ucsc-brainexplorer/mapping-results/774a01e8-e2f5-4d28-855c-4199affcafd9/f5e9258a-113f-442f-841d-e689f105a8e4/output.arrow",
+        "predictions_s3_uri": "s3://ucsc-brainexplorer/mapping-results/774a01e8-e2f5-4d28-855c-4199affcafd9/f5e9258a-113f-442f-841d-e689f105a8e4/predictions.tsv"
+      },
+      "created_at": "2026-03-25T07:23:53.320Z",
+      "updated_at": "2026-05-08T04:51:49.023Z"
+    }
+  }
+]
