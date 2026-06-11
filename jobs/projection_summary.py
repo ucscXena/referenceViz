@@ -43,7 +43,7 @@ def _numeric_summary(col):
     """Return min/max/mean/null_count for a numeric column, skipping nulls."""
     combined = col.combine_chunks()
     null_count = int(combined.null_count)
-    if combined.length() == null_count:
+    if len(combined) == null_count:
         return {'min': None, 'max': None, 'mean': None, 'null_count': null_count}
     return {
         'min': round(float(pc.min(combined).as_py()), 4),

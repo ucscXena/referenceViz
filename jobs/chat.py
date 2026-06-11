@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import sys
 from typing import Optional
 
 import anthropic
@@ -471,11 +472,24 @@ def _gene_expression_uris(job, reference_name):
     return h5ad_uri, arrow_uri
 
 
-def _dispatch_gene_expression(name, tool_input, job):
-    host = getattr(settings, 'GENE_EXPRESSION_HOST', '')
-    if not host:
-        return {'error': 'Gene expression service not configured'}
+_ge_cache = None  # FileCache instance shared across requests within one worker
 
+
+def _ge_local_cache():
+    """Return (and lazily create) a FileCache from gene_expression_service."""
+    global _ge_cache
+    if _ge_cache is not None:
+        return _ge_cache
+    service_dir = getattr(settings, 'GENE_EXPRESSION_LOCAL', '')
+    if service_dir not in sys.path:
+        sys.path.insert(0, service_dir)
+    from cache import FileCache  # noqa: PLC0415
+    cache_dir = getattr(settings, 'GENE_EXPRESSION_CACHE_DIR', '/tmp/ge_cache')
+    _ge_cache = FileCache(cache_dir)
+    return _ge_cache
+
+
+def _dispatch_gene_expression(name, tool_input, job):
     reference = tool_input.get('reference')
     try:
         h5ad_uri, arrow_uri = _gene_expression_uris(job, reference)
@@ -483,6 +497,43 @@ def _dispatch_gene_expression(name, tool_input, job):
         return {'error': str(e)}
 
     n_genes = tool_input.get('n_genes') or 20
+
+    local_dir = getattr(settings, 'GENE_EXPRESSION_LOCAL', '')
+    if local_dir:
+        # Direct invocation — no HTTP round-trip
+        if local_dir not in sys.path:
+            sys.path.insert(0, local_dir)
+        from analysis import top_expressed_genes, differential_expression  # noqa: PLC0415
+        cache = _ge_local_cache()
+        try:
+            h5ad_path = cache.get(h5ad_uri)
+            arrow_path = cache.get(arrow_uri)
+            uce_model_s3 = getattr(settings, 'UCE_MODEL_S3', '')
+            if name == 'top_expressed_genes':
+                result = top_expressed_genes(
+                    h5ad_path, arrow_path,
+                    predicate=tool_input['subset'],
+                    n_genes=n_genes,
+                    cache=cache,
+                    uce_model_s3=uce_model_s3,
+                )
+            else:  # differential_expression
+                result = differential_expression(
+                    h5ad_path, arrow_path,
+                    predicate_a=tool_input['group_a'],
+                    predicate_b=tool_input['group_b'],
+                    n_genes=n_genes,
+                    cache=cache,
+                    uce_model_s3=uce_model_s3,
+                )
+        except Exception as e:
+            logger.exception('Local gene expression analysis failed: %s', name)
+            return {'error': str(e)}
+        return result
+
+    host = getattr(settings, 'GENE_EXPRESSION_HOST', '')
+    if not host:
+        return {'error': 'Gene expression service not configured'}
 
     if name == 'top_expressed_genes':
         endpoint = 'top-expressed'
@@ -896,13 +947,21 @@ def chat(request, pk):
         thread = _db_to_api_messages(db_messages)
         response = None
         charts = []
+        tools_called = []
+        gene_expr_available = (
+            getattr(settings, 'GENE_EXPRESSION_HOST', '') or
+            getattr(settings, 'GENE_EXPRESSION_LOCAL', '')
+        )
+        active_tools = TOOLS if gene_expr_available else [
+            t for t in TOOLS if t['name'] not in ('top_expressed_genes', 'differential_expression')
+        ]
         for _ in range(5):
             response = client.messages.create(
                 model='claude-sonnet-4-6',
                 max_tokens=4096,
                 system=system_prompt,
                 messages=thread,
-                tools=TOOLS,
+                tools=active_tools,
             )
             if response.stop_reason != 'tool_use':
                 break
@@ -910,6 +969,7 @@ def chat(request, pk):
             tool_results = []
             for block in response.content:
                 if block.type == 'tool_use':
+                    tools_called.append(block.name)
                     result = _dispatch_tool(block.name, block.input, job)
                     is_error = 'error' in result
                     if not is_error and 'dot_plot' in result:
@@ -947,6 +1007,8 @@ def chat(request, pk):
             resp['charts'] = charts
         if suggestions:
             resp['suggestions'] = suggestions
+        if tools_called:
+            resp['tools_called'] = tools_called
         return JsonResponse(resp)
 
     except anthropic.APIError as e:

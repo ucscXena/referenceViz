@@ -10,5 +10,6 @@ db.sqlite3
 .DS_Store
 .directory
 /server/site_settings_private.py
+/server/site_settings_test.py
 /server/local_auth.py
 /papers/

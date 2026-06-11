@@ -50,8 +50,14 @@ PROJ_SECONDS_PER_CELL = 169 / 10000  # per cell
 
 # Chatbot
 ANTHROPIC_API_KEY = ''
-# Gene expression compute service (separate EC2 instance); leave empty to disable the tools
+# Gene expression compute service — set one of these, not both:
+# GENE_EXPRESSION_HOST: URL of the remote HTTP service (e.g. 'http://10.0.0.1:8000')
+# GENE_EXPRESSION_LOCAL: absolute path to the gene_expression_service/ directory for
+#   direct in-process invocation (no HTTP). Also set GENE_EXPRESSION_CACHE_DIR if
+#   the default /tmp/ge_cache is not suitable.
 GENE_EXPRESSION_HOST = ''
+GENE_EXPRESSION_LOCAL = ''
+GENE_EXPRESSION_CACHE_DIR = '/tmp/ge_cache'
 # Where sentence-transformers caches downloaded models.
 # Production: deploy script downloads here as ubuntu, then chmod a+rX so www-data can read.
 # Locally: override in site_settings_private.py if your st-models dir is elsewhere.
@@ -66,3 +72,6 @@ EXTRA_MIDDLEWARE = ["server.local_auth.ForceUserMiddleware"]
 # set to test allauth
 if os.environ.get("DBFORWARD"):
     from .site_settings_private import *
+
+if os.environ.get("CHATBOT"):
+    from .site_settings_test import *

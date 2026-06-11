@@ -1,0 +1,181 @@
+{
+  "n_cells": 5000,
+  "n_mismatches": 711,
+  "mismatch_pct": 14.2,
+  "prediction_by_cell_type_top1": {
+    "Excitatory neuron": {
+      "count": 2023,
+      "pct": 40.5
+    },
+    "Inhibitory neuron": {
+      "count": 1260,
+      "pct": 25.2
+    },
+    "Astrocyte": {
+      "count": 972,
+      "pct": 19.4
+    },
+    "Oligodendrocyte": {
+      "count": 502,
+      "pct": 10.0
+    },
+    "Microglia": {
+      "count": 243,
+      "pct": 4.9
+    }
+  },
+  "prediction_by_cell_type_top1_score": {
+    "0.80\u20130.88": {
+      "count": 1330,
+      "pct": 26.6
+    },
+    "0.88\u20130.96": {
+      "count": 1224,
+      "pct": 24.5
+    },
+    "0.72\u20130.80": {
+      "count": 997,
+      "pct": 19.9
+    },
+    "0.64\u20130.72": {
+      "count": 617,
+      "pct": 12.3
+    },
+    "0.56\u20130.64": {
+      "count": 334,
+      "pct": 6.7
+    },
+    "0.96\u20131.04": {
+      "count": 273,
+      "pct": 5.5
+    },
+    "0.48\u20130.56": {
+      "count": 150,
+      "pct": 3.0
+    },
+    "0.40\u20130.48": {
+      "count": 55,
+      "pct": 1.1
+    },
+    "0.32\u20130.40": {
+      "count": 16,
+      "pct": 0.3
+    },
+    "0.24\u20130.32": {
+      "count": 4,
+      "pct": 0.1
+    }
+  },
+  "prediction_by_cell_type_top2": {
+    "Oligodendrocyte": {
+      "count": 1179,
+      "pct": 23.6
+    },
+    "Microglia": {
+      "count": 1141,
+      "pct": 22.8
+    },
+    "Astrocyte": {
+      "count": 994,
+      "pct": 19.9
+    },
+    "Inhibitory neuron": {
+      "count": 931,
+      "pct": 18.6
+    },
+    "Excitatory neuron": {
+      "count": 755,
+      "pct": 15.1
+    }
+  },
+  "cell_type": {
+    "Excitatory neuron": {
+      "count": 1849,
+      "pct": 37.0
+    },
+    "Inhibitory neuron": {
+      "count": 1225,
+      "pct": 24.5
+    },
+    "Astrocyte": {
+      "count": 966,
+      "pct": 19.3
+    },
+    "Oligodendrocyte": {
+      "count": 578,
+      "pct": 11.6
+    },
+    "Microglia": {
+      "count": 382,
+      "pct": 7.6
+    }
+  },
+  "donor_id": {
+    "D01": {
+      "count": 2029,
+      "pct": 40.6
+    },
+    "D02": {
+      "count": 1705,
+      "pct": 34.1
+    },
+    "D03": {
+      "count": 1266,
+      "pct": 25.3
+    }
+  },
+  "doublet_score": {
+    "0.00\u20130.05": {
+      "count": 2645,
+      "pct": 52.9
+    },
+    "0.05\u20130.10": {
+      "count": 1328,
+      "pct": 26.6
+    },
+    "0.10\u20130.15": {
+      "count": 587,
+      "pct": 11.7
+    },
+    "0.15\u20130.20": {
+      "count": 256,
+      "pct": 5.1
+    },
+    "0.20\u20130.25": {
+      "count": 116,
+      "pct": 2.3
+    },
+    "0.25\u20130.30": {
+      "count": 41,
+      "pct": 0.8
+    },
+    "0.30\u20130.35": {
+      "count": 20,
+      "pct": 0.4
+    },
+    "0.35\u20130.40": {
+      "count": 5,
+      "pct": 0.1
+    },
+    "0.50\u20130.55": {
+      "count": 1,
+      "pct": 0.0
+    },
+    "0.40\u20130.45": {
+      "count": 1,
+      "pct": 0.0
+    }
+  },
+  "columns": [
+    "x",
+    "y",
+    "prediction_by_cell_type_top1",
+    "prediction_by_cell_type_top1_score",
+    "prediction_by_cell_type_top2",
+    "prediction_by_cell_type_top2_score",
+    "cell_type",
+    "donor_id",
+    "doublet_score",
+    "prediction_mean_euclidean_distance"
+  ]
+}
