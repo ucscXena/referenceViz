@@ -56,6 +56,8 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'server.urls'
 
+DATABASE_ROUTERS = ['server.db_router.ProductionReadOnlyRouter']
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',

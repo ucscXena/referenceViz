@@ -18,6 +18,9 @@ DATABASES = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
     }
+    # On the dev host, site_settings_private.py should also define a 'production'
+    # key pointing at the production RDS instance.  The sync_reference_data and
+    # copy_user management commands operate between 'default' and 'production'.
 }
 
 # Base URL of this server for internal callbacks (e.g. 'http://10.0.0.1')
