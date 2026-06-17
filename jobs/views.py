@@ -74,7 +74,7 @@ def reference_list(request):
     """Listing of references with version selectors."""
     groups = (
         ReferenceGroup.objects
-        .exclude(default_version=None)
+        .filter(default_version__is_active=True)
         .prefetch_related(
             models.Prefetch(
                 'versions',
