@@ -62,7 +62,8 @@ class Command(BaseCommand):
         self._sync_reference_groups(src, dst, dry)
         self._sync_references(src, dst, dry)
         self._fix_default_versions(src, dst, dry)
-        self._delete_orphans(src, dst, dry)
+        if not options['reverse']:
+            self._delete_orphans(src, dst, dry)
         if not skip_chunks:
             self._sync_chunks(src, dst, dry)
 

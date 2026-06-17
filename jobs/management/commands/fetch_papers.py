@@ -23,11 +23,15 @@ S3 layout (under AWS_S3_BUCKET):
   papers/<slug>/paper.pdf   (manually downloaded papers only)
 """
 
+import io
 import json
 import os
 import re
+import struct
+import threading
 import time
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import requests
@@ -38,9 +42,16 @@ from jobs.aws import boto_client
 
 S3_PREFIX = 'papers/'
 
-EPMC_SEARCH = 'https://www.ebi.ac.uk/europepmc/webservices/rest/search'
-EPMC_XML = 'https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML'
-UNPAYWALL = 'https://api.unpaywall.org/v2/{doi}?email={email}'
+EPMC_SEARCH    = 'https://www.ebi.ac.uk/europepmc/webservices/rest/search'
+NCBI_BIOC      = 'https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi/BioC_xml/{pmcid}/unicode'
+BIORXIV_API    = 'https://api.biorxiv.org/details/biorxiv/{doi}/json'
+BIORXIV_BUCKET = 'biorxiv-src-monthly'
+UNPAYWALL      = 'https://api.unpaywall.org/v2/{doi}?email={email}'
+
+_MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+]
 
 
 def doi_slug(doi):
@@ -71,48 +82,49 @@ def collect_papers(metadata):
     return papers
 
 
-# ── Europe PMC ────────────────────────────────────────────────────────────────
+# ── Europe PMC search + NCBI BioC full text ───────────────────────────────────
 
-def _epmc_xml_to_text(xml_text):
-    """Extract readable text from Europe PMC full-text XML."""
+# Section types to include (skip refs, figures, supplements, competing interests)
+_BIOC_SKIP = {'REF', 'FIG', 'SUPPL', 'COMP_INT', 'AUTH_CONT', 'ACK_FUND'}
+
+def _bioc_xml_to_text(xml_text):
+    """Extract readable text from NCBI BioC OA XML."""
     root = ET.fromstring(xml_text)
-    ns = {'jats': 'https://jats.nlm.nih.gov/ns/archiving/1.3/'}
+    doc  = root.find('document')
+    if doc is None:
+        return ''
+
     parts = []
+    current_section = None
 
-    def _text(el):
-        return ''.join(el.itertext()).strip()
+    for passage in doc.findall('passage'):
+        infons = {i.get('key'): i.text for i in passage.findall('infon')}
+        ptype   = infons.get('type', '')
+        section = infons.get('section_type', '')
 
-    # Title
-    for el in root.iter('article-title'):
-        parts.append('# ' + _text(el))
-        break
+        if section in _BIOC_SKIP:
+            continue
 
-    # Abstract
-    for el in root.iter('abstract'):
-        parts.append('\n## Abstract\n' + _text(el))
-        break
+        text = (passage.findtext('text') or '').strip()
+        if not text:
+            continue
 
-    # Body sections
-    for sec in root.iter('sec'):
-        title_el = sec.find('title')
-        heading = _text(title_el) if title_el is not None else ''
-        body_parts = []
-        for child in sec:
-            if child.tag not in ('title', 'sec'):
-                t = _text(child)
-                if t:
-                    body_parts.append(t)
-        if body_parts:
-            if heading:
-                parts.append(f'\n## {heading}\n' + '\n\n'.join(body_parts))
-            else:
-                parts.append('\n'.join(body_parts))
+        if ptype == 'title':
+            parts.append(f'# {text}')
+        elif ptype == 'abstract':
+            parts.append(f'## Abstract\n{text}')
+        elif ptype in ('title_1', 'title_2'):
+            if section != current_section:
+                current_section = section
+            parts.append(f'## {text}')
+        else:
+            parts.append(text)
 
     return '\n\n'.join(parts)
 
 
 def fetch_europepmc(doi, stdout):
-    stdout.write(f'  Trying Europe PMC…')
+    stdout.write('  Trying PMC full text…')
     try:
         r = requests.get(EPMC_SEARCH, params={
             'query': f'DOI:{doi}',
@@ -122,20 +134,23 @@ def fetch_europepmc(doi, stdout):
         r.raise_for_status()
         results = r.json().get('resultList', {}).get('result', [])
         if not results:
-            stdout.write(' not found\n')
+            stdout.write(' not found in Europe PMC\n')
             return None
         pmcid = results[0].get('pmcid')
         if not pmcid:
-            stdout.write(' no PMCID (paywalled or not indexed)\n')
+            stdout.write(' no PMCID (paywalled or not in PMC)\n')
             return None
         time.sleep(0.5)
-        xml_r = requests.get(EPMC_XML.format(pmcid=pmcid), timeout=30)
-        if xml_r.status_code != 200:
-            stdout.write(f' XML fetch failed ({xml_r.status_code})\n')
+        bioc_r = requests.get(NCBI_BIOC.format(pmcid=pmcid), timeout=30)
+        if bioc_r.status_code != 200:
+            stdout.write(f' PMC OA fetch failed ({bioc_r.status_code})\n')
             return None
-        text = _epmc_xml_to_text(xml_r.text)
+        text = _bioc_xml_to_text(bioc_r.text)
+        if not text:
+            stdout.write(' empty response from PMC OA\n')
+            return None
         stdout.write(f' OK ({pmcid}, {len(text):,} chars)\n')
-        return text, 'europepmc'
+        return text, 'pmc_oa'
     except Exception as e:
         stdout.write(f' error: {e}\n')
         return None
@@ -181,6 +196,164 @@ def _fetch_and_parse_pdf(url, stdout):
         text = '\n\n'.join(pages)
         stdout.write(f' OK ({len(pages)} pages, {len(text):,} chars)\n')
         return text, 'unpaywall_pdf'
+    except Exception as e:
+        stdout.write(f' error: {e}\n')
+        return None
+
+
+# ── bioRxiv S3 ────────────────────────────────────────────────────────────────
+
+def _jats_xml_to_text(xml_text):
+    """Extract readable text from JATS XML (bioRxiv format)."""
+    # Strip the DOCTYPE declaration which ET can't resolve
+    xml_text = re.sub(r'<!DOCTYPE[^>]*>', '', xml_text)
+    root = ET.fromstring(xml_text)
+    parts = []
+
+    def _text(el):
+        return ''.join(el.itertext()).strip()
+
+    for el in root.iter('article-title'):
+        parts.append('# ' + _text(el))
+        break
+    for el in root.iter('abstract'):
+        parts.append('## Abstract\n' + _text(el))
+        break
+    for sec in root.iter('sec'):
+        title_el = sec.find('title')
+        heading = _text(title_el) if title_el is not None else ''
+        body = [_text(c) for c in sec if c.tag not in ('title', 'sec') if _text(c)]
+        if body:
+            parts.append((f'## {heading}\n' if heading else '') + '\n\n'.join(body))
+
+    return '\n\n'.join(parts)
+
+
+def _zip_find_member(data, target_name):
+    """Return True if target_name appears as a member in the ZIP central directory data."""
+    cd_sig = b'PK\x01\x02'
+    pos = 0
+    while pos <= len(data) - 46:
+        if data[pos:pos + 4] != cd_sig:
+            pos += 1
+            continue
+        fname_len, extra_len, comment_len = struct.unpack_from('<HHH', data, pos + 28)
+        fname = data[pos + 46: pos + 46 + fname_len].decode('utf-8', errors='replace')
+        if fname == target_name:
+            return True
+        pos += 46 + fname_len + extra_len + comment_len
+    return False
+
+
+def _find_meca_key(s3, prefix, paper_number, stdout, workers=32):
+    """
+    Scan the bioRxiv S3 month directory to find the MECA file containing
+    content/{paper_number}.xml.  Uses ZIP range-reads (tail of each file)
+    issued in parallel to minimise latency.
+    """
+    target = f'content/{paper_number}.xml'
+
+    # Collect all candidate keys first (list operations are fast)
+    paginator = s3.get_paginator('list_objects_v2')
+    candidates = []
+    for page in paginator.paginate(
+        Bucket=BIORXIV_BUCKET, Prefix=prefix, RequestPayer='requester',
+        PaginationConfig={'PageSize': 1000},
+    ):
+        for obj in page.get('Contents', []):
+            if obj['Key'].endswith('.meca') and obj['Size'] >= 22:
+                candidates.append((obj['Key'], obj['Size']))
+
+    found_event = threading.Event()
+    found_key = [None]
+
+    def check_one(key, size):
+        if found_event.is_set():
+            return
+        try:
+            tail_size = min(4096, size)
+            resp = s3.get_object(
+                Bucket=BIORXIV_BUCKET, Key=key,
+                Range=f'bytes={size - tail_size}-{size - 1}',
+                RequestPayer='requester',
+            )
+            tail = resp['Body'].read()
+
+            eocd_pos = tail.rfind(b'PK\x05\x06')
+            if eocd_pos < 0 or len(tail) - eocd_pos < 22:
+                return
+            _sig, _dnum, _sdnum, _dentries, _total, cd_size, cd_offset, _clen = \
+                struct.unpack_from('<IHHHHIIH', tail, eocd_pos)
+
+            file_tail_start = size - tail_size
+            if cd_offset >= file_tail_start:
+                cd_data = tail[cd_offset - file_tail_start: cd_offset - file_tail_start + cd_size]
+            else:
+                resp2 = s3.get_object(
+                    Bucket=BIORXIV_BUCKET, Key=key,
+                    Range=f'bytes={cd_offset}-{cd_offset + cd_size - 1}',
+                    RequestPayer='requester',
+                )
+                cd_data = resp2['Body'].read()
+
+            if _zip_find_member(cd_data, target):
+                found_key[0] = key
+                found_event.set()
+        except Exception:
+            pass
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(check_one, key, size) for key, size in candidates]
+        # Wait until found or all done
+        found_event.wait(timeout=300)
+        for f in futures:
+            f.cancel()
+
+    if found_key[0]:
+        stdout.write(f' found ({len(candidates)} candidates)\n')
+    else:
+        stdout.write(f' not found ({len(candidates)} candidates)\n')
+    return found_key[0]
+
+
+def fetch_biorxiv_s3(doi, stdout):
+    """Fetch full-text JATS XML for a bioRxiv preprint from the requester-pays S3 bucket."""
+    # Only handles 10.1101/ preprint DOIs
+    m = re.match(r'10\.1101/(\d{4})\.(\d{2})\.\d{2}\.(\d+)$', doi)
+    if not m:
+        return None
+
+    year, month_num, paper_number = m.group(1), int(m.group(2)), m.group(3)
+    month_name = _MONTH_NAMES[month_num - 1]
+    prefix = f'Current_Content/{month_name}_{year}/'
+
+    stdout.write(f'  Trying bioRxiv S3 ({prefix})…')
+    try:
+        import boto3
+        from botocore.config import Config
+        _WORKERS = 32
+        kw = {'region_name': settings.AWS_REGION,
+              'config': Config(max_pool_connections=_WORKERS)}
+        if getattr(settings, 'AWS_ACCESS_KEY_ID', ''):
+            kw['aws_access_key_id'] = settings.AWS_ACCESS_KEY_ID
+            kw['aws_secret_access_key'] = settings.AWS_SECRET_ACCESS_KEY
+        s3 = boto3.client('s3', **kw)
+        key = _find_meca_key(s3, prefix, paper_number, stdout, workers=_WORKERS)
+        if not key:
+            return None
+
+        # Download and unzip the MECA
+        resp = s3.get_object(Bucket=BIORXIV_BUCKET, Key=key, RequestPayer='requester')
+        import zipfile
+        zf = zipfile.ZipFile(io.BytesIO(resp['Body'].read()))
+        xml_name = f'content/{paper_number}.xml'
+        xml_text = zf.read(xml_name).decode('utf-8')
+        text = _jats_xml_to_text(xml_text)
+        if not text:
+            stdout.write(' empty XML\n')
+            return None
+        stdout.write(f' OK ({len(text):,} chars)\n')
+        return text, 'biorxiv_s3'
     except Exception as e:
         stdout.write(f' error: {e}\n')
         return None
@@ -255,6 +428,9 @@ class Command(BaseCommand):
         parser.add_argument('--doi', help='Fetch a single DOI only.')
         parser.add_argument('--force', action='store_true',
                             help='Re-fetch even if fulltext.txt already exists.')
+        parser.add_argument('--retry-abstract', action='store_true',
+                            help='Re-fetch only papers previously saved as abstract-only '
+                                 '(leaves successful full-text fetches untouched).')
         parser.add_argument('--s3-sync', action='store_true',
                             help='Pull missing files from S3 before fetching, '
                                  'then push all local files to S3 at the end.')
@@ -303,14 +479,29 @@ class Command(BaseCommand):
             self.stdout.write(f'\n{info["label"]} [{doi}]')
 
             if fulltext_path.exists() and not options['force']:
-                self.stdout.write(f'  Already fetched ({fulltext_path}), skipping.\n')
-                results['ok'].append(doi)
-                continue
+                if options['retry_abstract']:
+                    meta_path_existing = out_dir / 'meta.json'
+                    if meta_path_existing.exists():
+                        existing_source = json.loads(
+                            meta_path_existing.read_text()
+                        ).get('source', '')
+                        if existing_source != 'abstract':
+                            self.stdout.write(
+                                f'  Full text already fetched ({existing_source}), skipping.\n'
+                            )
+                            results['ok'].append(doi)
+                            continue
+                    # source is 'abstract' (or meta missing) — fall through to re-fetch
+                else:
+                    self.stdout.write(f'  Already fetched, skipping.\n')
+                    results['ok'].append(doi)
+                    continue
 
             fetched = (
+                fetch_manual_pdf(slug, papers_dir, self.stdout) or
+                fetch_biorxiv_s3(doi, self.stdout) or
                 fetch_europepmc(doi, self.stdout) or
-                fetch_unpaywall(doi, unpaywall_email, self.stdout) or
-                fetch_manual_pdf(slug, papers_dir, self.stdout)
+                fetch_unpaywall(doi, unpaywall_email, self.stdout)
             )
 
             if fetched:
