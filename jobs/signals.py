@@ -1,8 +1,15 @@
+from allauth.account.signals import user_signed_up
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.utils import timezone
 
+from .example import provision_example_for_user
 from .models import Job, JobEvent, Projection, ProjectionEvent
+
+
+@receiver(user_signed_up)
+def on_new_user(sender, request, user, **kwargs):
+    provision_example_for_user(user)
 
 
 @receiver(pre_save, sender=Job)

@@ -31,6 +31,12 @@ AWS_REGION = 'us-east-1'
 AWS_BATCH_CONSOLE_URL = 'http://placeholder/detail/{}'
 AWS_S3_BUCKET = ''
 EXAMPLE_FILE_S3_KEY = ''   # e.g. 'example/example.h5ad'; leave empty to hide the example button
+# Pre-populated example job shown to new users on first login.
+# All four must be set together; leave empty to disable.
+EXAMPLE_ARROW_S3_KEY = ''       # e.g. 'example/output.arrow'
+EXAMPLE_TSV_S3_KEY = ''         # e.g. 'example/predictions.tsv'
+EXAMPLE_RESULTS_JSON_S3_KEY = ''  # e.g. 'example/results.json'
+EXAMPLE_REFERENCE_ID = ''       # Reference.id to project against, e.g. 'Adult_Human_Brain_v1'
 # UCE embedding pipeline (Batch)
 UCE_BATCH_JOB_QUEUE = ''
 UCE_BATCH_JOB_DEFINITION = ''

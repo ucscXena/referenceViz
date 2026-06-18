@@ -21,10 +21,6 @@
         </label>
       </div>
 
-      {% if example_available %}
-      <p class="example-hint">No file? <button id="example-btn" class="btn-link" type="button">Try an example</button></p>
-      {% endif %}
-
       <div id="progress" style="display:none; margin-top:1.25rem;">
         <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
         <p id="progress-msg" class="progress-msg">Preparing…</p>
@@ -165,46 +161,6 @@ submitBtn.addEventListener('click', async () => {
     submitBtn.disabled = false;
   }
 });
-
-// ── Example file ──
-
-const exampleBtn = document.getElementById('example-btn');
-if (exampleBtn) {
-  exampleBtn.addEventListener('click', async () => {
-    exampleBtn.disabled = true;
-    progressDiv.style.display = 'block';
-    progressBar.style.width = '50%';
-    progressMsg.textContent = 'Preparing example file…';
-
-    try {
-      const resp = await fetch('{% url "use_example" %}', {
-        method: 'POST',
-        headers: {'X-CSRFToken': csrfToken},
-      });
-      if (!resp.ok) throw new Error('Failed to prepare example');
-      const {job_id} = await resp.json();
-
-      progressBar.style.width = '80%';
-      progressMsg.textContent = 'Queuing analysis…';
-      const confirmBody = {mixed_precision: 'bf16'};
-      if (refId) confirmBody.ref_id = refId;
-      const confirmResp = await fetch(`/jobs/${job_id}/confirm/`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-        body: JSON.stringify(confirmBody),
-      });
-      if (!confirmResp.ok) throw new Error('Failed to confirm');
-
-      progressBar.style.width = '100%';
-      progressMsg.textContent = 'Queued! Redirecting…';
-      window.location.href = '{% url "job_list" %}';
-    } catch (err) {
-      progressMsg.textContent = 'Error: ' + err.message;
-      progressBar.style.background = '#d32f2f';
-      exampleBtn.disabled = false;
-    }
-  });
-}
 
 // ── Warn before leaving while an upload is in progress; clean up on exit ──
 
@@ -370,23 +326,6 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   width: 0%;
   transition: width 0.3s ease;
 }
-.example-hint {
-  font-size: 0.875rem;
-  color: #666;
-  margin: 0.75rem 0 0;
-  text-align: center;
-}
-.btn-link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: #1976d2;
-  font-size: inherit;
-  cursor: pointer;
-  text-decoration: underline;
-}
-.btn-link:hover { color: #1565c0; }
-.btn-link:disabled { color: #aaa; cursor: default; }
 .progress-msg {
   font-size: 0.875rem;
   color: #555;
