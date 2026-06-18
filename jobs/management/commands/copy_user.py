@@ -10,6 +10,8 @@ Run on the dev host (where both DB aliases are configured):
   python manage.py copy_user user@example.com --dry-run
 """
 
+import copy
+
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connections
@@ -73,10 +75,12 @@ class Command(BaseCommand):
                 dst_user.save(using=DST)
         except User.DoesNotExist:
             self.stdout.write(f'  User: create new')
-            dst_user = src_user  # will save with a new pk assigned by DST
             if not dry:
+                dst_user = copy.copy(src_user)  # new object — src_user.pk stays intact
                 dst_user.pk = None
                 dst_user.save(using=DST)
+            else:
+                dst_user = src_user
 
         if dry:
             # Can't copy related records without a real dst_user.pk
