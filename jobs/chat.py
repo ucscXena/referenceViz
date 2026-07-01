@@ -347,11 +347,13 @@ def _dispatch_tool(name, tool_input, job):
         if not projections:
             return {'error': 'No complete projections available'}
 
+        dn = _projection_display_names(projections)
+
         def _find_proj(ref_name):
             if ref_name:
-                p = next((p for p in projections if p.reference.name == ref_name), None)
+                p = next((p for p in projections if dn[p.pk] == ref_name), None)
                 if p is None:
-                    raise ValueError(f'Reference {ref_name!r} not found. Available: {[p.reference.name for p in projections]}')
+                    raise ValueError(f'Reference {ref_name!r} not found. Available: {list(dn.values())}')
                 return p
             return projections[0]
 
@@ -403,11 +405,12 @@ def _dispatch_tool(name, tool_input, job):
         )
         if not projections:
             return {'error': 'No complete projections available'}
+        dn = _projection_display_names(projections)
         if ref_name:
-            proj = next((p for p in projections if p.reference.name == ref_name), None)
+            proj = next((p for p in projections if dn[p.pk] == ref_name), None)
             if proj is None:
                 return {'error': f'Reference {ref_name!r} not found. '
-                        f'Available: {[p.reference.name for p in projections]}'}
+                        f'Available: {list(dn.values())}'}
         else:
             proj = projections[0]
 
@@ -456,12 +459,13 @@ def _gene_expression_uris(job, reference_name):
     )
     if not projections:
         raise ValueError('No complete projections available')
+    dn = _projection_display_names(projections)
     if reference_name:
-        proj = next((p for p in projections if p.reference.name == reference_name), None)
+        proj = next((p for p in projections if dn[p.pk] == reference_name), None)
         if proj is None:
             raise ValueError(
                 f'Reference {reference_name!r} not found. '
-                f'Available: {[p.reference.name for p in projections]}'
+                f'Available: {list(dn.values())}'
             )
     else:
         proj = projections[0]
@@ -630,9 +634,28 @@ def _interpret_columns(summary):
         return ''
 
 
+def _projection_display_names(projections):
+    """
+    Return a dict mapping projection pk → display name.
+    When multiple projections share the same reference group title, each gets
+    the version label appended so Claude can tell them apart.
+    """
+    from collections import Counter
+    group_counts = Counter(proj.reference.name for proj in projections)
+    names = {}
+    for proj in projections:
+        base = proj.reference.name
+        if group_counts[base] > 1 and proj.reference.version_label:
+            names[proj.pk] = f"{base} ({proj.reference.version_label})"
+        else:
+            names[proj.pk] = base
+    return names
+
+
 def _build_system_prompt(job, chunks=None):
     metadata = _load_metadata()
     projections = list(job.projections.select_related('reference').all())
+    display_names = _projection_display_names(projections)
 
     lines = [
         "You are a helpful assistant for UCSC Brain Explorer, a tool that maps "
@@ -650,9 +673,8 @@ def _build_system_prompt(job, chunks=None):
         ref_id = str(proj.reference_id)
         meta = metadata.get(ref_id, {})
 
-        lines += ["", f"## Reference: {proj.reference.name}"]
-        if proj.reference.version_label:
-            lines.append(f"Version: {proj.reference.version_label}")
+        ref_label = display_names[proj.pk]
+        lines += ["", f"## Reference: {ref_label}"]
         lines.append(f"Projection status: {proj.status}")
 
         if meta.get('abstract'):
@@ -705,7 +727,7 @@ def _build_system_prompt(job, chunks=None):
             summary = proj.result.get('summary')
             if summary:
                 total_cells = summary['total_cells']
-                lines.append(f"\n## Mapping results: {proj.reference.name}")
+                lines.append(f"\n## Mapping results: {ref_label}")
                 lines.append(f"Total cells: {total_cells:,}")
 
                 pred_cols = {k: v for k, v in summary['columns'].items()
