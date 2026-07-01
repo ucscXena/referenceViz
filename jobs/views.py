@@ -15,6 +15,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
+import django_rq
+
 from .aws import boto_client, delete_s3_key, delete_s3_uri
 from .models import Job, Projection, Reference, ReferenceGroup, ShareToken, UCEModel
 from .tasks import run_analysis, _submit_projection
@@ -549,27 +551,12 @@ def clone_job(request, token):
     if original_job.user == request.user:
         return redirect('job_list')
 
-    s3 = boto_client('s3')
-    bucket = settings.AWS_S3_BUCKET
+    from .tasks import clone_job_files
+
     new_job_id = uuid.uuid4()
 
-    # Copy UCE result file
-    original_uce_uri = original_job.uce_s3_uri()
-    new_uce_uri = None
-    if original_uce_uri:
-        try:
-            _, orig_key = original_uce_uri.replace('s3://', '').split('/', 1)
-            new_uce_key = f'uce-results/{new_job_id}/output.h5ad'
-            s3.copy_object(
-                Bucket=bucket,
-                CopySource={'Bucket': bucket, 'Key': orig_key},
-                Key=new_uce_key,
-            )
-            new_uce_uri = f's3://{bucket}/{new_uce_key}'
-        except Exception:
-            logger.warning('Failed to copy UCE result for clone of job %s', original_job.id, exc_info=True)
-
-    new_result = {'uce_s3_uri': new_uce_uri} if new_uce_uri else {}
+    # Seed result with metadata that's safe to copy immediately (no S3 involved)
+    new_result = {}
     if original_job.result and original_job.result.get('cell_count'):
         new_result['cell_count'] = original_job.result['cell_count']
 
@@ -578,48 +565,29 @@ def clone_job(request, token):
         user=request.user,
         uce_model=original_job.uce_model,
         original_filename=original_job.original_filename,
-        status='complete',
+        status='pending',
         result=new_result,
     )
-    if original_job.s3_input_key:
-        new_input_key = f'uploads/{new_job_id}/{original_job.original_filename}'
-        try:
-            s3.copy_object(
-                Bucket=bucket,
-                CopySource={'Bucket': bucket, 'Key': original_job.s3_input_key},
-                Key=new_input_key,
-            )
-            new_job.s3_input_key = new_input_key
-            new_job.save(update_fields=['s3_input_key'])
-        except Exception:
-            logger.warning('Failed to copy input file for clone of job %s', original_job.id, exc_info=True)
 
-    # Clone complete projections
+    # Create projection rows immediately so the job list can show what's coming.
+    # Store the original projection id in result so the RQ task can match them up.
+    new_projection_ids = []
     for proj in original_job.projections.filter(status='complete').select_related('reference'):
-        proj_result = proj.result or {}
-        new_proj_result = {}
-        for src_key, dest_name in [('s3_uri', 'output.arrow'), ('predictions_s3_uri', 'predictions.tsv')]:
-            orig_uri = proj_result.get(src_key)
-            if not orig_uri:
-                continue
-            try:
-                _, orig_s3_key = orig_uri.replace('s3://', '').split('/', 1)
-                new_s3_key = f'mapping-results/{new_job_id}/{proj.reference_id}/{dest_name}'
-                s3.copy_object(
-                    Bucket=bucket,
-                    CopySource={'Bucket': bucket, 'Key': orig_s3_key},
-                    Key=new_s3_key,
-                )
-                new_proj_result[src_key] = f's3://{bucket}/{new_s3_key}'
-            except Exception:
-                logger.warning('Failed to copy projection file %s for clone', orig_uri, exc_info=True)
-        Projection.objects.create(
+        new_proj = Projection.objects.create(
             job=new_job,
             reference=proj.reference,
-            status='complete',
+            status='pending',
             public=False,
-            result=new_proj_result,
+            result={'_clone_source': str(proj.id)},
         )
+        new_projection_ids.append(str(new_proj.id))
+
+    django_rq.get_queue('default').enqueue(
+        clone_job_files,
+        str(new_job_id),
+        str(original_job.id),
+        new_projection_ids,
+    )
 
     return redirect('job_list')
 

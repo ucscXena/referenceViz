@@ -6,7 +6,7 @@ from django.conf import settings
 from django.utils import timezone
 from django_rq import job
 
-from .aws import delete_s3_key, delete_s3_uri, notify_staff
+from .aws import boto_client, delete_s3_key, delete_s3_uri, notify_staff
 from .batch import check_batch_job, submit_batch_job, submit_uce_batch_job
 from .models import Job, Projection
 
@@ -174,6 +174,94 @@ def _submit_projection(projection, uce_s3_uri):
             subject=f'Projection job failed to submit: {str(projection.id)[:8]}',
             message=f'Projection {projection.id} failed to submit to Batch.\nUser: {projection.job.user}\nReference: {projection.reference.name}\nError: {e}',
         )
+
+
+@job('default')
+def clone_job_files(new_job_id, original_job_id, projection_ids):
+    """
+    RQ task: copy S3 files for a cloned job and mark it complete.
+
+    Called after the new Job and Projection DB rows have already been created
+    with status='pending'.  On success sets job.status='complete' and each
+    projection.status='complete'.  On any S3 error the job is set to 'error'
+    so the user sees a clear failure rather than a stuck pending job.
+    """
+    try:
+        new_job = Job.objects.get(id=new_job_id)
+        original_job = Job.objects.get(id=original_job_id)
+    except Job.DoesNotExist:
+        return  # deleted before we ran
+
+    bucket = settings.AWS_S3_BUCKET
+    s3 = boto_client('s3')
+
+    try:
+        # Copy UCE embedding
+        original_uce_uri = original_job.uce_s3_uri()
+        if original_uce_uri:
+            _, orig_key = original_uce_uri.replace('s3://', '').split('/', 1)
+            new_uce_key = f'uce-results/{new_job_id}/output.h5ad'
+            s3.copy_object(
+                Bucket=bucket,
+                CopySource={'Bucket': bucket, 'Key': orig_key},
+                Key=new_uce_key,
+            )
+            new_job.result = {**new_job.result, 'uce_s3_uri': f's3://{bucket}/{new_uce_key}'}
+            new_job.save(update_fields=['result'])
+
+        # Copy input h5ad
+        if original_job.s3_input_key:
+            new_input_key = f'uploads/{new_job_id}/{original_job.original_filename}'
+            s3.copy_object(
+                Bucket=bucket,
+                CopySource={'Bucket': bucket, 'Key': original_job.s3_input_key},
+                Key=new_input_key,
+            )
+            new_job.s3_input_key = new_input_key
+            new_job.save(update_fields=['s3_input_key'])
+
+        # Copy projection files
+        orig_projections = {str(p.id): p for p in
+                            original_job.projections.filter(status='complete')}
+        for new_proj in Projection.objects.filter(id__in=projection_ids):
+            orig_proj = orig_projections.get(str(new_proj.result.get('_clone_source')))
+            if orig_proj is None:
+                continue
+            proj_result = orig_proj.result or {}
+            new_proj_result = {}
+            for src_key, dest_name in [('s3_uri', 'output.arrow'),
+                                        ('predictions_s3_uri', 'predictions.tsv')]:
+                orig_uri = proj_result.get(src_key)
+                if not orig_uri:
+                    continue
+                _, orig_s3_key = orig_uri.replace('s3://', '').split('/', 1)
+                new_s3_key = f'mapping-results/{new_job_id}/{new_proj.reference_id}/{dest_name}'
+                s3.copy_object(
+                    Bucket=bucket,
+                    CopySource={'Bucket': bucket, 'Key': orig_s3_key},
+                    Key=new_s3_key,
+                )
+                new_proj_result[src_key] = f's3://{bucket}/{new_s3_key}'
+            # Copy over any cached summary/column_notes from the original
+            for meta_key in ('summary', 'column_notes'):
+                if proj_result.get(meta_key):
+                    new_proj_result[meta_key] = proj_result[meta_key]
+            new_proj.result = new_proj_result
+            new_proj.status = 'complete'
+            new_proj.save()
+
+    except Exception as e:
+        new_job.result = {**new_job.result, 'error': str(e)}
+        new_job.status = 'error'
+        new_job.save(update_fields=['result', 'status'])
+        notify_staff(
+            subject=f'Clone failed: {str(new_job_id)[:8]}',
+            message=f'Clone of job {original_job_id} failed.\nUser: {new_job.user}\nError: {e}',
+        )
+        return
+
+    new_job.status = 'complete'
+    new_job.save(update_fields=['status'])
 
 
 @job('default')
