@@ -244,10 +244,10 @@ const csrfToken = '{{ csrf_token }}';
 const sharePopover = document.createElement('div');
 sharePopover.className = 'share-popover';
 sharePopover.innerHTML =
-  `<button type="button" class="popover-btn popover-share" title="Copy a link to this visualization">Share a link</button>` +
-  `<button type="button" class="popover-btn popover-disable" title="Remove access to this visualization">Disable link sharing</button>` +
+  `<button type="button" class="popover-btn popover-share" title="Copy a link to this visualization">Link to visualization</button>` +
+  `<button type="button" class="popover-btn popover-disable" title="Remove access to this visualization">Disable visualization link</button>` +
   `<div class="popover-divider"></div>` +
-  `<button type="button" class="popover-btn popover-send" title="Copy a link that lets another user import a copy of these results into their own account">Send a copy</button>`;
+  `<button type="button" class="popover-btn popover-send" title="Copy a link that lets another user import a copy of these results into their own account">Share mapping results</button>`;
 document.body.appendChild(sharePopover);
 
 let activeShareBtn = null;
@@ -295,7 +295,11 @@ sharePopover.querySelector('.popover-send').addEventListener('click', () => {
     headers: {'X-CSRFToken': csrfToken},
   })
     .then(r => r.json())
-    .then(data => { copyToClipboard(data.url); showToast(btn, 'Copied to clipboard'); });
+    .then(data => {
+      shareMappingModal.querySelector('.share-mapping-input').value = data.url;
+      shareMappingModal.querySelector('.share-mapping-copy .material-icons').textContent = 'content_copy';
+      shareMappingModal.style.display = 'flex';
+    });
 });
 
 sharePopover.querySelector('.popover-share').addEventListener('click', () => {
@@ -305,7 +309,7 @@ sharePopover.querySelector('.popover-share').addEventListener('click', () => {
   const doShare = () => {
     const url = window.location.origin + btn.dataset.vizUrl;
     copyToClipboard(url);
-    showToast(btn, 'Copied to clipboard');
+    showToast(btn, 'Link copied to clipboard');
   };
   if (btn.dataset.public !== 'true') {
     fetch(`/jobs/projections/${btn.dataset.projId}/set-public/`, {
@@ -345,6 +349,37 @@ document.addEventListener('click', e => {
   const rect = btn.getBoundingClientRect();
   sharePopover.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
   sharePopover.style.left = rect.left + 'px';
+});
+
+// Share mapping results modal
+const shareMappingModal = document.createElement('div');
+shareMappingModal.className = 'share-mapping-overlay';
+shareMappingModal.innerHTML =
+  `<div class="share-mapping-modal">` +
+  `<div class="share-mapping-header">` +
+  `<h3 class="share-mapping-title">Share mapping results</h3>` +
+  `<button type="button" class="share-mapping-close" title="Close"><span class="material-icons">close</span></button>` +
+  `</div>` +
+  `<p class="share-mapping-desc">This link allows another user to import a copy of these results into their own account. The recipient will need a UCSC Brain Explorer account.</p>` +
+  `<div class="share-mapping-link-row">` +
+  `<input type="text" class="share-mapping-input" readonly>` +
+  `<button type="button" class="share-mapping-copy" title="Copy link"><span class="material-icons">content_copy</span></button>` +
+  `</div>` +
+  `</div>`;
+document.body.appendChild(shareMappingModal);
+
+shareMappingModal.querySelector('.share-mapping-close').addEventListener('click', () => {
+  shareMappingModal.style.display = '';
+});
+shareMappingModal.addEventListener('click', e => {
+  if (e.target === shareMappingModal) shareMappingModal.style.display = '';
+});
+shareMappingModal.querySelector('.share-mapping-copy').addEventListener('click', () => {
+  const input = shareMappingModal.querySelector('.share-mapping-input');
+  copyToClipboard(input.value);
+  const icon = shareMappingModal.querySelector('.share-mapping-copy .material-icons');
+  icon.textContent = 'check';
+  setTimeout(() => { icon.textContent = 'content_copy'; }, 2000);
 });
 
 // Explore popover
@@ -684,6 +719,85 @@ tr.job-row-alt td {
 .popover-stop { color: #c62828; }
 .popover-stop:hover { background: #ffebee; }
 .popover-stop .material-icons { color: #c62828; }
+
+.share-mapping-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+.share-mapping-modal {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+  padding: 1.5rem;
+  width: 480px;
+  max-width: calc(100vw - 2rem);
+}
+.share-mapping-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.share-mapping-title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #222;
+  margin: 0;
+}
+.share-mapping-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #888;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.share-mapping-close:hover { background: #f0f0f0; color: #333; }
+.share-mapping-close .material-icons { font-size: 20px; }
+.share-mapping-desc {
+  font-size: 0.875rem;
+  color: #555;
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}
+.share-mapping-link-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.share-mapping-input {
+  flex: 1;
+  font-size: 0.8rem;
+  font-family: monospace;
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  color: #333;
+  background: #f8f8f8;
+  min-width: 0;
+}
+.share-mapping-copy {
+  background: none;
+  border: 1px solid #1976d2;
+  border-radius: 4px;
+  color: #1976d2;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 5px;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.share-mapping-copy:hover { background: #e8f0fe; }
+.share-mapping-copy .material-icons { font-size: 18px; line-height: 1; }
 
 .list-footer { margin-top: 1rem; }
 .btn-delete {
