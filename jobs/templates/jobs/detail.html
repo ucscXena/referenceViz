@@ -416,8 +416,14 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   line-height: inherit;
 }
 .plot-ref-link:hover { color: #1565c0; }
-.plot-flip-btn {
+.plot-btn-group {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+.plot-flip-btn, .plot-dl-btn {
   display: inline-flex;
   align-items: center;
   background: none;
@@ -426,11 +432,10 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   color: #888;
   cursor: pointer;
   padding: 0.1rem 0.2rem;
-  flex-shrink: 0;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.plot-flip-btn:hover { background: #e8f0fe; color: #1976d2; border-color: #1976d2; }
-.plot-flip-btn .material-icons { font-size: 16px; line-height: 1; }
+.plot-flip-btn:hover, .plot-dl-btn:hover { background: #e8f0fe; color: #1976d2; border-color: #1976d2; }
+.plot-flip-btn .material-icons, .plot-dl-btn .material-icons { font-size: 16px; line-height: 1; }
 .plot-tooltip {
   position: fixed;
   background: rgba(30, 30, 30, 0.88);
@@ -653,6 +658,22 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     sessionStorage.setItem(ORIENT_KEY, JSON.stringify(o));
   }
 
+  function downloadChartTsv(chart) {
+    const { rows, cols, matrix, row_totals } = chart.data;
+    const header = [chart.col_a, ...cols, 'total'].join('\t');
+    const dataRows = rows.map((label, i) =>
+      [label, ...matrix[i].map(String), row_totals[i]].join('\t')
+    );
+    const tsv = [header, ...dataRows].join('\n');
+    const blob = new Blob([tsv], { type: 'text/tab-separated-values' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${chart.col_a}_${chart.col_b}.tsv`.replace(/[^\w.-]/g, '_');
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function renderPlotGroup(charts) {
     const orientations = getOrientations();
     const group = document.createElement('div');
@@ -669,11 +690,27 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
       titleSpan.textContent = chart.title || `${chart.col_a} × ${chart.col_b}`;
       summary.appendChild(titleSpan);
 
+      const btnGroup = document.createElement('div');
+      btnGroup.className = 'plot-btn-group';
+
+      const dlBtn = document.createElement('button');
+      dlBtn.className = 'plot-dl-btn';
+      dlBtn.title = 'Download as TSV';
+      dlBtn.innerHTML = '<span class="material-icons">download</span>';
+      dlBtn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        downloadChartTsv(chart);
+      });
+      btnGroup.appendChild(dlBtn);
+
       const flipBtn = document.createElement('button');
       flipBtn.className = 'plot-flip-btn';
       flipBtn.title = 'Flip axes';
       flipBtn.innerHTML = '<span class="material-icons">swap_horiz</span>';
-      summary.appendChild(flipBtn);
+      btnGroup.appendChild(flipBtn);
+
+      summary.appendChild(btnGroup);
       details.appendChild(summary);
 
       const body = document.createElement('div');
