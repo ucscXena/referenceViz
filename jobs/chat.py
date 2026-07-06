@@ -839,6 +839,8 @@ def _build_system_prompt(job, chunks=None):
         "analysis. Filters can be applied to restrict the analysis to a subset of cells.",
         "",
         "Do not use strikethrough formatting (~~text~~) in your responses.",
+        "When computing any numerical aggregation or percentage from the data above, "
+        "use the code execution tool to perform the calculation — do not compute it in your head.",
         "",
         "After your response, if there are specific follow-up questions worth surfacing, "
         "append them as a suggestions block on the very last line, with no trailing text:\n"
@@ -977,6 +979,7 @@ def chat(request, pk):
         active_tools = TOOLS if gene_expr_available else [
             t for t in TOOLS if t['name'] not in ('top_expressed_genes', 'differential_expression')
         ]
+        active_tools = active_tools + [{'type': 'code_execution_20260120', 'name': 'code_execution'}]
         for _ in range(5):
             response = client.messages.create(
                 model='claude-sonnet-4-6',
@@ -985,7 +988,7 @@ def chat(request, pk):
                 messages=thread,
                 tools=active_tools,
             )
-            if response.stop_reason != 'tool_use':
+            if response.stop_reason not in ('tool_use', 'pause_turn'):
                 break
 
             tool_results = []
@@ -1012,7 +1015,7 @@ def chat(request, pk):
             thread.append({'role': 'assistant', 'content': [b.model_dump() for b in response.content]})
             thread.append({'role': 'user', 'content': tool_results})
 
-        text = next((b.text for b in response.content if hasattr(b, 'text')), '')
+        text = ''.join(b.text for b in response.content if hasattr(b, 'text'))
         text, suggestions = _extract_suggestions(text)
 
         ConversationMessage.objects.create(
