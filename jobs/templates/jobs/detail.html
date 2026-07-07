@@ -305,6 +305,27 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   padding: 0;
   font-size: 0.85em;
 }
+.bubble-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+}
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: #aaa;
+  cursor: pointer;
+  padding: 0.15rem 0.25rem;
+  font-size: 0.75rem;
+  transition: color 0.15s;
+}
+.copy-btn:hover { color: #1976d2; }
+.copy-btn .material-icons { font-size: 14px; line-height: 1; }
+.copy-btn--copied { color: #388e3c; }
 .chat-bubble--error {
   align-self: flex-start;
   background: #ffebee;
@@ -810,6 +831,27 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     return div;
   }
 
+  function addCopyButton(bubble, getText) {
+    const actions = document.createElement('div');
+    actions.className = 'bubble-actions';
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.title = 'Copy response';
+    btn.innerHTML = '<span class="material-icons">content_copy</span>';
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(getText()).then(() => {
+        btn.classList.add('copy-btn--copied');
+        btn.innerHTML = '<span class="material-icons">check</span>';
+        setTimeout(() => {
+          btn.classList.remove('copy-btn--copied');
+          btn.innerHTML = '<span class="material-icons">content_copy</span>';
+        }, 1500);
+      });
+    });
+    actions.appendChild(btn);
+    bubble.appendChild(actions);
+  }
+
   function renderConversation(msgs) {
     log.innerHTML = '';
     const lastAssistantIdx = msgs.reduce((acc, m, i) => m.role === 'assistant' ? i : acc, -1);
@@ -821,6 +863,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
         const div = addBubble('assistant', '');
         div.innerHTML = marked.parse(msg.content || '');
         postProcessChartRefs(div);
+        if (msg.content) addCopyButton(div, () => msg.content);
         lastEl = div;
         if (msg.charts && msg.charts.length) {
           const pg = renderPlotGroup(msg.charts);
@@ -878,6 +921,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
           if (content) {
             thinking.innerHTML = marked.parse(content);
             postProcessChartRefs(thinking);
+            addCopyButton(thinking, () => content);
           } else {
             thinking.style.display = 'none';
           }
