@@ -87,6 +87,29 @@ fileInput.addEventListener('change', () => {
   }
 });
 
+const uploadArea = document.getElementById('upload-area');
+
+uploadArea.addEventListener('dragover', e => {
+  e.preventDefault();
+  uploadArea.classList.add('drag-over');
+});
+
+uploadArea.addEventListener('dragleave', e => {
+  if (!uploadArea.contains(e.relatedTarget)) uploadArea.classList.remove('drag-over');
+});
+
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadArea.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  fileInput.files = dt.files;
+  document.getElementById('upload-label-text').textContent = file.name;
+  submitBtn.disabled = false;
+});
+
 let uploadInProgress = false;
 let activeJobId = null;
 
@@ -302,7 +325,7 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   background: #fafafa;
   transition: border-color 0.2s;
 }
-.upload-area:hover { border-color: #1976d2; }
+.upload-area:hover, .upload-area.drag-over { border-color: #1976d2; background: #e3f2fd; }
 .upload-label {
   display: flex;
   flex-direction: column;
