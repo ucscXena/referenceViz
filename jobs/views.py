@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import secrets
 import uuid
 from datetime import timedelta
@@ -353,20 +354,25 @@ def set_projection_public(request, pk):
 @login_required
 def download_projection(request, pk):
     """Presigned download for a completed projection result (parquet)."""
-    projection = get_object_or_404(Projection, pk=str(pk), job__user=request.user)
+    projection = get_object_or_404(
+        Projection.objects.select_related('job', 'reference__group'),
+        pk=str(pk), job__user=request.user,
+    )
     s3_uri = projection.result.get('predictions_s3_uri') if projection.result else None
     if not s3_uri:
-        from django.http import Http404
         raise Http404
 
+    base = re.sub(r'\.h5ad$', '', projection.job.original_filename, flags=re.IGNORECASE)
+    raw = f'{base}_{projection.reference}.tsv'
+    filename = re.sub(r'[^\w.-]', '_', raw).strip('_')
+
     bucket, key = s3_uri.replace('s3://', '').split('/', 1)
-    s3 = boto_client('s3')
-    url = s3.generate_presigned_url(
+    url = boto_client('s3').generate_presigned_url(
         'get_object',
         Params={
             'Bucket': bucket,
             'Key': key,
-            'ResponseContentDisposition': 'attachment; filename="cell_label_prediction.tsv"',
+            'ResponseContentDisposition': f'attachment; filename="{filename}"',
         },
         ExpiresIn=300,
     )
