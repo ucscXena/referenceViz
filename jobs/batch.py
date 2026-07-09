@@ -8,15 +8,18 @@ logger = logging.getLogger(__name__)
 
 
 def submit_uce_batch_job(input_s3_uri, output_s3_uri, callback_url, model_s3,
-                         mixed_precision='bf16', job_name='uce-inference'):
+                         mixed_precision='bf16', job_name='uce-inference',
+                         job_queue=None):
     """
     Submit a UCE embedding job to AWS Batch.
     Returns the Batch job ID.
+    job_queue defaults to UCE_BATCH_JOB_QUEUE (Spot); pass
+    UCE_BATCH_JOB_QUEUE_ONDEMAND to use the On-Demand fallback queue.
     """
     batch = boto_client('batch')
     response = batch.submit_job(
         jobName=job_name,
-        jobQueue=settings.UCE_BATCH_JOB_QUEUE,
+        jobQueue=job_queue or settings.UCE_BATCH_JOB_QUEUE,
         jobDefinition=settings.UCE_BATCH_JOB_DEFINITION,
         parameters={
             'input_s3': input_s3_uri,
