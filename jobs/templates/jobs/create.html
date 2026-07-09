@@ -80,11 +80,13 @@ const progressDiv = document.getElementById('progress');
 const progressBar = document.getElementById('progress-bar');
 const progressMsg = document.getElementById('progress-msg');
 
+function setFileSelected(file) {
+  document.getElementById('upload-label-text').textContent = file.name;
+  submitBtn.disabled = false;
+}
+
 fileInput.addEventListener('change', () => {
-  if (fileInput.files.length) {
-    document.getElementById('upload-label-text').textContent = fileInput.files[0].name;
-    submitBtn.disabled = false;
-  }
+  if (fileInput.files.length) setFileSelected(fileInput.files[0]);
 });
 
 const uploadArea = document.getElementById('upload-area');
@@ -106,12 +108,8 @@ uploadArea.addEventListener('drop', e => {
   const dt = new DataTransfer();
   dt.items.add(file);
   fileInput.files = dt.files;
-  document.getElementById('upload-label-text').textContent = file.name;
-  submitBtn.disabled = false;
+  setFileSelected(file);
 });
-
-let uploadInProgress = false;
-let activeJobId = null;
 
 submitBtn.addEventListener('click', async () => {
   const file = fileInput.files[0];
@@ -119,118 +117,28 @@ submitBtn.addEventListener('click', async () => {
 
   submitBtn.disabled = true;
   progressDiv.style.display = 'block';
-  uploadInProgress = true;
+  progressBar.style.width = '30%';
+  progressMsg.textContent = 'Starting upload…';
 
-  function setProgress(pct, msg) {
-    progressBar.style.width = pct + '%';
-    progressMsg.textContent = msg;
-  }
-
-  let jobId = null;
   try {
-    setProgress(10, 'Requesting upload URL…');
-    const urlResp = await fetch('{% url "upload_url" %}', {
+    const resp = await fetch('{% url "multipart_create" %}', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
       body: JSON.stringify({filename: file.name}),
     });
-    if (!urlResp.ok) throw new Error('Failed to get upload URL');
-    const {job_id, presigned} = await urlResp.json();
-    jobId = job_id;
-    activeJobId = job_id;
+    if (!resp.ok) throw new Error('Failed to initiate upload');
+    const {jobId, uploadId, key} = await resp.json();
 
-    setProgress(30, 'Uploading to S3…');
-    const formData = new FormData();
-    for (const [k, v] of Object.entries(presigned.fields)) formData.append(k, v);
-    formData.append('file', file);
+    await window.UploadManager.start(file, jobId, uploadId, key, {refId: refId || null});
 
-    const s3Resp = await fetch(presigned.url, {method: 'POST', body: formData});
-    if (s3Resp.status !== 204 && s3Resp.status !== 201) {
-      const text = await s3Resp.text().catch(() => '');
-      throw new Error(text.includes('EntityTooLarge')
-        ? 'File exceeds the 5 GB limit — please choose a smaller file'
-        : `S3 upload failed (${s3Resp.status})`);
-    }
-
-    const confirmedId = jobId;
-    jobId = null;      // upload succeeded, no longer need to abort on error
-    activeJobId = null; // no longer need to beacon-abort on exit
-    setProgress(80, 'Queuing analysis…');
-    const confirmBody = {mixed_precision: 'bf16'};
-    if (refId) confirmBody.ref_id = refId;
-    const confirmResp = await fetch(`/jobs/${confirmedId}/confirm/`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-      body: JSON.stringify(confirmBody),
-    });
-    if (!confirmResp.ok) throw new Error('Failed to confirm upload');
-
-    uploadInProgress = false;
-    setProgress(100, 'Queued! Redirecting…');
+    progressBar.style.width = '100%';
+    progressMsg.textContent = 'Upload started — redirecting…';
     window.location.href = '{% url "job_list" %}';
   } catch (err) {
-    if (jobId) {
-      // Use sendBeacon so the abort fires even if this catch ran because the
-      // page is unloading (fetch() is dropped during unload; sendBeacon is not).
-      const abortData = new FormData();
-      abortData.append('csrfmiddlewaretoken', csrfToken);
-      navigator.sendBeacon(`/jobs/${jobId}/abort/`, abortData);
-      jobId = null;
-      activeJobId = null;
-    }
-    uploadInProgress = false;
     progressMsg.textContent = 'Error: ' + err.message;
     progressBar.style.background = '#d32f2f';
     submitBtn.disabled = false;
   }
-});
-
-// ── Warn before leaving while an upload is in progress; clean up on exit ──
-
-function abortActiveJob() {
-  if (activeJobId) {
-    const data = new FormData();
-    data.append('csrfmiddlewaretoken', csrfToken);
-    navigator.sendBeacon(`/jobs/${activeJobId}/abort/`, data);
-    activeJobId = null;
-  }
-}
-
-// Back/forward/close-tab: native browser dialog, then beacon on exit.
-window.addEventListener('beforeunload', (e) => {
-  if (uploadInProgress) {
-    e.preventDefault();
-  }
-});
-
-window.addEventListener('pagehide', () => {
-  if (uploadInProgress) {
-    abortActiveJob();
-  }
-});
-
-// Link clicks: custom confirm dialog so we can also fire the beacon on confirm.
-document.querySelectorAll('a[href]').forEach(a => {
-  if (a.target === '_blank' || a.href.startsWith('mailto:')) return;
-  a.addEventListener('click', (e) => {
-    if (!uploadInProgress) return;
-    e.preventDefault();
-    const dest = a.href;
-    if (confirm('An upload is in progress and will be cancelled if you leave. Leave anyway?')) {
-      const jobToAbort = activeJobId;
-      activeJobId = null;
-      uploadInProgress = false;
-      if (jobToAbort) {
-        const abortData = new FormData();
-        abortData.append('csrfmiddlewaretoken', csrfToken);
-        fetch(`/jobs/${jobToAbort}/abort/`, {method: 'POST', body: abortData})
-          .catch(() => {})
-          .finally(() => { window.location.href = dest; });
-      } else {
-        window.location.href = dest;
-      }
-    }
-  });
 });
 
 // ── Right panel: remap existing embedding ──

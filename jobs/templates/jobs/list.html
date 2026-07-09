@@ -77,6 +77,8 @@
             <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
           {% elif job.status == 'running' %}
             <span class="status-running">{% if job.cell_count %}Running{% else %}Starting{% endif %}</span>
+          {% elif job.status == 'uploading' %}
+            <span class="status-uploading">Uploading…</span>
           {% else %}
             <span class="status-pending">Pending</span>
           {% endif %}
@@ -103,6 +105,8 @@
             <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
           {% elif job.status == 'running' %}
             <span class="status-running">{% if job.cell_count %}Running{% else %}Starting{% endif %}</span>
+          {% elif job.status == 'uploading' %}
+            <span class="status-uploading">Uploading…</span>
           {% else %}
             <span class="status-pending">Pending</span>
           {% endif %}
@@ -430,7 +434,7 @@ document.addEventListener('click', e => {
   const QUEUED_BATCH = new Set(['SUBMITTED', 'PENDING', 'RUNNABLE']);
   // Track last-known projection statuses for transition detection
   const projLastStatus = new Map();
-  const LABELS = {pending: 'Pending', running: 'Running', complete: 'Complete', error: 'Error'};
+  const LABELS = {uploading: 'Uploading', pending: 'Pending', running: 'Running', complete: 'Complete', error: 'Error'};
 
   function formatEst(seconds, queued) {
     if (queued) return '<br><span class="status-est">for machine</span>';
@@ -564,6 +568,12 @@ document.addEventListener('click', e => {
             projLastStatus.set(proj.id, proj.status);
           });
 
+          // If upload just completed, reload so reference/projection rows appear.
+          if (prevStatus === 'uploading' && data.status !== 'uploading') {
+            window.location.reload();
+            return;
+          }
+
           // If UCE just completed, reload so projection rows appear.
           if (data.status === 'complete' && prevStatus !== 'complete' &&
               (data.projections || []).length > 0) {
@@ -576,6 +586,37 @@ document.addEventListener('click', e => {
   }
 
   if (jobRowsWithActiveProjRows().length) pollAll();
+})();
+
+// ── Upload progress via BroadcastChannel ──────────────────────────────────
+(function () {
+  if (!window.BroadcastChannel) return;
+  const bc = new BroadcastChannel('upload-progress');
+  bc.onmessage = ({data}) => {
+    const row = document.querySelector(`tr[data-job-id="${data.jobId}"]`);
+    const cell = row && row.querySelector('.uce-status-cell');
+    if (!cell) return;
+
+    if (data.type === 'progress') {
+      const pct = Math.round(100 * data.done / data.total);
+      cell.innerHTML = `<span class="status-uploading">Uploading ${pct}%</span>`;
+      row.dataset.jobStatus = 'uploading';
+    } else if (data.type === 'complete') {
+      cell.innerHTML = `<span class="status-pending">Pending</span>`;
+      row.dataset.jobStatus = 'pending';
+      // Kick the polling loop immediately so the transition to running shows quickly.
+      fetch(`/jobs/${data.jobId}/status/`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) row.dataset.jobStatus = d.status; })
+        .catch(() => {});
+    } else if (data.type === 'error') {
+      cell.innerHTML = `<span class="status-error">Upload failed</span>`;
+      row.dataset.jobStatus = 'error';
+    } else if (data.type === 'lost') {
+      cell.innerHTML = `<span class="status-error">File lost — please re-upload</span>`;
+      row.dataset.jobStatus = 'error';
+    }
+  };
 })();
 </script>
 
@@ -631,9 +672,10 @@ tr.job-row-alt td {
 .action-sep  { width: 1px; height: 16px; background: #e0e0e0; margin: 0 2px; flex-shrink: 0; }
 .no-projections { color: #bbb; }
 
-.status-complete { color: #2e7d32; font-weight: 500; }
-.status-running  { color: #1565c0; font-weight: 500; }
-.status-pending  { color: #888; }
+.status-complete  { color: #2e7d32; font-weight: 500; }
+.status-running   { color: #1565c0; font-weight: 500; }
+.status-uploading { color: #6a1b9a; font-weight: 500; }
+.status-pending   { color: #888; }
 .status-est      { font-size: 0.8rem; font-weight: 400; opacity: 0.85; }
 .status-error    { color: #c62828; font-weight: 500; text-decoration: none; }
 .status-error:hover { text-decoration: underline; }

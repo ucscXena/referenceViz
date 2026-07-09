@@ -526,7 +526,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
   const RESET_URL = '{% url "job_chat_reset" job.pk %}';
   const CSRF = '{{ csrf_token }}';
   const ORIENT_KEY = 'orient_{{ job.pk }}';
-  const JOB_COMPLETE = {{ job.status|yesno:"true,false" }};
+  const JOB_COMPLETE = {% if job.status == 'complete' %}true{% else %}false{% endif %};
   const messages = [];
 
   const form = document.getElementById('chat-form');

@@ -162,10 +162,144 @@ def use_example(request):
 def abort_upload(request, job_id):
     """Delete a pending job whose S3 upload failed before confirmation."""
     job = get_object_or_404(Job, pk=str(job_id), user=request.user)
-    if job.status != 'pending':
+    if job.status not in ('pending', 'uploading'):
         return JsonResponse({'error': 'job is not pending'}, status=400)
     _delete_job_s3_files(job)
     job.delete()
+    return JsonResponse({'status': 'ok'})
+
+
+# ── Multipart upload endpoints ──────────────────────────────────────────────
+
+@login_required
+@require_POST
+@login_required
+@require_POST
+def multipart_create(request):
+    """Initiate an S3 multipart upload and create a pending Job."""
+    data = json.loads(request.body)
+    filename = data.get('filename', 'upload')
+
+    job = Job.objects.create(
+        user=request.user,
+        original_filename=filename,
+        status='uploading',
+    )
+    s3_key = f'uploads/{job.id}/{filename}'
+    resp = boto_client('s3').create_multipart_upload(
+        Bucket=settings.AWS_S3_BUCKET,
+        Key=s3_key,
+    )
+    job.s3_input_key = s3_key
+    job.result = {'upload_id': resp['UploadId']}
+    job.save(update_fields=['s3_input_key', 'result'])
+
+    return JsonResponse({'jobId': str(job.id), 'uploadId': resp['UploadId'], 'key': s3_key})
+
+
+@login_required
+@require_POST
+def multipart_sign(request):
+    """Sign part URLs for an in-progress multipart upload, or list completed parts."""
+    data = json.loads(request.body)
+    upload_id = data['uploadId']
+    key = data['key']
+    s3 = boto_client('s3')
+
+    if data.get('list'):
+        from botocore.exceptions import ClientError
+        parts = []
+        kwargs = dict(Bucket=settings.AWS_S3_BUCKET, Key=key, UploadId=upload_id)
+        try:
+            while True:
+                resp = s3.list_parts(**kwargs)
+                parts.extend(resp.get('Parts', []))
+                if resp.get('IsTruncated'):
+                    kwargs['PartNumberMarker'] = resp['NextPartNumberMarker']
+                else:
+                    break
+        except ClientError as e:
+            code = e.response['Error']['Code']
+            logger.error('list_parts failed for upload %s: %s', upload_id, e)
+            if code == 'NoSuchUpload':
+                return JsonResponse({'error': 'NoSuchUpload'}, status=404)
+            return JsonResponse({'error': str(e)}, status=502)
+        return JsonResponse({'parts': [{'PartNumber': p['PartNumber'], 'ETag': p['ETag']} for p in parts]})
+
+    urls = {}
+    for part_number in data.get('partNumbers', []):
+        urls[part_number] = s3.generate_presigned_url(
+            'upload_part',
+            Params={
+                'Bucket': settings.AWS_S3_BUCKET,
+                'Key': key,
+                'UploadId': upload_id,
+                'PartNumber': part_number,
+            },
+            ExpiresIn=3600,
+        )
+    return JsonResponse({'urls': urls})
+
+
+@login_required
+@require_POST
+def multipart_complete(request):
+    """Complete a multipart upload and enqueue analysis."""
+    data = json.loads(request.body)
+    job_id = data['jobId']
+    upload_id = data['uploadId']
+    key = data['key']
+    parts = data['parts']  # [{PartNumber, ETag}, ...]
+    ref_id = data.get('refId')
+    mixed_precision = data.get('mixedPrecision', 'bf16')
+
+    job = get_object_or_404(Job, pk=job_id, user=request.user)
+
+    boto_client('s3').complete_multipart_upload(
+        Bucket=settings.AWS_S3_BUCKET,
+        Key=key,
+        UploadId=upload_id,
+        MultipartUpload={'Parts': parts},
+    )
+
+    if ref_id:
+        reference = get_object_or_404(
+            Reference.objects.select_related('uce_model'), pk=ref_id)
+        Projection.objects.get_or_create(job=job, reference=reference)
+        job.uce_model = reference.uce_model
+    else:
+        job.uce_model = UCEModel.objects.get(is_default=True)
+
+    job.status = 'pending'
+    job.save()
+
+    run_analysis.delay(str(job.id), mixed_precision)
+    return JsonResponse({'status': 'queued'})
+
+
+@login_required
+@require_POST
+def multipart_abort(request):
+    """Abort a multipart upload and delete the Job."""
+    data = json.loads(request.body)
+    job_id = data.get('jobId')
+    upload_id = data['uploadId']
+    key = data['key']
+
+    try:
+        boto_client('s3').abort_multipart_upload(
+            Bucket=settings.AWS_S3_BUCKET,
+            Key=key,
+            UploadId=upload_id,
+        )
+    except Exception:
+        pass  # best-effort
+
+    if job_id:
+        job = Job.objects.filter(pk=job_id, user=request.user).first()
+        if job and job.status == 'uploading':
+            job.delete()
+
     return JsonResponse({'status': 'ok'})
 
 
@@ -448,7 +582,7 @@ def uce_callback(request):
     if status == 'success':
         with transaction.atomic():
             job = Job.objects.select_for_update().get(pk=job.pk)
-            if job.status != 'running':
+            if job.status not in ('running', 'error'):
                 return JsonResponse({'status': 'ignored'})
             job.status = 'complete'
             job.save()
@@ -601,6 +735,20 @@ def clone_job(request, token):
 def _delete_job_s3_files(job):
     """Delete all S3 files associated with a job and its projections."""
     result = job.result or {}
+
+    # For jobs still uploading, abort the in-flight multipart upload so S3
+    # doesn't accumulate orphaned parts (the lifecycle rule is a backstop).
+    if job.status == 'uploading' and job.s3_input_key:
+        upload_id = result.get('upload_id')
+        if upload_id:
+            try:
+                boto_client('s3').abort_multipart_upload(
+                    Bucket=settings.AWS_S3_BUCKET,
+                    Key=job.s3_input_key,
+                    UploadId=upload_id,
+                )
+            except Exception:
+                pass
 
     # UCE embedding (kept until job is deleted)
     delete_s3_uri(result.get('uce_s3_uri') or result.get('s3_uri'))

@@ -61,6 +61,7 @@ class Reference(models.Model):
 
 class Job(models.Model):
     STATUS_CHOICES = [
+        ('uploading', 'Uploading'),
         ('pending', 'Pending'),
         ('running', 'Running'),
         ('complete', 'Complete'),
