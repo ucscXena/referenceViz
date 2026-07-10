@@ -77,6 +77,8 @@ BRAIN_EXPLORER_METADATA_PATH = os.path.join(BASE_DIR, 'UCSC_Brain_Explorer_metad
 # Directory where fetched paper text files are stored; override in site_settings_private.py
 PAPERS_DIR = os.path.join(BASE_DIR, 'papers')
 
+GA_ID = ''
+
 EXTRA_MIDDLEWARE = ["server.local_auth.ForceUserMiddleware"]
 # set to test allauth
 if os.environ.get("DBFORWARD"):
