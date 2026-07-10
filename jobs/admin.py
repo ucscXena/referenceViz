@@ -71,6 +71,7 @@ class ProjectionInline(admin.TabularInline):
 class JobAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'user', 'original_filename', 'status', 'batch_job_link', 'created_at', 'uce_download_link')
     list_filter = ('status',)
+    ordering = ('-created_at',)
     readonly_fields = ('id', 'batch_job_link', 'created_at', 'updated_at', 'uce_download_link', 'system_prompt_link')
     inlines = [ProjectionInline]
     change_list_template = 'admin/jobs/job/change_list.html'
