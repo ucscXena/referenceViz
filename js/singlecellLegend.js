@@ -8,6 +8,7 @@ var {item} = legendStyles;
 import {phenotypeScale} from './colorScales';
 import {Let, concat, conj, contains, getIn, memoize1, merge, uniq, without} from
 	'./underscore_ext.js';
+import * as gaEvents from './gaEvents';
 import cmpCodes from './cmpCodes';
 import {div, span} from './react-hyper';
 
@@ -33,13 +34,15 @@ var firstMatch = (el, selector) =>
 		el.parentElement ? firstMatch(el.parentElement, selector) :
 		null;
 
-var onCode = (state, onState) => ev => {
+var onCode = (state, onState, codes) => ev => {
 	var iStr = getIn(firstMatch(ev.target, '.' + item), ['dataset', 'code']);
 
 	if (iStr != null) {
 		var i = parseInt(iStr, 10),
 			hidden = state.hidden || [],
-			next = (contains(hidden, i) ? without : conj)(hidden, i);
+			isHiding = !contains(hidden, i),
+			next = (isHiding ? conj : without)(hidden, i);
+		gaEvents.categoryVisibility('color', isHiding ? 'hide' : 'show', codes[i] || String(i));
 		onState(state => merge(state, {hidden: next}));
 	}
 };
@@ -97,7 +100,7 @@ export default function(state, onState) {
 	return !codes.length ? null :
 		div(sortToggle(effectiveSort, onState),
 			codedLegend({
-				onClick: onCode(state, onState),
+				onClick: onCode(state, onState, codes),
 				cmp,
 				column: {
 					codes,

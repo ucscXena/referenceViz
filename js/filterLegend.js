@@ -5,6 +5,7 @@ import legendStyles from './legend.module.css';
 var {item} = legendStyles;
 
 import {conj, contains, getIn, merge, range, without} from './underscore_ext.js';
+import * as gaEvents from './gaEvents';
 import cmpCodes from './cmpCodes';
 
 function codedLegend({column: {filtered = [], codes, codesInView}, cmp, onClick}) {
@@ -22,13 +23,15 @@ var firstMatch = (el, selector) =>
 		el.parentElement ? firstMatch(el.parentElement, selector) :
 		null;
 
-var onCode = (state, onState, filterIndex) => ev => {
+var onCode = (state, onState, filterIndex, codes) => ev => {
 	var iStr = getIn(firstMatch(ev.target, '.' + item), ['dataset', 'code']);
 
 	if (iStr != null) {
 		var i = parseInt(iStr, 10),
 			filtered = state.referenceFilters[filterIndex].filtered || [],
-			next = (contains(filtered, i) ? without : conj)(filtered, i);
+			isHiding = !contains(filtered, i),
+			next = (isHiding ? conj : without)(filtered, i);
+		gaEvents.categoryVisibility('filter', isHiding ? 'hide' : 'show', codes[i] || String(i));
 		onState(state => merge(state, {
 			referenceFilters: state.referenceFilters.map((f, j) =>
 				j === filterIndex ? {layer: f.layer, filtered: next} : f)
@@ -49,7 +52,7 @@ export default function(state, onState, filterIndex = 0) {
 
 	return !codes.length ? null :
 		codedLegend({
-			onClick: onCode(state, onState, filterIndex),
+			onClick: onCode(state, onState, filterIndex, codes),
 			cmp: type === 'ordinal' ? (i, j) => j - i : cmpCodes(codes),
 			column: {
 				codes,

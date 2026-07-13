@@ -1,6 +1,7 @@
 import singlecellLegend from './singlecellLegend';
 import filterLegend from './filterLegend';
 import overlayLegend from './overlayLegend';
+import * as gaEvents from './gaEvents';
 import Tab from '@material-ui/core/Tab';
 import Tabs from '@material-ui/core/Tabs';
 import Typography from '@material-ui/core/Typography';
@@ -86,10 +87,17 @@ export default el(class extends PureComponent {
 
 	onLayer = ev => {
 		var layer = ev.target.value;
+		var name = getIn(this.props.state, ['imageState', 'phenotypes', layer, 'name']);
+		gaEvents.colorByChange(name || String(layer));
 		this.props.onState(state => merge(state, {layer, hidden: [], legendSort: null}));
 	};
 
 	onRefFilterVar = (i, value) => {
+		var name = value >= 0 ?
+			getIn(this.props.state, ['imageState', 'phenotypes', value, 'name']) || String(value) :
+			'None';
+		if (i === 0) { gaEvents.filterByChange(name); }
+		else { gaEvents.refineByChange('filter', name); }
 		if (i === 0 && value === -1) {
 			this.props.onState(state => merge(state, {referenceFilters: []}));
 		} else {
@@ -101,6 +109,7 @@ export default el(class extends PureComponent {
 	};
 
 	onRefHideAll = i => {
+		gaEvents.visibilityBulk('filter', 'hide_all');
 		var {imageState, referenceFilters} = this.props.state;
 		var codes = getIn(imageState,
 			['phenotypes', referenceFilters[i].layer, 'int_to_category'], []).slice(1);
@@ -111,6 +120,7 @@ export default el(class extends PureComponent {
 	};
 
 	onRefShowAll = i => {
+		gaEvents.visibilityBulk('filter', 'show_all');
 		this.props.onState(state => merge(state, {
 			referenceFilters: state.referenceFilters.map((f, j) =>
 				j === i ? {layer: f.layer, filtered: []} : f)
@@ -140,6 +150,8 @@ export default el(class extends PureComponent {
 	};
 
 	onOverlayVar = (i, value) => {
+		if (i === 0) { gaEvents.mappedDataChange(value); }
+		else { gaEvents.refineByChange('mapped', value); }
 		this.props.onState(state => merge(state, {
 			overlayFilters: state.overlayFilters.map((f, j) =>
 				j === i ? {var: value, filtered: []} : f)
@@ -147,6 +159,7 @@ export default el(class extends PureComponent {
 	};
 
 	onOverlayHideAll = i => {
+		gaEvents.visibilityBulk('mapped', 'hide_all');
 		var {overlay, overlayFilters} = this.props.state;
 		var codes = overlay._dicts[overlayFilters[i].var];
 		this.props.onState(state => merge(state, {
@@ -156,6 +169,7 @@ export default el(class extends PureComponent {
 	};
 
 	onOverlayShowAll = i => {
+		gaEvents.visibilityBulk('mapped', 'show_all');
 		this.props.onState(state => merge(state, {
 			overlayFilters: state.overlayFilters.map((f, j) =>
 				j === i ? {var: f.var, filtered: []} : f)
@@ -258,6 +272,8 @@ export default el(class extends PureComponent {
 							onChange: ev => {
 								var layer = ev.target.value;
 								if (layer >= 0) {
+									var name = getIn(imageState, ['phenotypes', layer, 'name']);
+									gaEvents.filterByChange(name || String(layer));
 									this.props.onState(state => merge(state,
 										{referenceFilters: [{layer, filtered: []}]}));
 								}

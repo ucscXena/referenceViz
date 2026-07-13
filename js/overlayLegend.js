@@ -7,6 +7,7 @@ import {span} from './react-hyper';
 
 import {conj, contains, getIn, groupBy, mapObject, memoize1, merge, range,
     sortBy, without} from './underscore_ext.js';
+import * as gaEvents from './gaEvents';
 
 var pad = (width, x) => `${width - x.toString().length}ch`;
 var lengthStyle = (width, length) =>
@@ -30,13 +31,15 @@ var firstMatch = (el, selector) =>
 		el.parentElement ? firstMatch(el.parentElement, selector) :
 		null;
 
-var onCode = (state, onState, filterIndex) => ev => {
+var onCode = (state, onState, filterIndex, codes) => ev => {
 	var iStr = getIn(firstMatch(ev.target, '.' + item), ['dataset', 'code']);
 
 	if (iStr != null) {
 		var i = parseInt(iStr, 10),
 			filtered = state.overlayFilters[filterIndex].filtered || [],
-			next = (contains(filtered, i) ? without : conj)(filtered, i);
+			isHiding = !contains(filtered, i),
+			next = (isHiding ? conj : without)(filtered, i);
+		gaEvents.categoryVisibility('mapped', isHiding ? 'hide' : 'show', codes[i] || String(i));
 		onState(state => merge(state, {
 			overlayFilters: state.overlayFilters.map((f, j) =>
 				j === filterIndex ? {var: f.var, filtered: next} : f)
@@ -78,7 +81,7 @@ export default function(state, onState, filterIndex = 0) {
 			groupLengths(overlay[overlayVar]);
 
 	return codedLegend({
-			onClick: onCode(state, onState, filterIndex),
+			onClick: onCode(state, onState, filterIndex, codes),
 			column: {
 				codes,
 				lengths,

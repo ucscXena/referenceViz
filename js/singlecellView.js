@@ -12,6 +12,7 @@ import '../fonts/index.css';
 import Rx from './rx';
 import colorPicker from './colorPicker';
 import {phenotypeScale} from './colorScales';
+import * as gaEvents from './gaEvents';
 import legendStyles from './legend.module.css';
 import {tableFromIPC} from 'apache-arrow';
 var {ajax} = Rx.Observable;
@@ -65,7 +66,9 @@ var dotSlider = (labelTxt, range, value, onChange) =>
 		slider({...range,
 			valueLabelDisplay: 'auto',
 			valueLabelFormat: labelFormat,
-			value, onChange}));
+			value, onChange,
+			onChangeCommitted: (ev, v) =>
+				gaEvents.dotSizeChange(labelTxt.toLowerCase().replace(/\s+/g, '_'), v)}));
 
 var dotSizes = ({state, onRadius, onOverlayRadius, hasOverlay}) =>
 	!state.radiusBase ? null :
