@@ -26,6 +26,10 @@
 			baseurl: '/'
 		};
 	</script>
+	<script type="text/javascript">
+		window.dataLayer = window.dataLayer || [];
+		window.gtag = function(){window.dataLayer.push(arguments);}
+	</script>
   </head>
   <body id="body">
 	<div class="minWidthWrapper">

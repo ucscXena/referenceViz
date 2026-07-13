@@ -2,8 +2,10 @@
 // Silent no-ops when gtag is not loaded (dev environment, or before async load).
 
 var send = (name, params) => {
-	if (window.gtag) {
+	if (window.config && window.config.ga_id) {
 		window.gtag('event', name, params);
+	} else {
+		console.log('[ga event]', name, params);
 	}
 };
 
