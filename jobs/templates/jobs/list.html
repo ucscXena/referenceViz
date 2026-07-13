@@ -50,7 +50,7 @@
         {% if job.status == 'complete' %}
         <td class="proj-status-cell" data-proj-id="{{ proj.id }}">
           {% if proj.status == 'error' %}
-            <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
+            <span class="status-error">Error <a href="{% url 'job_detail' job.pk %}" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>
           {% elif proj.status == 'complete' %}
             <span class="status-complete">Complete</span>
           {% elif proj.status == 'running' %}
@@ -74,7 +74,7 @@
         {% if forloop.first %}
         <td rowspan="{{ pcount }}" class="uce-status-cell">
           {% if job.status == 'error' %}
-            <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
+            <span class="status-error">Error <a href="{% url 'job_detail' job.pk %}" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>
           {% elif job.status == 'running' %}
             <span class="status-running">{% if job.cell_count %}Running{% else %}Starting{% endif %}</span>
           {% elif job.status == 'uploading' %}
@@ -102,7 +102,7 @@
         <td class="no-projections">—</td>
         <td class="uce-status-cell">
           {% if job.status == 'error' %}
-            <a href="{% url 'job_detail' job.pk %}" class="status-error">Error</a>
+            <span class="status-error">Error <a href="{% url 'job_detail' job.pk %}" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>
           {% elif job.status == 'running' %}
             <span class="status-running">{% if job.cell_count %}Running{% else %}Starting{% endif %}</span>
           {% elif job.status == 'uploading' %}
@@ -518,7 +518,7 @@ document.addEventListener('click', e => {
           const uceCell = row.querySelector('.uce-status-cell');
           if (uceCell) {
             if (data.status === 'error') {
-              uceCell.innerHTML = `<a href="/jobs/${jobId}/" class="status-error">Error</a>`;
+              uceCell.innerHTML = `<span class="status-error">Error <a href="/jobs/${jobId}/" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>`;
             } else {
               const waiting = data.status === 'running' && (!data.batch_status || QUEUED_BATCH.has(data.batch_status));
               const label = waiting ? 'Waiting' : (LABELS[data.status] || data.status);
@@ -533,7 +533,7 @@ document.addEventListener('click', e => {
             const downloadCell = document.querySelector(`.proj-download-cell[data-proj-id="${proj.id}"]`);
             if (statusCell) {
               if (proj.status === 'error') {
-                statusCell.innerHTML = `<a href="/jobs/${jobId}/" class="status-error">Error</a>`;
+                statusCell.innerHTML = `<span class="status-error">Error <a href="/jobs/${jobId}/" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>`;
               } else {
                 const projWaiting = proj.status === 'running' && proj.batch_status && QUEUED_BATCH.has(proj.batch_status);
                 const label = projWaiting ? 'Waiting' : (LABELS[proj.status] || proj.status);
@@ -677,8 +677,10 @@ tr.job-row-alt td {
 .status-uploading { color: #6a1b9a; font-weight: 500; }
 .status-pending   { color: #888; }
 .status-est      { font-size: 0.8rem; font-weight: 400; opacity: 0.85; }
-.status-error    { color: #c62828; font-weight: 500; text-decoration: none; }
-.status-error:hover { text-decoration: underline; }
+.status-error    { color: #c62828; font-weight: 500; }
+.status-error-info { color: #c62828; text-decoration: none; vertical-align: middle; line-height: 1; }
+.status-error-info .material-icons { font-size: 15px; }
+.status-error-info:hover { opacity: 0.7; }
 
 .action-icons { display: flex; align-items: center; gap: 2px; }
 .action-btns { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
