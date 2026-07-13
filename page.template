@@ -53,6 +53,8 @@
 			s.async = true;
 			s.src = 'https://www.googletagmanager.com/gtag/js?id=' + id;
 			document.head.appendChild(s);
+		window.gtag('js', new Date());
+		window.gtag('config', id);
 		})();
 	</script>
 	<script type="text/javascript">
