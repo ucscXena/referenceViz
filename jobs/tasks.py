@@ -82,7 +82,8 @@ def check_job_result(job_id, attempt=0):
 
         try:
             batch_job_id = job_instance.batch_job_id
-            uce_s3_uri = job_instance.result.get('uce_s3_uri')
+            uce_s3_uri = (job_instance.result.get('uce_s3_uri') or
+                f"s3://{settings.AWS_S3_BUCKET}/uce-results/{job_id}/output.h5ad")
             status, detail, batch_status = check_batch_job(batch_job_id)
 
             if status == 'complete':

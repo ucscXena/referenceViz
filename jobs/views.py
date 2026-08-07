@@ -340,7 +340,8 @@ def project_existing(request, job_id):
         return JsonResponse({'redirect': '/jobs/'})
 
     if job.status == 'complete':
-        uce_s3_uri = job.uce_s3_uri()
+        uce_s3_uri = (job.uce_s3_uri() or
+            f"s3://{settings.AWS_S3_BUCKET}/uce-results/{job.id}/output.h5ad")
         _submit_projection(projection, uce_s3_uri)
 
     return JsonResponse({'status': 'queued', 'redirect': '/jobs/'})

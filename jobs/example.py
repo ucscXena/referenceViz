@@ -30,6 +30,7 @@ def _example_settings():
     or None if any required setting is missing."""
     keys = (
         'EXAMPLE_FILE_S3_KEY',
+        'EXAMPLE_UCE_S3_KEY',
         'EXAMPLE_ARROW_S3_KEY',
         'EXAMPLE_TSV_S3_KEY',
         'EXAMPLE_RESULTS_JSON_S3_KEY',
@@ -52,7 +53,7 @@ def provision_example_for_user(user):
         logger.info('Example job not configured; skipping for user %s', user)
         return
 
-    h5ad_key, arrow_key, tsv_key, results_json_key, reference_id = cfg
+    h5ad_key, uce_key, arrow_key, tsv_key, results_json_key, reference_id = cfg
 
     # Don't provision twice
     if Job.objects.filter(
@@ -102,6 +103,7 @@ def provision_example_for_user(user):
     )
 
     dest_h5ad  = f'uploads/{job.id}/example.h5ad'
+    dest_uce   = f'uce-results/{job.id}/output.h5ad'
     dest_arrow = f'mapping-results/{job.id}/{projection.id}/output.arrow'
     dest_tsv   = f'mapping-results/{job.id}/{projection.id}/predictions.tsv'
 
@@ -109,6 +111,7 @@ def provision_example_for_user(user):
         s3 = boto_client('s3')
         for src_key, dst_key in [
             (h5ad_key,  dest_h5ad),
+            (uce_key,   dest_uce),
             (arrow_key, dest_arrow),
             (tsv_key,   dest_tsv),
         ]:
@@ -124,7 +127,8 @@ def provision_example_for_user(user):
         return
 
     job.s3_input_key = dest_h5ad
-    job.save(update_fields=['s3_input_key'])
+    job.result = {**job.result, 'uce_s3_uri': f's3://{bucket}/{dest_uce}'}
+    job.save(update_fields=['s3_input_key', 'result'])
 
     projection.result = {
         's3_uri':              f's3://{bucket}/{dest_arrow}',
