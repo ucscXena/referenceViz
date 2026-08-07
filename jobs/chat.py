@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 import anthropic
@@ -991,23 +992,30 @@ def chat(request, pk):
             if response.stop_reason not in ('tool_use', 'pause_turn'):
                 break
 
+            tool_blocks = [b for b in response.content if b.type == 'tool_use']
             tool_results = []
-            for block in response.content:
-                if block.type == 'tool_use':
-                    tools_called.append(block.name)
-                    result = _dispatch_tool(block.name, block.input, job)
+            if tool_blocks:
+                with ThreadPoolExecutor() as executor:
+                    futures = {
+                        executor.submit(_dispatch_tool, b.name, b.input, job): b
+                        for b in tool_blocks
+                    }
+                    block_results = {futures[f].id: f.result() for f in as_completed(futures)}
+                for b in tool_blocks:
+                    tools_called.append(b.name)
+                    result = block_results[b.id]
                     is_error = 'error' in result
                     if not is_error and 'dot_plot' in result:
                         charts.append({
                             'type': 'dot_plot',
                             'col_a': result['col_a'],
                             'col_b': result['col_b'],
-                            'open': block.input.get('open', True),
+                            'open': b.input.get('open', True),
                             'data': result['dot_plot'],
                         })
                     tool_results.append({
                         'type': 'tool_result',
-                        'tool_use_id': block.id,
+                        'tool_use_id': b.id,
                         'content': json.dumps(result),
                         'is_error': is_error,
                     })
