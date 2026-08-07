@@ -254,6 +254,51 @@ def _submit_projection(projection, uce_s3_uri):
         )
 
 
+_COPY_OBJECT_MAX = 5 * 1024 ** 3        # 5 GiB — hard limit for copy_object
+_MULTIPART_CHUNK = 500 * 1024 ** 2     # 500 MiB per part
+
+
+def _s3_copy(s3, bucket, src_key, dest_key):
+    """Copy an S3 object within a bucket, using multipart copy for files > 5 GiB."""
+    size = s3.head_object(Bucket=bucket, Key=src_key)['ContentLength']
+    if size <= _COPY_OBJECT_MAX:
+        s3.copy_object(
+            Bucket=bucket,
+            CopySource={'Bucket': bucket, 'Key': src_key},
+            Key=dest_key,
+        )
+        return
+
+    mpu = s3.create_multipart_upload(Bucket=bucket, Key=dest_key)
+    upload_id = mpu['UploadId']
+    try:
+        parts = []
+        offset = 0
+        part_num = 1
+        while offset < size:
+            end = min(offset + _MULTIPART_CHUNK - 1, size - 1)
+            resp = s3.upload_part_copy(
+                Bucket=bucket,
+                Key=dest_key,
+                UploadId=upload_id,
+                PartNumber=part_num,
+                CopySource={'Bucket': bucket, 'Key': src_key},
+                CopySourceRange=f'bytes={offset}-{end}',
+            )
+            parts.append({'PartNumber': part_num, 'ETag': resp['CopyPartResult']['ETag']})
+            offset = end + 1
+            part_num += 1
+        s3.complete_multipart_upload(
+            Bucket=bucket,
+            Key=dest_key,
+            UploadId=upload_id,
+            MultipartUpload={'Parts': parts},
+        )
+    except Exception:
+        s3.abort_multipart_upload(Bucket=bucket, Key=dest_key, UploadId=upload_id)
+        raise
+
+
 @job('default')
 def clone_job_files(new_job_id, original_job_id, projection_ids):
     """
@@ -279,22 +324,14 @@ def clone_job_files(new_job_id, original_job_id, projection_ids):
         if original_uce_uri:
             _, orig_key = original_uce_uri.replace('s3://', '').split('/', 1)
             new_uce_key = f'uce-results/{new_job_id}/output.h5ad'
-            s3.copy_object(
-                Bucket=bucket,
-                CopySource={'Bucket': bucket, 'Key': orig_key},
-                Key=new_uce_key,
-            )
+            _s3_copy(s3, bucket, orig_key, new_uce_key)
             new_job.result = {**new_job.result, 'uce_s3_uri': f's3://{bucket}/{new_uce_key}'}
             new_job.save(update_fields=['result'])
 
         # Copy input h5ad
         if original_job.s3_input_key:
             new_input_key = f'uploads/{new_job_id}/{original_job.original_filename}'
-            s3.copy_object(
-                Bucket=bucket,
-                CopySource={'Bucket': bucket, 'Key': original_job.s3_input_key},
-                Key=new_input_key,
-            )
+            _s3_copy(s3, bucket, original_job.s3_input_key, new_input_key)
             new_job.s3_input_key = new_input_key
             new_job.save(update_fields=['s3_input_key'])
 
@@ -314,11 +351,7 @@ def clone_job_files(new_job_id, original_job_id, projection_ids):
                     continue
                 _, orig_s3_key = orig_uri.replace('s3://', '').split('/', 1)
                 new_s3_key = f'mapping-results/{new_job_id}/{new_proj.reference_id}/{dest_name}'
-                s3.copy_object(
-                    Bucket=bucket,
-                    CopySource={'Bucket': bucket, 'Key': orig_s3_key},
-                    Key=new_s3_key,
-                )
+                _s3_copy(s3, bucket, orig_s3_key, new_s3_key)
                 new_proj_result[src_key] = f's3://{bucket}/{new_s3_key}'
             # Copy over any cached summary/column_notes from the original
             for meta_key in ('summary', 'column_notes'):
