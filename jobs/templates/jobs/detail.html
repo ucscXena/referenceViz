@@ -579,7 +579,7 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
         const count = matrix[i][j];
         if (!count) return;
         const frac = row_totals[i] > 0 ? count / row_totals[i] : 0;
-        const r = (maxRadius * Math.sqrt(count / maxCount)).toFixed(1);
+        const r = (2 + (maxRadius - 2) * Math.sqrt(count / maxCount)).toFixed(1);
         const cx = rowLabelW + j * cellSize + cellSize / 2;
         const cy = colLabelH + i * cellSize + cellSize / 2;
         const opacity = (0.15 + 0.85 * frac).toFixed(3);
