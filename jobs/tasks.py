@@ -10,7 +10,7 @@ from django.utils import timezone
 from django_rq import job
 
 from .aws import boto_client, delete_s3_key, delete_s3_uri, notify_staff
-from .batch import check_batch_job, submit_batch_job, submit_uce_batch_job
+from .batch import check_batch_job, submit_batch_job, submit_uce_batch_job, _ecr_image_digest
 from .models import Job, Projection
 
 # 60 checks × 5 min = 300 min max wait for UCE
@@ -51,7 +51,10 @@ def run_analysis(job_id, mixed_precision='bf16'):
             job_name=f'uce-{str(job_id)[:8]}',
         )
         job_instance.batch_job_id = batch_job_id
-        job_instance.result = {'uce_s3_uri': uce_s3_uri}
+        job_instance.result = {
+            'uce_s3_uri': uce_s3_uri,
+            'uce_image_digest': _ecr_image_digest('uce-pipeline'),
+        }
         job_instance.save()
 
         django_rq.get_queue('default').enqueue_in(
@@ -238,6 +241,7 @@ def _submit_projection(projection, uce_s3_uri):
             'output_s3_uri': output_s3_uri,
             'predictions_s3_uri': predictions_s3_uri,
             'submitted_at': timezone.now().isoformat(),
+            'mapping_image_digest': _ecr_image_digest('cell-pipeline'),
         }
         projection.save()
 

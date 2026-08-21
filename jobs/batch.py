@@ -1,10 +1,31 @@
 import logging
 
 from django.conf import settings
+from django.core.cache import cache
 
 from .aws import boto_client
 
 logger = logging.getLogger(__name__)
+
+
+def _ecr_image_digest(repo_name, tag='latest'):
+    """Return the ECR image digest for repo_name:tag, cached for 5 minutes."""
+    cache_key = f'ecr_digest_{repo_name}_{tag}'
+    digest = cache.get(cache_key)
+    if digest:
+        return digest
+    try:
+        ecr = boto_client('ecr')
+        resp = ecr.describe_images(
+            repositoryName=repo_name,
+            imageIds=[{'imageTag': tag}],
+        )
+        digest = resp['imageDetails'][0]['imageDigest']
+        cache.set(cache_key, digest, timeout=300)
+        return digest
+    except Exception as e:
+        logger.warning('Could not fetch ECR digest for %s:%s: %s', repo_name, tag, e)
+        return ''
 
 
 def submit_uce_batch_job(input_s3_uri, output_s3_uri, callback_url, model_s3,

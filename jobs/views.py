@@ -571,7 +571,9 @@ def uce_callback(request):
         return JsonResponse({'status': 'not_found'}, status=404)
 
     if status == 'running':
-        updates = {k: data[k] for k in ('cell_count', 'num_gpus', 'cells_per_second') if k in data}
+        updates = {k: data[k] for k in ('cell_count', 'num_gpus', 'cells_per_second', 'git_commit') if k in data}
+        if 'git_commit' in updates:
+            updates['uce_git_commit'] = updates.pop('git_commit')
         with transaction.atomic():
             job = Job.objects.select_for_update().get(pk=job.pk)
             if job.status != 'running':
@@ -634,6 +636,8 @@ def projection_callback(request):
             projection.result = {
                 's3_uri': projection.result.get('output_s3_uri'),
                 'predictions_s3_uri': projection.result.get('predictions_s3_uri'),
+                'mapping_image_digest': projection.result.get('mapping_image_digest', ''),
+                **({'mapping_git_commit': data['git_commit']} if data.get('git_commit') else {}),
             }
             projection.status = 'complete'
             projection.save()
