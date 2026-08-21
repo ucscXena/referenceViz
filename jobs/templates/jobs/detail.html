@@ -603,7 +603,42 @@ details summary { cursor: pointer; font-size: 0.875rem; color: #555; margin-top:
     parts.push(`<text x="${rowLabelW + gridW / 2}" y="${H - 1}" text-anchor="middle" style="${axisStyle}">${escSvg(chart.col_b)}</text>`);
     parts.push(`<text transform="translate(8,${colLabelH + gridH / 2}) rotate(-90)" text-anchor="middle" style="${axisStyle}">${escSvg(chart.col_a)}</text>`);
 
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:block;overflow:visible">${parts.join('')}</svg>`;
+    // Legend
+    const legStyle = 'font-size:10px;fill:#666';
+    const legTitleStyle = 'font-size:11px;fill:#555;font-style:italic';
+    parts.push(`<line x1="${rowLabelW}" y1="${H + 10}" x2="${rowLabelW + gridW}" y2="${H + 10}" stroke="#ddd" stroke-width="1"/>`);
+    const legTitleY = H + 26;
+    const legBaseY = legTitleY + maxRadius + 8;
+
+    // Size sub-legend: 3 bottom-aligned circles at 25%, 50%, 100% of max count
+    const sizeItems = [{f: 0.25, label: '25%'}, {f: 0.5, label: '50%'}, {f: 1.0, label: 'max'}];
+    const sColW = maxRadius * 2 + 8;
+    const sX0 = rowLabelW + 4;
+    parts.push(`<text x="${sX0}" y="${legTitleY}" style="${legTitleStyle}">Cell count</text>`);
+    sizeItems.forEach(({f, label}, i) => {
+      const r = parseFloat((2 + (maxRadius - 2) * Math.sqrt(f)).toFixed(1));
+      const cx = sX0 + 56 + i * sColW + maxRadius;
+      const cy = legBaseY - r;
+      parts.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#1565c0" fill-opacity="0.85"/>`);
+      parts.push(`<text x="${cx}" y="${legBaseY + 13}" text-anchor="middle" style="${legStyle}">${label}</text>`);
+    });
+
+    // Opacity sub-legend: 3 same-size circles at 0%, 50%, 100% row fraction
+    const opacR = Math.max(6, Math.round(maxRadius * 0.5));
+    const opacItems = [{frac: 0, label: '0%'}, {frac: 0.5, label: '50%'}, {frac: 1.0, label: '100%'}];
+    const oColW = opacR * 2 + 10;
+    const oX0 = sX0 + 64 + sizeItems.length * sColW + 16;
+    parts.push(`<text x="${oX0}" y="${legTitleY}" style="${legTitleStyle}">Row fraction</text>`);
+    opacItems.forEach(({frac, label}, i) => {
+      const opacity = (0.15 + 0.85 * frac).toFixed(3);
+      const cx = oX0 + 68 + i * oColW + opacR;
+      const cy = legBaseY - opacR;
+      parts.push(`<circle cx="${cx}" cy="${cy}" r="${opacR}" fill="#1565c0" fill-opacity="${opacity}"/>`);
+      parts.push(`<text x="${cx}" y="${legBaseY + 13}" text-anchor="middle" style="${legStyle}">${label}</text>`);
+    });
+
+    const totalH = legBaseY + 18;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${totalH}" style="display:block;overflow:visible">${parts.join('')}</svg>`;
   }
 
   const plotTooltip = document.createElement('div');
