@@ -23,8 +23,12 @@
 	position: relative;
 	margin-right: 5px;
 	border: 1px solid black;
-	cursor: crosshair;
+	cursor: grab;
 	flex: 1;
+}
+
+.graphWrapper:active {
+	cursor: grabbing;
 }
 
 .layerSelect {
