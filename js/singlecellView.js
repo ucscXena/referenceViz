@@ -52,8 +52,8 @@ var scale = um =>
 	div({className: styles.scale},
 		span(), span(), span(), span(`${um == null ? '-' : um.toFixed()} \u03BCm`));
 
-var tooltipValueView = (code, color, onClick, frozen) =>
-	div({className: styles.tooltip},
+var tooltipValueView = (code, color, onClick, frozen, hasScale) =>
+	div({className: styles.tooltip, style: {top: hasScale ? '28px' : '4px'}},
 		div({className: legendStyles.colorBox,
 			style: {backgroundColor: color}}),
 		code,
@@ -267,7 +267,7 @@ export default el(class SinglecellView extends PureComponent {
 					null,
 				...(unit ? [scale(this.state.scale)] : []),
 				...(tooltipValue != null ?
-					[tooltipValueView(codes[tooltipValue], tooltipColor, onClose, this.state.tooltipFrozen)]
+					[tooltipValueView(codes[tooltipValue], tooltipColor, onClose, this.state.tooltipFrozen, unit)]
 					: []),
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
