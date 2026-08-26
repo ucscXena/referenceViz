@@ -9,11 +9,7 @@
 }
 
 .title {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: flex-end;
 	margin-right: 5px;
-	gap: 1rem; /* minimum space between elements */
 	flex-grow: 0;
 	flex-shrink: 0;
 }

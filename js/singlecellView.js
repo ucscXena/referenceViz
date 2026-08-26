@@ -230,7 +230,7 @@ export default el(class SinglecellView extends PureComponent {
 			onOverlayRadius, onReload, onTileData} = this,
 			{image, state, onState, onShadow, title: titleProp} = this.props,
 			{hidden, referenceFilters = [], layer, imageState, overlay,
-				hideOverlay, overlayFilters = []} = state || {},
+				hideOverlay, overlayFilters = [], overlayTitle} = state || {},
 			error = this.state.error,
 			unit = false,
 			{container, tooltipValue, showControls, radius, overlayRadius,
@@ -244,9 +244,10 @@ export default el(class SinglecellView extends PureComponent {
 
 		return div({className: styles.content},
 			div({className: styles.title},
-				name ? span(name) : '',
-				span({className: styles.spacer}),
-				count ? span(`${count.toLocaleString()} cells`) : ''),
+				name ? span(count ? `${name} (${count.toLocaleString()} cells)` : name) : '',
+				overlay && overlayTitle ?
+					span(` / ${overlayTitle} (${overlay.x.length.toLocaleString()} cells)`) :
+					''),
 			span({className: styles.fps, ref: this.onFPSRef}),
 			div({className: styles.graphWrapper, ref: this.onRef},
 				controlsView({state: {radiusBase: 10, radius, overlayRadius},
