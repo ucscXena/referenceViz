@@ -107,7 +107,7 @@ var getOverlay = path =>
 	path.startsWith('s3://') ?
 		presignOverlay(path).flatMap(({url, original_filename: originalFilename}) =>
 			fetchOverlay(url).map(ipc => ({ipc, originalFilename}))) :
-		fetchOverlay(path).map(ipc => ({ipc}));
+		fetchOverlay(path).map(ipc => ({ipc, originalFilename: 'Mapped cells'}));
 
 function forceRedraw(deck) {
 	if (deck) {
