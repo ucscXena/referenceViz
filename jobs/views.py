@@ -477,6 +477,47 @@ def presign_overlay(request):
 
 @login_required
 @require_POST
+def rerun_projection(request, pk):
+    """Reset a completed projection and resubmit it to Batch."""
+    projection = get_object_or_404(
+        Projection.objects.select_related('job', 'reference'),
+        pk=str(pk), job__user=request.user,
+    )
+    job = projection.job
+    if job.status != 'complete':
+        return JsonResponse({'error': 'UCE embedding must be complete to re-run mapping.'}, status=400)
+    uce_s3_uri = job.uce_s3_uri()
+    if not uce_s3_uri:
+        return JsonResponse({'error': 'No UCE embedding found for this job.'}, status=400)
+    result = projection.result or {}
+    for key in ('s3_uri', 'predictions_s3_uri'):
+        uri = result.get(key)
+        if uri:
+            delete_s3_uri(uri)
+    projection.result = {}
+    projection.public = False
+    projection.status = 'pending'
+    projection.save()
+    _submit_projection(projection, uce_s3_uri)
+    return JsonResponse({'status': projection.status})
+
+
+@login_required
+@require_POST
+def delete_projection(request, pk):
+    """Delete a projection and its S3 result files."""
+    projection = get_object_or_404(Projection, pk=str(pk), job__user=request.user)
+    result = projection.result or {}
+    for key in ('s3_uri', 'predictions_s3_uri'):
+        uri = result.get(key)
+        if uri:
+            delete_s3_uri(uri)
+    projection.delete()
+    return JsonResponse({'ok': True})
+
+
+@login_required
+@require_POST
 def set_projection_public(request, pk):
     """Toggle the public flag on a projection."""
     projection = get_object_or_404(Projection, pk=str(pk), job__user=request.user)

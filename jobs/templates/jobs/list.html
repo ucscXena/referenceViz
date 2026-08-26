@@ -63,8 +63,8 @@
           {% if proj.status == 'complete' and proj.result.s3_uri %}
             <div class="action-btns">
               <button type="button" class="action-btn explore-btn" data-viz-url="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" data-job-id="{{ job.id }}" title="Explore results"><span class="material-icons">explore</span>Explore</button>
-              <button type="button" class="action-btn share-btn{% if proj.public %} share-btn--active{% endif %}" data-proj-id="{{ proj.id }}" data-job-id="{{ job.id }}" data-viz-url="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" data-public="{{ proj.public|yesno:'true,false' }}" title="{% if proj.public %}Share results. Link sharing is on.{% else %}Share results{% endif %}"><span class="material-icons">share</span>Share</button>
               <a href="{% url 'download_projection' proj.pk %}" class="action-btn" title="Download results"><span class="material-icons">download</span>Download</a>
+              <button type="button" class="action-btn kebab-btn" data-proj-id="{{ proj.id }}" data-job-id="{{ job.id }}" data-viz-url="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" data-public="{{ proj.public|yesno:'true,false' }}" title="More options"><span class="material-icons">more_vert</span></button>
             </div>
           {% else %}
             —
@@ -386,6 +386,84 @@ shareMappingModal.querySelector('.share-mapping-copy').addEventListener('click',
   setTimeout(() => { icon.textContent = 'content_copy'; }, 2000);
 });
 
+// Kebab menu
+const kebabPopover = document.createElement('div');
+kebabPopover.className = 'share-popover';
+kebabPopover.innerHTML =
+  `<button type="button" class="popover-btn kebab-share"><span class="material-icons">share</span>Share</button>` +
+  `<div class="popover-divider"></div>` +
+  `<button type="button" class="popover-btn kebab-rerun"><span class="material-icons">refresh</span>Re-run mapping</button>` +
+  `<button type="button" class="popover-btn popover-stop kebab-delete"><span class="material-icons">delete_outline</span>Delete</button>`;
+document.body.appendChild(kebabPopover);
+
+let activeKebabBtn = null;
+
+function hideKebabPopover() {
+  kebabPopover.style.display = '';
+  activeKebabBtn = null;
+}
+
+kebabPopover.querySelector('.kebab-share').addEventListener('click', () => {
+  const btn = activeKebabBtn;
+  hideKebabPopover();
+  if (!btn) return;
+  activeShareBtn = btn;
+  sharePopover.querySelector('.popover-disable').disabled = btn.dataset.public !== 'true';
+  sharePopover.style.display = 'flex';
+  const rect = btn.getBoundingClientRect();
+  sharePopover.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+  sharePopover.style.left = rect.left + 'px';
+});
+
+kebabPopover.querySelector('.kebab-rerun').addEventListener('click', () => {
+  const btn = activeKebabBtn;
+  hideKebabPopover();
+  if (!btn) return;
+  if (!confirm('Re-run this mapping with the current pipeline version? The existing results will be replaced.')) return;
+  fetch(`/jobs/projections/${btn.dataset.projId}/rerun/`, {
+    method: 'POST',
+    headers: {'X-CSRFToken': csrfToken},
+  }).then(r => {
+    if (!r.ok) return r.json().then(d => alert(d.error || 'Re-run failed.'));
+    const statusCell = document.querySelector(`.proj-status-cell[data-proj-id="${btn.dataset.projId}"]`);
+    if (statusCell) statusCell.innerHTML = '<span class="status-running">Running</span>';
+    const downloadCell = document.querySelector(`.proj-download-cell[data-proj-id="${btn.dataset.projId}"]`);
+    if (downloadCell) downloadCell.innerHTML = '—';
+  }).catch(() => alert('Re-run failed.'));
+});
+
+kebabPopover.querySelector('.kebab-delete').addEventListener('click', () => {
+  const btn = activeKebabBtn;
+  hideKebabPopover();
+  if (!btn) return;
+  if (!confirm('Delete this mapping? This cannot be undone.')) return;
+  fetch(`/jobs/projections/${btn.dataset.projId}/delete/`, {
+    method: 'POST',
+    headers: {'X-CSRFToken': csrfToken},
+  }).then(r => {
+    if (!r.ok) { alert('Delete failed.'); return; }
+    window.location.reload();
+  }).catch(() => alert('Delete failed.'));
+});
+
+document.addEventListener('click', e => {
+  if (activeKebabBtn && !kebabPopover.contains(e.target) && !e.target.closest('.kebab-btn')) {
+    hideKebabPopover();
+  }
+}, true);
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.kebab-btn');
+  if (!btn) return;
+  e.stopPropagation();
+  if (activeKebabBtn === btn && kebabPopover.style.display) { hideKebabPopover(); return; }
+  activeKebabBtn = btn;
+  kebabPopover.style.display = 'flex';
+  const rect = btn.getBoundingClientRect();
+  kebabPopover.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+  kebabPopover.style.left = (rect.right + window.scrollX - kebabPopover.offsetWidth) + 'px';
+});
+
 // Explore popover
 const explorePopover = document.createElement('div');
 explorePopover.className = 'share-popover';
@@ -545,8 +623,8 @@ document.addEventListener('click', e => {
               const vizUrl = `/visualization/${proj.reference_id}/?overlay=${encodeURIComponent(proj.s3_uri)}`;
               downloadCell.innerHTML = `<div class="action-btns">` +
                 `<button type="button" class="action-btn explore-btn" data-viz-url="${vizUrl}" data-job-id="${jobId}" title="Explore results"><span class="material-icons">explore</span>Explore</button>` +
-                `<button type="button" class="action-btn share-btn" data-proj-id="${proj.id}" data-job-id="${jobId}" data-viz-url="${vizUrl}" data-public="false" title="Share results"><span class="material-icons">share</span>Share</button>` +
                 `<a href="/jobs/projections/${proj.id}/download/" class="action-btn" title="Download results"><span class="material-icons">download</span>Download</a>` +
+                `<button type="button" class="action-btn kebab-btn" data-proj-id="${proj.id}" data-job-id="${jobId}" data-viz-url="${vizUrl}" data-public="false" title="More options"><span class="material-icons">more_vert</span></button>` +
                 `</div>`;
             }
           });
@@ -713,6 +791,8 @@ tr.job-row-alt td {
 .share-btn .material-icons { color: #aaa; transition: color 0.15s; }
 .share-btn--active.action-btn .material-icons { color: #1976d2; }
 .share-btn--copied.action-btn { color: #2e7d32; border-color: #2e7d32; }
+.kebab-btn { padding: 3px 4px; min-width: 0; }
+.kebab-btn .material-icons { font-size: 18px; color: #999; }
 .copy-toast {
   position: absolute;
   font-size: 0.78rem;
