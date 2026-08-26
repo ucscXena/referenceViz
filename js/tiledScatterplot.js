@@ -188,12 +188,20 @@ class TiledScatterplot extends PureComponent {
 	_initialViewState = null;
 	_views = new OrthographicView({far: -1, near: 1});
 
-	onTooltip = ev => {
+	onHover = debounce(60, ev => {
 		if (ev.index >= 0 && ev.tile) {
 			let [, , i] = ev.tile.layers[0].props.data[ev.index];
 			this.props.onTooltip(i);
 		} else {
 			this.props.onTooltip(undefined);
+		}
+	});
+	onTooltipClick = ev => {
+		if (ev.index >= 0 && ev.tile) {
+			let [, , i] = ev.tile.layers[0].props.data[ev.index];
+			this.props.onTooltipClick(i);
+		} else {
+			this.props.onTooltipClick(undefined);
 		}
 	};
 	onViewState = debounce(400, this.props.onViewState);
@@ -255,7 +263,8 @@ class TiledScatterplot extends PureComponent {
 			coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
 			getCursor: () => 'inherit',
 			initialViewState: this._initialViewState,
-			onClick: this.onTooltip,
+			onHover: this.onHover,
+			onClick: this.onTooltipClick,
 			style: {backgroundColor: '#FFFFFF'}
 		});
 	}

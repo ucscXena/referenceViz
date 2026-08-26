@@ -52,12 +52,12 @@ var scale = um =>
 	div({className: styles.scale},
 		span(), span(), span(), span(`${um == null ? '-' : um.toFixed()} \u03BCm`));
 
-var tooltipValueView = (code, color, onClick) =>
+var tooltipValueView = (code, color, onClick, frozen) =>
 	div({className: styles.tooltip},
 		div({className: legendStyles.colorBox,
 			style: {backgroundColor: color}}),
 		code,
-		icon({onClick}, 'close')
+		frozen ? icon({onClick}, 'close') : null
 	);
 
 var labelFormat = v => v.toPrecision(2);
@@ -120,6 +120,7 @@ export default el(class SinglecellView extends PureComponent {
 	state = {
 		tooltipID: undefined,
 		tooltipValue: undefined,
+		tooltipFrozen: false,
 		scale: null,
 		showControls: true,
 		radius: 1.5,
@@ -204,10 +205,19 @@ export default el(class SinglecellView extends PureComponent {
 	findSample = memoize1((samples, id) => indexOf(samples, id, true));
 	getScale = memoize1(phenotypeScale);
 	onTooltip = i => {
-		this.setState({tooltipValue: i, tooltipID: undefined});
+		if (!this.state.tooltipFrozen) {
+			this.setState({tooltipValue: i, tooltipID: undefined});
+		}
+	};
+	onTooltipClick = i => {
+		if (this.state.tooltipFrozen) {
+			this.setState({tooltipFrozen: false, tooltipValue: i, tooltipID: undefined});
+		} else if (i !== undefined) {
+			this.setState({tooltipFrozen: true, tooltipValue: i, tooltipID: undefined});
+		}
 	};
 	onClose = () => {
-		this.setState({tooltipID: undefined, tooltipValue: undefined});
+		this.setState({tooltipID: undefined, tooltipValue: undefined, tooltipFrozen: false});
 	};
 	onControls = () => {
 		this.setState({showControls: !this.state.showControls});
@@ -257,11 +267,11 @@ export default el(class SinglecellView extends PureComponent {
 					null,
 				...(unit ? [scale(this.state.scale)] : []),
 				...(tooltipValue != null ?
-					[tooltipValueView(codes[tooltipValue], tooltipColor, onClose)]
+					[tooltipValueView(codes[tooltipValue], tooltipColor, onClose, this.state.tooltipFrozen)]
 					: []),
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
-					onTooltip, radius, overlayRadius, viewState, hidden, referenceFilters, image,
+					onTooltip, onTooltipClick: this.onTooltipClick, radius, overlayRadius, viewState, hidden, referenceFilters, image,
 					imageState, overlay, overlayFilters, hideOverlay, layer, container,
 					key: 'drawing'})));
 	}
