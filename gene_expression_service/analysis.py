@@ -130,6 +130,14 @@ def _load_subset_expression(adata: anndata.AnnData, cell_mask: np.ndarray) -> np
 # Analysis functions
 # ---------------------------------------------------------------------------
 
+def _validate_file_pair(adata: anndata.AnnData, table) -> None:
+    if adata.n_obs != len(table):
+        raise ValueError(
+            f'h5ad has {adata.n_obs} cells but arrow file has {len(table)} rows — '
+            f'files must correspond to the same filtered cell set'
+        )
+
+
 def top_expressed_genes(h5ad_path: Path, arrow_path: Path,
                         predicate: list, n_genes: int = 20,
                         cache=None, uce_model_s3: str = '') -> dict:
@@ -140,6 +148,7 @@ def top_expressed_genes(h5ad_path: Path, arrow_path: Path,
         return {'error': 'No cells match the subset predicate'}
 
     adata = anndata.read_h5ad(h5ad_path, backed='r')
+    _validate_file_pair(adata, table)
     mapping = get_ensembl_mapping(adata, cache, uce_model_s3)
     X = _load_subset_expression(adata, mask)
     gene_names = adata.var_names.tolist()
@@ -186,6 +195,7 @@ def differential_expression(h5ad_path: Path, arrow_path: Path,
         warnings.append(f'Group B has only {n_b} cells; results are exploratory')
 
     adata = anndata.read_h5ad(h5ad_path, backed='r')
+    _validate_file_pair(adata, table)
     mapping = get_ensembl_mapping(adata, cache, uce_model_s3)
     X_a = _load_subset_expression(adata, mask_a)
     X_b = _load_subset_expression(adata, mask_b)

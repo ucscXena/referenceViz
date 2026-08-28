@@ -50,3 +50,23 @@ def delete_s3_uri(uri):
         logger.info("Deleted %s", uri)
     except Exception:
         logger.warning("Failed to delete S3 URI %s", uri, exc_info=True)
+
+
+def delete_s3_prefix(prefix):
+    """Delete all objects under an s3:// prefix. No-op if prefix is empty."""
+    if not prefix:
+        return
+    try:
+        bucket, key_prefix = prefix.replace('s3://', '').split('/', 1)
+        key_prefix = key_prefix.rstrip('/') + '/'
+        s3 = boto_client('s3')
+        paginator = s3.get_paginator('list_objects_v2')
+        deleted = 0
+        for page in paginator.paginate(Bucket=bucket, Prefix=key_prefix):
+            objects = [{'Key': obj['Key']} for obj in page.get('Contents', [])]
+            if objects:
+                s3.delete_objects(Bucket=bucket, Delete={'Objects': objects})
+                deleted += len(objects)
+        logger.info("Deleted %d objects under %s", deleted, prefix)
+    except Exception:
+        logger.warning("Failed to delete S3 prefix %s", prefix, exc_info=True)

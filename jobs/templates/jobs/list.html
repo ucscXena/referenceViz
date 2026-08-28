@@ -514,11 +514,19 @@ document.addEventListener('click', e => {
   const projLastStatus = new Map();
   const LABELS = {uploading: 'Uploading', pending: 'Pending', running: 'Running', complete: 'Complete', error: 'Error'};
 
-  function formatEst(seconds, queued) {
-    if (queued) return '<br><span class="status-est">for machine</span>';
-    if (seconds == null) return '<br><span class="status-est">estimating\u2026</span>';
-    const mins = Math.round(seconds / 60);
-    return '<br><span class="status-est">~' + mins + ' min left</span>';
+  function ucePhaseLabel(data) {
+    if (data.sharded) {
+      if (data.n_shards == null) return 'Preprocessing';
+      const done = data.shards_complete || 0;
+      const total = data.n_shards;
+      if (done >= total) return 'Merging';
+      return `Processing \u00b7 ${done}\u202f/\u202f${total} shards`;
+    }
+    const waiting = !data.batch_status || QUEUED_BATCH.has(data.batch_status);
+    if (waiting) return 'Waiting for GPU';
+    if (data.uce_progress != null) return `Processing \u00b7 ${data.uce_progress}%`;
+    if (data.cell_count) return 'Processing';
+    return 'Starting';
   }
 
   function activeJobRows() {
@@ -577,6 +585,14 @@ document.addEventListener('click', e => {
           const prevStatus = row.dataset.jobStatus;
           row.dataset.jobStatus = data.status;
 
+          // Reload as soon as UCE completes so projection rows appear correctly.
+          // Do this before any DOM updates to avoid a "Complete" flash.
+          if (data.status === 'complete' && prevStatus !== 'complete' &&
+              (data.projections || []).length > 0) {
+            window.location.reload();
+            return;
+          }
+
           // Update cell count display
           if (data.cell_count) {
             const fileCell = row.querySelector('.job-file-cell');
@@ -598,10 +614,8 @@ document.addEventListener('click', e => {
             if (data.status === 'error') {
               uceCell.innerHTML = `<span class="status-error">Error <a href="/jobs/${jobId}/" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>`;
             } else {
-              const waiting = data.status === 'running' && (!data.batch_status || QUEUED_BATCH.has(data.batch_status));
-              const label = waiting ? 'Waiting' : (LABELS[data.status] || data.status);
-              const est = TERMINAL.has(data.status) ? '' : formatEst(data.estimated_remaining_seconds, waiting);
-              uceCell.innerHTML = `<span class="status-${data.status}">${label}${est}</span>`;
+              const label = data.status === 'running' ? ucePhaseLabel(data) : (LABELS[data.status] || data.status);
+              uceCell.innerHTML = `<span class="status-${data.status}">${label}</span>`;
             }
           }
 
@@ -614,9 +628,8 @@ document.addEventListener('click', e => {
                 statusCell.innerHTML = `<span class="status-error">Error <a href="/jobs/${jobId}/" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>`;
               } else {
                 const projWaiting = proj.status === 'running' && proj.batch_status && QUEUED_BATCH.has(proj.batch_status);
-                const label = projWaiting ? 'Waiting' : (LABELS[proj.status] || proj.status);
-                const est = TERMINAL.has(proj.status) ? '' : formatEst(proj.estimated_remaining_seconds, projWaiting);
-                statusCell.innerHTML = `<span class="status-${proj.status}">${label}${est}</span>`;
+                const label = projWaiting ? 'Waiting' : (proj.status === 'running' ? 'Mapping' : (LABELS[proj.status] || proj.status));
+                statusCell.innerHTML = `<span class="status-${proj.status}">${label}</span>`;
               }
             }
             if (downloadCell && proj.status === 'complete' && proj.has_download) {
@@ -652,11 +665,6 @@ document.addEventListener('click', e => {
             return;
           }
 
-          // If UCE just completed, reload so projection rows appear.
-          if (data.status === 'complete' && prevStatus !== 'complete' &&
-              (data.projections || []).length > 0) {
-            window.location.reload();
-          }
         }).catch(() => {});
     });
 
@@ -754,7 +762,6 @@ tr.job-row-alt td {
 .status-running   { color: #1565c0; font-weight: 500; }
 .status-uploading { color: #6a1b9a; font-weight: 500; }
 .status-pending   { color: #888; }
-.status-est      { font-size: 0.8rem; font-weight: 400; opacity: 0.85; }
 .status-error    { color: #c62828; font-weight: 500; }
 .status-error-info { color: #c62828; text-decoration: none; vertical-align: middle; line-height: 1; }
 .status-error-info .material-icons { font-size: 15px; }

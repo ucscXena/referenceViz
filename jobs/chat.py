@@ -449,11 +449,22 @@ def _dispatch_tool(name, tool_input, job):
 
 
 def _gene_expression_uris(job, reference_name):
-    """Return (h5ad_uri, arrow_uri) for a job, or raise ValueError."""
-    bucket = settings.AWS_S3_BUCKET
-    if not bucket or not job.s3_input_key:
-        raise ValueError('Input file URI not available for this job')
-    h5ad_uri = f's3://{bucket}/{job.s3_input_key}'
+    """Return (h5ad_uri, arrow_uri) for a job, or raise ValueError.
+
+    For sharded jobs the merge output contains only embeddings (no X), so we
+    use the filtered expression file uploaded by the preprocess step instead.
+    For non-sharded jobs the UCE output contains the filtered expression matrix.
+    Either way the result is aligned with the arrow file (post-filter cell set).
+    """
+    result = job.result or {}
+    if result.get('sharded'):
+        h5ad_uri = result.get('filtered_expression_s3_uri')
+        if not h5ad_uri:
+            raise ValueError('Filtered expression file not available for this job')
+    else:
+        h5ad_uri = job.uce_s3_uri()
+        if not h5ad_uri:
+            raise ValueError('UCE embedding file not available for this job')
 
     projections = list(
         job.projections.filter(status='complete').select_related('reference').all()

@@ -80,6 +80,102 @@ def submit_batch_job(uce_s3_uri, ref_s3_uri, output_s3_uri, predictions_s3_uri,
     return response['jobId']
 
 
+def submit_preprocess_batch_job(input_s3_uri, output_s3_prefix, model_s3,
+                                callback_url='none', uce_s3_uri='none',
+                                species='auto', shard_size=10000, max_shards=100,
+                                job_name='uce-sharding-preprocess'):
+    batch = boto_client('batch')
+    response = batch.submit_job(
+        jobName=job_name,
+        jobQueue=settings.UCE_SHARDING_CPU_QUEUE,
+        jobDefinition=settings.UCE_SHARDING_PREPROCESS_JOB_DEFINITION,
+        parameters={
+            'input_s3':          input_s3_uri,
+            'output_s3_prefix':  output_s3_prefix,
+            'model_s3':          model_s3,
+            'species':           species,
+            'shard_size':        str(shard_size),
+            'max_shards':        str(max_shards),
+            'callback_url':      callback_url or 'none',
+            'uce_s3_uri':        uce_s3_uri or 'none',
+        },
+    )
+    return response['jobId']
+
+
+def submit_shard_batch_job(input_s3_uri, output_s3_uri, model_s3,
+                           species, mixed_precision='bf16',
+                           job_name='uce-sharding-shard'):
+    batch = boto_client('batch')
+    response = batch.submit_job(
+        jobName=job_name,
+        jobQueue=settings.UCE_SHARDING_GPU_QUEUE,
+        jobDefinition=settings.UCE_SHARDING_SHARD_JOB_DEFINITION,
+        parameters={
+            'input_s3':        input_s3_uri,
+            'output_s3':       output_s3_uri,
+            'model_s3':        model_s3,
+            'species':         species,
+            'mixed_precision': mixed_precision,
+            'filter':          'False',
+        },
+    )
+    return response['jobId']
+
+
+def submit_merge_batch_job(manifest_s3, shard_output_prefix, output_s3,
+                           callback_url='none', job_name='uce-sharding-merge'):
+    batch = boto_client('batch')
+    response = batch.submit_job(
+        jobName=job_name,
+        jobQueue=settings.UCE_SHARDING_CPU_QUEUE,
+        jobDefinition=settings.UCE_SHARDING_MERGE_JOB_DEFINITION,
+        parameters={
+            'manifest_s3':          manifest_s3,
+            'shard_output_prefix':  shard_output_prefix,
+            'output_s3':            output_s3,
+            'callback_url':         callback_url or 'none',
+        },
+    )
+    return response['jobId']
+
+
+def check_batch_jobs(batch_job_ids):
+    """Check multiple Batch jobs, paginating describe_jobs in chunks of 100.
+
+    Returns a list of (status, detail, batch_status) tuples in the same order
+    as batch_job_ids, using the same conventions as check_batch_job.
+    """
+    if not batch_job_ids:
+        return []
+    batch = boto_client('batch')
+    by_id = {}
+    for i in range(0, len(batch_job_ids), 100):
+        chunk = batch_job_ids[i:i + 100]
+        response = batch.describe_jobs(jobs=chunk)
+        by_id.update({j['jobId']: j for j in response.get('jobs', [])})
+    results = []
+    for job_id in batch_job_ids:
+        job = by_id.get(job_id)
+        if not job:
+            results.append(('error', f'Batch job {job_id} not found', 'UNKNOWN'))
+            continue
+        status = job['status']
+        if status == 'SUCCEEDED':
+            results.append(('complete', None, 'SUCCEEDED'))
+        elif status == 'FAILED':
+            reason = job.get('statusReason', 'Unknown failure')
+            attempts = job.get('attempts', [])
+            if attempts:
+                container_reason = attempts[-1].get('container', {}).get('reason', '')
+                if container_reason:
+                    reason = f'{reason}: {container_reason}'
+            results.append(('error', reason, 'FAILED'))
+        else:
+            results.append(('running', None, status))
+    return results
+
+
 def check_batch_job(batch_job_id):
     """
     Check the status of a Batch job once.

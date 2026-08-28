@@ -9,7 +9,6 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from django.db import models, transaction
 from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -18,7 +17,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 import django_rq
 
-from .aws import boto_client, delete_s3_key, delete_s3_uri
+from .aws import boto_client, delete_s3_key, delete_s3_uri, delete_s3_prefix
 from .models import Job, Projection, Reference, ReferenceGroup, ShareToken, UCEModel
 from .tasks import run_analysis, _submit_projection
 
@@ -371,51 +370,6 @@ def job_detail(request, pk):
     })
 
 
-_QUEUED_BATCH_STATES = {'SUBMITTED', 'PENDING', 'RUNNABLE'}
-
-
-def _estimate_uce_remaining(job):
-    """Estimated seconds until UCE embedding completes, or None if queued/unknown."""
-    if job.status not in ('pending', 'running'):
-        return None
-    result = job.result or {}
-    if result.get('batch_status') not in ('RUNNING', 'STARTING'):
-        return None  # queued or not yet polled — no meaningful estimate
-    started_at_str = result.get('started_at')
-    reference_time = parse_datetime(started_at_str) if started_at_str else job.created_at
-    elapsed = (timezone.now() - reference_time).total_seconds()
-    cell_count = job.cell_count()
-    if not cell_count:
-        return max(0, int(settings.UCE_STARTUP_SECONDS - elapsed))
-    cells_per_second = result.get('cells_per_second')
-    if cells_per_second:
-        uce_total = settings.UCE_STARTUP_SECONDS + cell_count / cells_per_second
-    else:
-        gpu_count = result.get('num_gpus') or 4
-        uce_total = settings.UCE_STARTUP_SECONDS + cell_count * settings.UCE_SECONDS_PER_CELL_PER_GPU / gpu_count
-    proj_total = settings.PROJ_STARTUP_SECONDS + cell_count * settings.PROJ_SECONDS_PER_CELL
-    return max(0, int(uce_total - elapsed)) + int(proj_total)
-
-
-def _estimate_projection_remaining(proj, job):
-    """Estimated seconds until this projection completes, or None if queued/unknown."""
-    if proj.status not in ('pending', 'running'):
-        return None
-    if job.status != 'complete':
-        return None
-    result = proj.result or {}
-    if result.get('batch_status') in _QUEUED_BATCH_STATES:
-        return None  # explicitly queued — waiting for capacity
-    cell_count = job.cell_count() or 0
-    total = settings.PROJ_STARTUP_SECONDS + cell_count * settings.PROJ_SECONDS_PER_CELL
-    if proj.status == 'running':
-        started_at_str = result.get('started_at') or result.get('submitted_at')
-        reference_time = parse_datetime(started_at_str) if started_at_str else timezone.now()
-        elapsed = (timezone.now() - reference_time).total_seconds()
-        return max(0, int(total - elapsed))
-    # pending + job complete: transient hand-off state, elapsed ≈ 0
-    return int(total)
-
 
 @login_required
 def job_status(request, pk):
@@ -425,11 +379,18 @@ def job_status(request, pk):
     if job.status == 'error' and job.result:
         data['error'] = job.result.get('error', '')
     if job.status in ('pending', 'running'):
-        data['estimated_remaining_seconds'] = _estimate_uce_remaining(job)
+        result = job.result or {}
         data['cell_count'] = job.cell_count()
-        batch_status = (job.result or {}).get('batch_status')
+        batch_status = result.get('batch_status')
         if batch_status:
             data['batch_status'] = batch_status
+        if result.get('sharded'):
+            data['sharded'] = True
+            for key in ('n_shards', 'shards_complete'):
+                if key in result:
+                    data[key] = result[key]
+        elif 'uce_progress' in result:
+            data['uce_progress'] = result['uce_progress']
 
     projections = []
     for proj in Projection.objects.select_related('reference__group').filter(job_id=str(job.pk)):
@@ -445,7 +406,6 @@ def job_status(request, pk):
         if proj.status == 'error' and proj.result:
             p['error'] = proj.result.get('error', '')
         if proj.status in ('pending', 'running'):
-            p['estimated_remaining_seconds'] = _estimate_projection_remaining(proj, job)
             batch_status = (proj.result or {}).get('batch_status')
             if batch_status:
                 p['batch_status'] = batch_status
@@ -612,7 +572,7 @@ def uce_callback(request):
         return JsonResponse({'status': 'not_found'}, status=404)
 
     if status == 'running':
-        updates = {k: data[k] for k in ('cell_count', 'num_gpus', 'cells_per_second', 'git_commit') if k in data}
+        updates = {k: data[k] for k in ('cell_count', 'num_gpus', 'cells_per_second', 'git_commit', 'filtered_expression_s3_uri', 'uce_progress') if k in data}
         if 'git_commit' in updates:
             updates['uce_git_commit'] = updates.pop('git_commit')
         with transaction.atomic():
@@ -798,6 +758,11 @@ def _delete_job_s3_files(job):
 
     # UCE embedding (kept until job is deleted)
     delete_s3_uri(result.get('uce_s3_uri') or result.get('s3_uri'))
+    delete_s3_uri(result.get('filtered_expression_s3_uri'))
+
+    # Sharding intermediates (shard h5ads + UCE shard outputs + manifest).
+    # Already cleaned up on successful merge, but may still exist for errored jobs.
+    delete_s3_prefix(result.get('output_s3_prefix'))
 
     # Input file and UCE request JSON (normally gone after completion,
     # but may still exist for pending/running/error jobs)
