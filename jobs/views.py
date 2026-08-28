@@ -16,9 +16,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 import django_rq
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
 
 from .aws import boto_client, delete_s3_key, delete_s3_uri, delete_s3_prefix
-from .models import Job, Projection, Reference, ReferenceGroup, ShareToken, UCEModel
+from .models import Job, Projection, Reference, ReferenceGroup, ShareToken, UCEModel, UserProfile
 from .tasks import run_analysis, _submit_projection
 
 logger = logging.getLogger(__name__)
@@ -353,7 +355,12 @@ def job_list(request):
         .prefetch_related('projections__reference__group')
         .order_by('-created_at')
     )
-    return render(request, 'jobs/list.html', {'jobs': jobs})
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    return render(request, 'jobs/list.html', {
+        'jobs': jobs,
+        'email_on_complete': profile.email_on_complete,
+        'user_email': request.user.email,
+    })
 
 
 @login_required
@@ -610,6 +617,41 @@ def uce_callback(request):
     return JsonResponse({'error': 'invalid status'}, status=400)
 
 
+def _notify_user_projection_complete(projection):
+    """Send a completion email to the job owner if they have opted in. Non-fatal on failure."""
+    user = projection.job.user
+    if not user.email:
+        logger.info("email_notify: skipped projection %s — user %s has no email", projection.pk, user.pk)
+        return
+    try:
+        profile = UserProfile.objects.get(user=user)
+        if not profile.email_on_complete:
+            logger.info("email_notify: skipped projection %s — user %s opted out", projection.pk, user.pk)
+            return
+    except UserProfile.DoesNotExist:
+        pass  # no profile means opted in (default)
+    try:
+        job_url = f"{settings.PUBLIC_BASE_URL}/jobs/{projection.job.id}/"
+        logger.info("email_notify: sending to %s for projection %s", user.email, projection.pk)
+        send_mail(
+            subject=f"Cell mapping complete — {projection.job.short_uploaded_file()}",
+            message=(
+                f"Your cell mapping on the UCSC Brain Explorer has finished.\n\n"
+                f"File: {projection.job.original_filename}\n"
+                f"Reference: {projection.reference.name}\n\n"
+                f"View results: {job_url}\n\n"
+                f"— UCSC Brain Explorer\n"
+                f"  brainexplorer.ucsc.edu"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+        logger.info("email_notify: sent successfully to %s", user.email)
+    except Exception:
+        logger.exception("email_notify: failed for projection %s", projection.pk)
+
+
 @csrf_exempt
 @require_POST
 def projection_callback(request):
@@ -642,6 +684,7 @@ def projection_callback(request):
             }
             projection.status = 'complete'
             projection.save()
+        _notify_user_projection_complete(projection)
         return JsonResponse({'status': 'ok'})
 
     if status == 'error':
@@ -736,6 +779,16 @@ def clone_job(request, token):
     )
 
     return redirect('job_list')
+
+
+@login_required
+@require_POST
+def toggle_email_notifications(request):
+    """Toggle the email-on-complete preference for the current user."""
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    profile.email_on_complete = not profile.email_on_complete
+    profile.save()
+    return JsonResponse({'email_on_complete': profile.email_on_complete})
 
 
 def _delete_job_s3_files(job):

@@ -8,6 +8,9 @@
       <button class="btn-notify" id="btn-notify" title="Notify me when a job completes">
         <span class="material-icons" id="notify-icon">notifications_none</span>
       </button>
+      <button class="btn-notify" id="btn-email-notify" title="Email me when a job completes">
+        <span class="material-icons" id="email-notify-icon">mail_outline</span>
+      </button>
       <a href="{% url 'reference_list' %}" class="base-button">Map new cells</a>
     </div>
   </div>
@@ -240,6 +243,34 @@ document.getElementById('job-list-form').onsubmit = function(e) {
     if (!isEnabled()) { logNotify('skipped', filename); return; }
     fireNotification('Cell mapping failed', filename);
   };
+})();
+
+// Email notifications
+(function() {
+  const btn  = document.getElementById('btn-email-notify');
+  const icon = document.getElementById('email-notify-icon');
+  const userEmail = '{{ user_email|escapejs }}';
+  let enabled = {{ email_on_complete|yesno:'true,false' }};
+
+  function updateButton() {
+    icon.textContent = enabled ? 'mail' : 'mail_outline';
+    btn.classList.toggle('btn-notify--active', enabled);
+    btn.title = enabled
+      ? `Email notifications on (${userEmail}) — click to turn off`
+      : `Email me at ${userEmail} when a job completes`;
+  }
+
+  btn.addEventListener('click', function() {
+    fetch('{% url "toggle_email_notifications" %}', {
+      method: 'POST',
+      headers: {'X-CSRFToken': '{{ csrf_token }}'},
+    })
+      .then(r => r.json())
+      .then(data => { enabled = data.email_on_complete; updateButton(); })
+      .catch(() => {});
+  });
+
+  updateButton();
 })();
 
 // Share button

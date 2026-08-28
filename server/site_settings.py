@@ -25,6 +25,8 @@ DATABASES = {
 
 # Base URL of this server for internal callbacks (e.g. 'http://10.0.0.1')
 SERVER_BASE_URL = ''
+# Public-facing base URL for user-visible links (e.g. in emails)
+PUBLIC_BASE_URL = 'http://localhost:8000'
 
 # AWS / Batch — override these in site_settings_private.py
 AWS_REGION = 'us-east-1'
@@ -78,6 +80,11 @@ BRAIN_EXPLORER_METADATA_PATH = os.path.join(BASE_DIR, 'UCSC_Brain_Explorer_metad
 PAPERS_DIR = os.path.join(BASE_DIR, 'papers')
 
 GA_ID = ''
+
+# Email — override in production settings
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'UCSC Brain Explorer <noreply@xenabrowser.net>'
+AWS_SES_REGION_NAME = 'us-east-1'
 
 EXTRA_MIDDLEWARE = ["server.local_auth.ForceUserMiddleware"]
 # set to test allauth

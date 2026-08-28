@@ -361,6 +361,10 @@ django-rq==3.1 \
     --hash=sha256:8d7b9137b85b8df18b1cdf06244eb71b39f43ad020c0a0c7d49723f8940074ae \
     --hash=sha256:9c8a725aa3f43251a5571ec51d7b65a01613358574d01a5101861480963e59b7
     # via -r requirements.in
+django-ses==4.7.2 \
+    --hash=sha256:f3db567fb6f43c01d7d890f5c991e1ebbfa48220de0be24d497ba6332004abcb \
+    --hash=sha256:a36f2af0e4ce060bf36053ed4c94feac1703ea3351e677c6f6421abd01433a35
+    # via -r requirements.in
 docstring-parser==0.18.0 \
     --hash=sha256:292510982205c12b1248696f44959db3cdd1740237a968ea1e2e7a900eeb2015 \
     --hash=sha256:b3fcbed555c47d8479be0796ef7e19c2670d428d72e96da63f3a40122860374b

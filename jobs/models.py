@@ -193,6 +193,14 @@ class ShareToken(models.Model):
         return f'ShareToken for Job {str(self.job_id)[:8]} (expires {self.expires_at:%Y-%m-%d})'
 
 
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    email_on_complete = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f'Profile({self.user})'
+
+
 class ConversationMessage(models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='conversation_messages')
     generation = models.PositiveSmallIntegerField(default=0)

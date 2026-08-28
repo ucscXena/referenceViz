@@ -11,7 +11,25 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from .aws import boto_client
-from .models import ConversationMessage, Job, JobEvent, Projection, ProjectionEvent, Reference, ReferenceGroup, UCEModel
+from django.contrib.auth.admin import UserAdmin as DefaultUserAdmin
+from django.contrib.auth.models import User
+
+from .models import ConversationMessage, Job, JobEvent, Projection, ProjectionEvent, Reference, ReferenceGroup, UCEModel, UserProfile
+
+
+class UserProfileInline(admin.StackedInline):
+    model = UserProfile
+    can_delete = False
+    verbose_name_plural = 'Notification preferences'
+    fields = ('email_on_complete',)
+
+
+class UserAdmin(DefaultUserAdmin):
+    inlines = list(DefaultUserAdmin.inlines) + [UserProfileInline]
+
+
+admin.site.unregister(User)
+admin.site.register(User, UserAdmin)
 
 
 def _presigned_link(s3_uri, label):

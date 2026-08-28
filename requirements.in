@@ -1,4 +1,5 @@
 anthropic
+django-ses
 boto3
 pgvector
 sentence-transformers
