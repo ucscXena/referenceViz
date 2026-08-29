@@ -253,15 +253,30 @@ def multipart_complete(request):
     parts = data['parts']  # [{PartNumber, ETag}, ...]
     ref_id = data.get('refId')
     mixed_precision = data.get('mixedPrecision', 'bf16')
+    expected_size = data.get('fileSize')  # bytes, sent by client for integrity check
 
     job = get_object_or_404(Job, pk=job_id, user=request.user)
 
-    boto_client('s3').complete_multipart_upload(
+    s3 = boto_client('s3')
+    s3.complete_multipart_upload(
         Bucket=settings.AWS_S3_BUCKET,
         Key=key,
         UploadId=upload_id,
         MultipartUpload={'Parts': parts},
     )
+
+    if expected_size is not None:
+        head = s3.head_object(Bucket=settings.AWS_S3_BUCKET, Key=key)
+        actual_size = head['ContentLength']
+        if actual_size != expected_size:
+            logger.error(
+                'multipart_complete: size mismatch for job %s — expected %d bytes, got %d',
+                job_id, expected_size, actual_size,
+            )
+            return JsonResponse(
+                {'error': 'upload_truncated', 'expected': expected_size, 'actual': actual_size},
+                status=400,
+            )
 
     if ref_id:
         reference = get_object_or_404(
@@ -385,6 +400,7 @@ def job_status(request, pk):
     data = {'status': job.status}
     if job.status == 'error' and job.result:
         data['error'] = job.result.get('error', '')
+        data['has_upload'] = bool(job.s3_input_key)
     if job.status in ('pending', 'running'):
         result = job.result or {}
         data['cell_count'] = job.cell_count()
@@ -612,24 +628,79 @@ def uce_callback(request):
             job.status = 'error'
             job.result = {**job.result, 'error': error_msg}
             job.save()
+        _notify_user_uce_error(job)
         return JsonResponse({'status': 'ok'})
 
     return JsonResponse({'error': 'invalid status'}, status=400)
 
 
+def _should_notify(user):
+    """Return True if the user has email and has not opted out."""
+    if not user.email:
+        return False
+    try:
+        return UserProfile.objects.get(user=user).email_on_complete
+    except UserProfile.DoesNotExist:
+        return True  # no profile = opted in
+
+
+def _notify_user_uce_error(job):
+    user = job.user
+    if not _should_notify(user):
+        logger.info("email_notify: skipped UCE error for job %s — user %s no email or opted out", job.pk, user.pk)
+        return
+    try:
+        job_url = f"{settings.PUBLIC_BASE_URL}/jobs/{job.id}/"
+        send_mail(
+            subject=f"Cell mapping failed — {job.short_uploaded_file()}",
+            message=(
+                f"Unfortunately your cell mapping on the UCSC Brain Explorer encountered an error.\n\n"
+                f"File: {job.original_filename}\n\n"
+                f"View details: {job_url}\n\n"
+                f"— UCSC Brain Explorer\n"
+                f"  brainexplorer.ucsc.edu"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+        logger.info("email_notify: sent UCE error to %s for job %s", user.email, job.pk)
+    except Exception:
+        logger.exception("email_notify: failed sending UCE error for job %s", job.pk)
+
+
+def _notify_user_projection_error(projection):
+    user = projection.job.user
+    if not _should_notify(user):
+        logger.info("email_notify: skipped projection error %s — user %s no email or opted out", projection.pk, user.pk)
+        return
+    try:
+        job_url = f"{settings.PUBLIC_BASE_URL}/jobs/{projection.job.id}/"
+        send_mail(
+            subject=f"Cell mapping failed — {projection.job.short_uploaded_file()}",
+            message=(
+                f"Unfortunately your cell mapping on the UCSC Brain Explorer encountered an error.\n\n"
+                f"File: {projection.job.original_filename}\n"
+                f"Reference: {projection.reference.name}\n\n"
+                f"View details: {job_url}\n\n"
+                f"— UCSC Brain Explorer\n"
+                f"  brainexplorer.ucsc.edu"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+        logger.info("email_notify: sent projection error to %s for projection %s", user.email, projection.pk)
+    except Exception:
+        logger.exception("email_notify: failed sending projection error for projection %s", projection.pk)
+
+
 def _notify_user_projection_complete(projection):
     """Send a completion email to the job owner if they have opted in. Non-fatal on failure."""
     user = projection.job.user
-    if not user.email:
-        logger.info("email_notify: skipped projection %s — user %s has no email", projection.pk, user.pk)
+    if not _should_notify(user):
+        logger.info("email_notify: skipped projection %s — user %s no email or opted out", projection.pk, user.pk)
         return
-    try:
-        profile = UserProfile.objects.get(user=user)
-        if not profile.email_on_complete:
-            logger.info("email_notify: skipped projection %s — user %s opted out", projection.pk, user.pk)
-            return
-    except UserProfile.DoesNotExist:
-        pass  # no profile means opted in (default)
     try:
         job_url = f"{settings.PUBLIC_BASE_URL}/jobs/{projection.job.id}/"
         logger.info("email_notify: sending to %s for projection %s", user.email, projection.pk)
@@ -696,6 +767,7 @@ def projection_callback(request):
             projection.result = {**projection.result, 'error': error_msg}
             projection.status = 'error'
             projection.save()
+        _notify_user_projection_error(projection)
         return JsonResponse({'status': 'ok'})
 
     return JsonResponse({'error': 'invalid status'}, status=400)
@@ -789,6 +861,35 @@ def toggle_email_notifications(request):
     profile.email_on_complete = not profile.email_on_complete
     profile.save()
     return JsonResponse({'email_on_complete': profile.email_on_complete})
+
+
+@login_required
+@require_POST
+def cancel_upload(request, pk):
+    """Cancel an in-progress upload: abort the S3 multipart upload and delete the job."""
+    job = get_object_or_404(Job, pk=pk, user=request.user)
+    if job.status != 'uploading':
+        return JsonResponse({'error': 'job is not uploading'}, status=400)
+    _delete_job_s3_files(job)
+    job.delete()
+    return JsonResponse({'status': 'ok'})
+
+
+@login_required
+@require_POST
+def retry_uce(request, pk):
+    """Re-queue a UCE job that is in error state."""
+    job = get_object_or_404(Job, pk=pk, user=request.user)
+    if job.status != 'error':
+        return JsonResponse({'error': 'job is not in error state'}, status=400)
+    if not job.s3_input_key:
+        return JsonResponse({'error': 'no uploaded file to retry'}, status=400)
+    job.status = 'pending'
+    job.batch_job_id = ''
+    job.result = {}
+    job.save()
+    run_analysis.delay(str(job.id))
+    return JsonResponse({'status': 'queued'})
 
 
 def _delete_job_s3_files(job):

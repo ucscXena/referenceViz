@@ -15,6 +15,7 @@ from django.contrib.auth.admin import UserAdmin as DefaultUserAdmin
 from django.contrib.auth.models import User
 
 from .models import ConversationMessage, Job, JobEvent, Projection, ProjectionEvent, Reference, ReferenceGroup, UCEModel, UserProfile
+from .tasks import run_analysis
 
 
 class UserProfileInline(admin.StackedInline):
@@ -85,6 +86,23 @@ class ProjectionInline(admin.TabularInline):
 
 
 
+@admin.action(description='Retry UCE pipeline')
+def retry_uce_action(modeladmin, request, queryset):
+    retried = 0
+    skipped = 0
+    for job in queryset:
+        if job.status != 'error' or not job.s3_input_key:
+            skipped += 1
+            continue
+        job.status = 'pending'
+        job.batch_job_id = ''
+        job.result = {}
+        job.save()
+        run_analysis.delay(str(job.id))
+        retried += 1
+    modeladmin.message_user(request, f'Retried {retried} job(s); skipped {skipped} (not in error state or no upload).')
+
+
 @admin.register(Job)
 class JobAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'user', 'original_filename', 'status', 'batch_job_link', 'created_at', 'uce_download_link')
@@ -92,6 +110,7 @@ class JobAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
     readonly_fields = ('id', 'batch_job_link', 'created_at', 'updated_at', 'uce_download_link', 'system_prompt_link')
     inlines = [ProjectionInline]
+    actions = [retry_uce_action]
     change_list_template = 'admin/jobs/job/change_list.html'
 
     def get_urls(self):

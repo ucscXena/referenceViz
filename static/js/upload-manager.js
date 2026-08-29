@@ -5,12 +5,27 @@
 
 (function () {
   const SUPPORTED = !!(window.indexedDB && navigator.locks);
-  const PART_SIZE = 8 * 1024 * 1024; // 8 MB (S3 min is 5 MB for non-final parts)
-  const CONCURRENCY = 4;
+  const PART_SIZE_SMALL = 8 * 1024 * 1024;   // 8 MB  — files under 1 GB
+  const PART_SIZE_LARGE = 64 * 1024 * 1024;  // 64 MB — files 1 GB and above
+  const CONCURRENCY_SMALL = 4;
+  const CONCURRENCY_LARGE = 1;
+  const LARGE_FILE_THRESHOLD = 1024 * 1024 * 1024; // 1 GB
+
+  function choosePartSize(fileSize) {
+    return fileSize >= LARGE_FILE_THRESHOLD ? PART_SIZE_LARGE : PART_SIZE_SMALL;
+  }
+  function chooseConcurrency(fileSize) {
+    return fileSize >= LARGE_FILE_THRESHOLD ? CONCURRENCY_LARGE : CONCURRENCY_SMALL;
+  }
   const DB_NAME = 'uce-uploads';
   const STORE = 'pending';
 
   const bc = new BroadcastChannel('upload-progress');
+  const cancelledJobs = new Set();
+
+  bc.addEventListener('message', e => {
+    if (e.data?.type === 'cancel') cancelledJobs.add(e.data.jobId);
+  });
 
   function getCsrf() {
     const m = document.cookie.match(/csrftoken=([^;]+)/);
@@ -87,9 +102,18 @@
     return data.parts; // [{PartNumber, ETag}]
   }
 
-  async function completeUpload(jobId, uploadId, key, parts, refId, mixedPrecision) {
-    const resp = await post('/jobs/upload/complete/', {jobId, uploadId, key, parts, refId, mixedPrecision});
-    if (!resp.ok) throw new Error(`complete failed: ${resp.status}`);
+  async function completeUpload(jobId, uploadId, key, parts, refId, mixedPrecision, fileSize) {
+    const resp = await post('/jobs/upload/complete/', {jobId, uploadId, key, parts, refId, mixedPrecision, fileSize});
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      if (body.error === 'upload_truncated') {
+        throw Object.assign(
+          new Error(`Upload incomplete: only ${body.actual.toLocaleString()} of ${body.expected.toLocaleString()} bytes reached S3. Please try again.`),
+          {code: 'upload_truncated'},
+        );
+      }
+      throw new Error(`complete failed: ${resp.status}`);
+    }
   }
 
   async function abortUpload(jobId, uploadId, key) {
@@ -112,7 +136,9 @@
       return;
     }
 
-    const totalParts = Math.ceil(file.size / PART_SIZE);
+    const partSize = state.partSize || choosePartSize(file.size);
+    const concurrency = chooseConcurrency(file.size);
+    const totalParts = Math.ceil(file.size / partSize);
 
     // Reconcile with S3 — it is the authoritative source of what's committed.
     console.log('[upload-manager] listing completed parts for', uploadId);
@@ -143,20 +169,22 @@
       const queue = [...missing];
 
       const uploadPart = async partNum => {
-        const offset = (partNum - 1) * PART_SIZE;
-        const slice = file.slice(offset, Math.min(offset + PART_SIZE, file.size));
+        const offset = (partNum - 1) * partSize;
+        const slice = file.slice(offset, Math.min(offset + partSize, file.size));
         const putResp = await fetch(urls[partNum], {method: 'PUT', body: slice});
         if (!putResp.ok) throw new Error(`part ${partNum} PUT failed: ${putResp.status}`);
         const etag = putResp.headers.get('ETag');
         if (!etag) throw new Error('ETag missing — add ETag to S3 CORS ExposeHeaders');
         etags[partNum] = etag;
-        await dbPut(db, {...state, etags: Object.assign({}, etags)});
         bc.postMessage({type: 'progress', jobId, done: Object.keys(etags).length, total: totalParts});
       };
 
       await Promise.all(
-        Array.from({length: Math.min(CONCURRENCY, missing.length)}, async () => {
-          while (queue.length > 0) await uploadPart(queue.shift());
+        Array.from({length: Math.min(concurrency, missing.length)}, async () => {
+          while (queue.length > 0) {
+            if (cancelledJobs.has(jobId)) return;
+            await uploadPart(queue.shift());
+          }
         })
       );
     }
@@ -166,7 +194,7 @@
       .map(([n, e]) => ({PartNumber: parseInt(n, 10), ETag: e}))
       .sort((a, b) => a.PartNumber - b.PartNumber);
 
-    await completeUpload(jobId, uploadId, key, parts, refId, mixedPrecision);
+    await completeUpload(jobId, uploadId, key, parts, refId, mixedPrecision, file.size);
     await dbDelete(db, uploadId);
     bc.postMessage({type: 'complete', jobId});
   }
@@ -209,6 +237,15 @@
 
   window.UploadManager = {
     supported: SUPPORTED,
+    async cancel(jobId) {
+      cancelledJobs.add(jobId);
+      bc.postMessage({type: 'cancel', jobId});
+      const db = await openDb();
+      const all = await dbGetAll(db);
+      const state = all.find(s => s.jobId === jobId);
+      if (state) await dbDelete(db, state.uploadId);
+    },
+
     async start(file, jobId, uploadId, key, {refId = null, mixedPrecision = 'bf16'} = {}) {
       if (!SUPPORTED) {
         throw new Error(
@@ -217,7 +254,7 @@
         );
       }
       const db = await openDb();
-      const state = {uploadId, key, jobId, file, refId, mixedPrecision, etags: {}};
+      const state = {uploadId, key, jobId, file, refId, mixedPrecision, etags: {}, partSize: choosePartSize(file.size)};
       await dbPut(db, state);
       // Don't tryResume here — it would race with the imminent navigation and be
       // cancelled mid-flight. The next page's init() picks it up with no lock contention.

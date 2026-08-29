@@ -78,10 +78,12 @@
         <td rowspan="{{ pcount }}" class="uce-status-cell">
           {% if job.status == 'error' %}
             <span class="status-error">Error <a href="{% url 'job_detail' job.pk %}" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>
+            {% if job.s3_input_key %}<button class="btn-retry-uce" data-job-id="{{ job.pk }}" title="Retry UCE pipeline">Retry</button>{% endif %}
           {% elif job.status == 'running' %}
             <span class="status-running">{% if job.cell_count %}Running{% else %}Starting{% endif %}</span>
           {% elif job.status == 'uploading' %}
-            <span class="status-uploading">Uploading…</span>
+            <span class="status-uploading">Uploading</span>
+            <button class="btn-cancel-upload" data-job-id="{{ job.pk }}" title="Cancel upload">Cancel</button>
           {% else %}
             <span class="status-pending">Pending</span>
           {% endif %}
@@ -106,10 +108,12 @@
         <td class="uce-status-cell">
           {% if job.status == 'error' %}
             <span class="status-error">Error <a href="{% url 'job_detail' job.pk %}" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>
+            {% if job.s3_input_key %}<button class="btn-retry-uce" data-job-id="{{ job.pk }}" title="Retry UCE pipeline">Retry</button>{% endif %}
           {% elif job.status == 'running' %}
             <span class="status-running">{% if job.cell_count %}Running{% else %}Starting{% endif %}</span>
           {% elif job.status == 'uploading' %}
-            <span class="status-uploading">Uploading…</span>
+            <span class="status-uploading">Uploading</span>
+            <button class="btn-cancel-upload" data-job-id="{{ job.pk }}" title="Cancel upload">Cancel</button>
           {% else %}
             <span class="status-pending">Pending</span>
           {% endif %}
@@ -495,6 +499,44 @@ document.addEventListener('click', e => {
   kebabPopover.style.left = (rect.right + window.scrollX - kebabPopover.offsetWidth) + 'px';
 });
 
+// Cancel upload
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.btn-cancel-upload');
+  if (!btn) return;
+  if (!confirm('Cancel this upload? The file will need to be re-uploaded.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Cancelling…';
+  const jobId = btn.dataset.jobId;
+  window.UploadManager?.cancel(jobId);
+  fetch(`/jobs/${jobId}/cancel-upload/`, {method: 'POST', headers: {'X-CSRFToken': csrfToken}})
+    .then(r => r.json())
+    .then(() => {
+      const row = document.querySelector(`tr[data-job-id="${jobId}"]`);
+      if (row) row.remove();
+    })
+    .catch(() => { btn.disabled = false; btn.textContent = 'Cancel'; });
+});
+
+// Retry UCE
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.btn-retry-uce');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = 'Retrying…';
+  fetch(`/jobs/${btn.dataset.jobId}/retry/`, {method: 'POST', headers: {'X-CSRFToken': csrfToken}})
+    .then(r => r.json())
+    .then(d => {
+      if (d.status === 'queued') {
+        btn.closest('tr')?.querySelector('.uce-status-cell')?.querySelectorAll('.btn-retry-uce').forEach(b => b.remove());
+      } else {
+        btn.textContent = 'Retry';
+        btn.disabled = false;
+        alert(d.error || 'Retry failed.');
+      }
+    })
+    .catch(() => { btn.textContent = 'Retry'; btn.disabled = false; });
+});
+
 // Explore popover
 const explorePopover = document.createElement('div');
 explorePopover.className = 'share-popover';
@@ -643,7 +685,13 @@ document.addEventListener('click', e => {
           const uceCell = row.querySelector('.uce-status-cell');
           if (uceCell) {
             if (data.status === 'error') {
-              uceCell.innerHTML = `<span class="status-error">Error <a href="/jobs/${jobId}/" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>`;
+              const retryBtn = data.has_upload ? ` <button class="btn-retry-uce" data-job-id="${jobId}" title="Retry UCE pipeline">Retry</button>` : '';
+              uceCell.innerHTML = `<span class="status-error">Error <a href="/jobs/${jobId}/" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>${retryBtn}`;
+            } else if (data.status === 'uploading') {
+              // Preserve percentage from BroadcastChannel if present; always keep Cancel visible.
+              const existingPct = uceCell.querySelector('.status-uploading')?.textContent?.match(/\d+%/)?.[0];
+              const pctText = existingPct ? ` ${existingPct}` : '';
+              uceCell.innerHTML = `<span class="status-uploading">Uploading${pctText}</span> <button class="btn-cancel-upload" data-job-id="${jobId}" title="Cancel upload">Cancel</button>`;
             } else {
               const label = data.status === 'running' ? ucePhaseLabel(data) : (LABELS[data.status] || data.status);
               uceCell.innerHTML = `<span class="status-${data.status}">${label}</span>`;
@@ -716,7 +764,7 @@ document.addEventListener('click', e => {
 
     if (data.type === 'progress') {
       const pct = Math.round(100 * data.done / data.total);
-      cell.innerHTML = `<span class="status-uploading">Uploading ${pct}%</span>`;
+      cell.innerHTML = `<span class="status-uploading">Uploading ${pct}%</span> <button class="btn-cancel-upload" data-job-id="${data.jobId}" title="Cancel upload">Cancel</button>`;
       row.dataset.jobStatus = 'uploading';
     } else if (data.type === 'complete') {
       cell.innerHTML = `<span class="status-pending">Pending</span>`;
@@ -793,6 +841,12 @@ tr.job-row-alt td {
 .status-running   { color: #1565c0; font-weight: 500; }
 .status-uploading { color: #6a1b9a; font-weight: 500; }
 .status-pending   { color: #888; }
+.btn-retry-uce, .btn-cancel-upload { margin-left: 0.4rem; padding: 1px 8px; font-size: 0.8rem; border-radius: 3px; background: transparent; cursor: pointer; }
+.btn-retry-uce { border: 1px solid #c62828; color: #c62828; }
+.btn-retry-uce:hover:not(:disabled) { background: #fdecea; }
+.btn-cancel-upload { border: 1px solid #6a1b9a; color: #6a1b9a; }
+.btn-cancel-upload:hover:not(:disabled) { background: #f3e5f5; }
+.btn-retry-uce:disabled, .btn-cancel-upload:disabled { opacity: 0.5; cursor: default; }
 .status-error    { color: #c62828; font-weight: 500; }
 .status-error-info { color: #c62828; text-decoration: none; vertical-align: middle; line-height: 1; }
 .status-error-info .material-icons { font-size: 15px; }
