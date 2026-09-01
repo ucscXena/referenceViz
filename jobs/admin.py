@@ -315,6 +315,7 @@ class ReferenceAdmin(admin.ModelAdmin):
 class ProjectionAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'short_job', 'reference_link', 'status', 'batch_job_link', 'download_link', 'created_at')
     list_filter = ('status', 'reference')
+    ordering = ('-created_at',)
     readonly_fields = ('id', 'job_file', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'predictions_download_link', 'viz_link', 'created_at', 'updated_at')
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('reference__group', 'job__user')
