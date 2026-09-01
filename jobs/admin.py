@@ -8,7 +8,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, mark_safe
 
 from .aws import boto_client
 from django.contrib.auth.admin import UserAdmin as DefaultUserAdmin
@@ -105,10 +105,10 @@ def retry_uce_action(modeladmin, request, queryset):
 
 @admin.register(Job)
 class JobAdmin(admin.ModelAdmin):
-    list_display = ('short_id', 'user', 'original_filename', 'status', 'batch_job_link', 'created_at', 'uce_download_link')
+    list_display = ('short_id', 'user', 'filename_display', 'status', 'batch_job_link', 'created_at', 'uce_download_link')
     list_filter = ('status',)
     ordering = ('-created_at',)
-    readonly_fields = ('id', 'batch_job_link', 'created_at', 'updated_at', 'uce_download_link', 'system_prompt_link')
+    readonly_fields = ('id', 'batch_job_links', 'created_at', 'updated_at', 'uce_download_link', 'system_prompt_link')
     inlines = [ProjectionInline]
     actions = [retry_uce_action]
     change_list_template = 'admin/jobs/job/change_list.html'
@@ -230,10 +230,38 @@ class JobAdmin(admin.ModelAdmin):
         return format_html('<a href="{}" target="_blank">View system prompt</a>', url)
     system_prompt_link.short_description = 'System Prompt'
 
+    def filename_display(self, obj):
+        name = obj.original_filename or '—'
+        # Insert word-break opportunities after _, -, and . so long names wrap gracefully.
+        broken = name.replace('_', '_<wbr>').replace('-', '-<wbr>').replace('.', '.<wbr>')
+        return mark_safe(f'<span style="word-break:break-word">{broken}</span>')
+    filename_display.short_description = 'File'
+    filename_display.admin_order_field = 'original_filename'
+
     def batch_job_link(self, obj):
+        # List view: show the most current job only (merge > preprocess > regular).
+        if obj.result and obj.result.get('sharded'):
+            job_id = obj.result.get('merge_batch_job_id') or obj.result.get('preprocess_batch_job_id')
+            prefix = 'merge' if obj.result.get('merge_batch_job_id') else 'pre'
+            link = _batch_link(job_id)
+            return mark_safe(f'{prefix}: {link}') if job_id else '—'
         return _batch_link(obj.batch_job_id)
     batch_job_link.short_description = 'Batch Job'
     batch_job_link.admin_order_field = 'batch_job_id'
+
+    def batch_job_links(self, obj):
+        # Detail view: show both preprocess and merge links for sharded jobs.
+        if obj.result and obj.result.get('sharded'):
+            preprocess_id = obj.result.get('preprocess_batch_job_id')
+            merge_id = obj.result.get('merge_batch_job_id')
+            parts = []
+            if preprocess_id:
+                parts.append(f'pre: {_batch_link(preprocess_id)}')
+            if merge_id:
+                parts.append(f'merge: {_batch_link(merge_id)}')
+            return mark_safe(' · '.join(parts)) if parts else '—'
+        return _batch_link(obj.batch_job_id)
+    batch_job_links.short_description = 'Batch Job'
 
     def uce_download_link(self, obj):
         return _presigned_link(obj.uce_s3_uri(), 'Download UCE')
