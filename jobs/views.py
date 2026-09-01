@@ -595,7 +595,7 @@ def uce_callback(request):
         return JsonResponse({'status': 'not_found'}, status=404)
 
     if status == 'running':
-        updates = {k: data[k] for k in ('cell_count', 'num_gpus', 'cells_per_second', 'git_commit', 'filtered_expression_s3_uri', 'uce_progress') if k in data}
+        updates = {k: data[k] for k in ('cell_count', 'raw_cell_count', 'num_gpus', 'cells_per_second', 'git_commit', 'filtered_expression_s3_uri', 'uce_progress') if k in data}
         if 'git_commit' in updates:
             updates['uce_git_commit'] = updates.pop('git_commit')
         with transaction.atomic():
