@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import timedelta
 
+from django import forms
 from django.conf import settings
 from django.contrib import admin
 from django.db.models import Count, Q
@@ -9,6 +10,21 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html, mark_safe
+
+
+class _S3KeyWidget(forms.TextInput):
+    def __init__(self, download_url, *args, **kwargs):
+        self.download_url = download_url
+        super().__init__(*args, **kwargs)
+
+    def render(self, name, value, attrs=None, renderer=None):
+        html = super().render(name, value, attrs, renderer)
+        return mark_safe(
+            html + format_html(
+                '<a href="{}" target="_blank" style="margin-left:10px; align-self:center; font-size:13px">↓ Download</a>',
+                self.download_url,
+            )
+        )
 
 from .aws import boto_client
 from django.contrib.auth.admin import UserAdmin as DefaultUserAdmin
@@ -262,6 +278,20 @@ class JobAdmin(admin.ModelAdmin):
             return mark_safe(' · '.join(parts)) if parts else '—'
         return _batch_link(obj.batch_job_id)
     batch_job_links.short_description = 'Batch Job'
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if obj and obj.s3_input_key:
+            try:
+                url = boto_client('s3').generate_presigned_url(
+                    'get_object',
+                    Params={'Bucket': settings.AWS_S3_BUCKET, 'Key': obj.s3_input_key},
+                    ExpiresIn=300,
+                )
+                form.base_fields['s3_input_key'].widget = _S3KeyWidget(download_url=url)
+            except Exception:
+                pass
+        return form
 
     def uce_download_link(self, obj):
         return _presigned_link(obj.uce_s3_uri(), 'Download UCE')
