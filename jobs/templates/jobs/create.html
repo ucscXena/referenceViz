@@ -135,7 +135,9 @@ submitBtn.addEventListener('click', async () => {
     progressMsg.textContent = 'Upload started — redirecting…';
     window.location.href = '{% url "job_list" %}';
   } catch (err) {
-    progressMsg.textContent = 'Error: ' + err.message;
+    console.error('[upload] error:', err);
+    const msg = err.message || err.name || String(err) || 'unknown error';
+    progressMsg.textContent = 'Error: ' + msg;
     progressBar.style.background = '#d32f2f';
     submitBtn.disabled = false;
   }
