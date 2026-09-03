@@ -129,11 +129,42 @@ submitBtn.addEventListener('click', async () => {
     if (!resp.ok) throw new Error('Failed to initiate upload');
     const {jobId, uploadId, key} = await resp.json();
 
-    await window.UploadManager.start(file, jobId, uploadId, key, {refId: refId || null});
+    const {background} = await window.UploadManager.start(file, jobId, uploadId, key, {refId: refId || null});
 
-    progressBar.style.width = '100%';
-    progressMsg.textContent = 'Upload started — redirecting…';
-    window.location.href = '{% url "job_list" %}';
+    if (background) {
+      progressBar.style.width = '100%';
+      progressMsg.textContent = 'Upload started — redirecting…';
+      window.location.href = '{% url "job_list" %}';
+    } else {
+      // Inline mode (IndexedDB unavailable — e.g. private browsing).
+      // Upload is running in this tab; don't navigate until it completes.
+      progressMsg.textContent = 'Uploading… do not close or leave this page.';
+
+      const guard = e => { e.preventDefault(); e.returnValue = ''; };
+      window.addEventListener('beforeunload', guard);
+
+      const bc = new BroadcastChannel('upload-progress');
+      bc.addEventListener('message', e => {
+        if (e.data?.jobId !== jobId) return;
+        if (e.data.type === 'progress') {
+          const pct = Math.round(e.data.done / e.data.total * 100);
+          progressBar.style.width = pct + '%';
+          progressMsg.textContent = `Uploading… ${pct}% — do not close or leave this page.`;
+        } else if (e.data.type === 'complete') {
+          bc.close();
+          window.removeEventListener('beforeunload', guard);
+          progressBar.style.width = '100%';
+          progressMsg.textContent = 'Upload complete — redirecting…';
+          window.location.href = '{% url "job_list" %}';
+        } else if (e.data.type === 'error') {
+          bc.close();
+          window.removeEventListener('beforeunload', guard);
+          progressMsg.textContent = 'Error: ' + (e.data.message || 'upload failed');
+          progressBar.style.background = '#d32f2f';
+          submitBtn.disabled = false;
+        }
+      });
+    }
   } catch (err) {
     console.error('[upload] error:', err);
     const msg = err.message || err.name || String(err) || 'unknown error';

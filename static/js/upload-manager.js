@@ -195,7 +195,7 @@
       .sort((a, b) => a.PartNumber - b.PartNumber);
 
     await completeUpload(jobId, uploadId, key, parts, refId, mixedPrecision, file.size);
-    await dbDelete(db, uploadId);
+    await dbDelete(db, uploadId).catch(() => {});
     bc.postMessage({type: 'complete', jobId});
   }
 
@@ -255,9 +255,18 @@
       }
       const db = await openDb();
       const state = {uploadId, key, jobId, file, refId, mixedPrecision, etags: {}, partSize: choosePartSize(file.size)};
-      await dbPut(db, state);
-      // Don't tryResume here — it would race with the imminent navigation and be
-      // cancelled mid-flight. The next page's init() picks it up with no lock contention.
+      try {
+        await dbPut(db, state);
+      } catch (e) {
+        // IndexedDB write failed (e.g. Safari private browsing quota). Fall back to
+        // running the upload inline in this tab — no cross-page resume, but it works.
+        console.warn('[upload-manager] IndexedDB unavailable, falling back to inline upload:', e);
+        tryResume(db, state);  // fire-and-forget; progress broadcast as usual
+        return {background: false};
+      }
+      // Background mode: don't tryResume here — it would race with the imminent
+      // navigation. The next page's init() picks it up with no lock contention.
+      return {background: true};
     },
   };
 })();
