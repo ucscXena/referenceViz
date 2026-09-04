@@ -105,9 +105,10 @@ var presignOverlay = uri => ajax({
 
 var getOverlay = path =>
 	path.startsWith('s3://') ?
-		presignOverlay(path).flatMap(({url, original_filename: originalFilename}) =>
-			fetchOverlay(url).map(ipc => ({ipc, originalFilename}))) :
-		fetchOverlay(path).map(ipc => ({ipc, originalFilename: 'Mapped cells'}));
+		presignOverlay(path).flatMap(({url, original_filename: originalFilename,
+				cell_count: overlayCount}) =>
+			fetchOverlay(url).map(ipc => ({ipc, originalFilename, overlayCount}))) :
+		fetchOverlay(path).map(ipc => ({ipc, originalFilename: 'Mapped cells', overlayCount: undefined}));
 
 function forceRedraw(deck) {
 	if (deck) {
@@ -136,7 +137,7 @@ export default el(class SinglecellView extends PureComponent {
 		);
 		this.props.overlay &&
 			getOverlay(this.props.overlay).subscribe(
-				({ipc, originalFilename}) => {
+				({ipc, originalFilename, overlayCount}) => {
 					var table = tableFromIPC(ipc);
 					var names = pluck(table.schema.fields, 'name');
 					var dicts = table.batches[0].data.children.map(f =>
@@ -149,7 +150,8 @@ export default el(class SinglecellView extends PureComponent {
 						[{var: overlayVars[0], filtered: []}] : [];
 					this.setState({overlayRadius: defaultOverlayRadius(overlay.x.length)});
 					this.props.onState(state => merge(state, {overlay, overlayFilters,
-						...(originalFilename ? {overlayTitle: originalFilename} : {})}));
+						...(originalFilename ? {overlayTitle: originalFilename} : {}),
+						...(overlayCount != null ? {overlayCount} : {})}));
 				},
 				() => this.setState({error: true}));
 		this.intervalId =  Let((lastPixelRatio = window.devicePixelRatio) =>
@@ -240,7 +242,7 @@ export default el(class SinglecellView extends PureComponent {
 			onOverlayRadius, onReload, onTileData} = this,
 			{image, state, onState, onShadow, title: titleProp} = this.props,
 			{hidden, referenceFilters = [], layer, imageState, overlay,
-				hideOverlay, overlayFilters = [], overlayTitle} = state || {},
+				hideOverlay, overlayFilters = [], overlayTitle, overlayCount} = state || {},
 			error = this.state.error,
 			unit = false,
 			{container, tooltipValue, showControls, radius, overlayRadius,
@@ -256,7 +258,7 @@ export default el(class SinglecellView extends PureComponent {
 			div({className: styles.title},
 				name ? span(count ? `${name} (${count.toLocaleString()} cells)` : name) : '',
 				overlay && overlayTitle ?
-					span(` / ${overlayTitle} (${overlay.x.length.toLocaleString()} cells)`) :
+					span(` / ${overlayTitle} (${(overlayCount != null ? overlayCount : overlay.x.length).toLocaleString()} cells)`) :
 					''),
 			span({className: styles.fps, ref: this.onFPSRef}),
 			div({className: styles.graphWrapper, ref: this.onRef},
