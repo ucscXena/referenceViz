@@ -235,7 +235,7 @@ export default el(class extends PureComponent {
 				usedVars = new Set(overlayFilters.map((g, j) => j !== i ? g.var : null)),
 				availableVars = oVars.filter(v => !usedVars.has(v) || v === f.var),
 				label = i === 0 ?
-					(overlayTitle ? `Filter mapped data by ${overlayTitle}` : 'Filter mapped data by') :
+					'Filter mapped data by' :
 					'Refine by';
 			return [
 				div({style: {display: 'flex', alignItems: 'center'}},

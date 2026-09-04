@@ -9,11 +9,7 @@
 }
 
 .title {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: flex-end;
 	margin-right: 5px;
-	gap: 1rem; /* minimum space between elements */
 	flex-grow: 0;
 	flex-shrink: 0;
 }
@@ -23,8 +19,12 @@
 	position: relative;
 	margin-right: 5px;
 	border: 1px solid black;
-	cursor: crosshair;
+	cursor: grab;
 	flex: 1;
+}
+
+.graphWrapper:active {
+	cursor: grabbing;
 }
 
 .layerSelect {
@@ -57,8 +57,7 @@
 	display: flex;
 	align-items: center;
 	position: absolute;
-	right: 0;
-	top: 28px;
+	right: 8px;
 	background-color: #FFFFFF;
 	z-index: 10;
 }
@@ -124,6 +123,7 @@
 	right: 0;
 	bottom: 0;
 	background-color: inherit;
+	cursor: pointer;
 }
 
 .open {

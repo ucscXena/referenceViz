@@ -52,12 +52,12 @@ var scale = um =>
 	div({className: styles.scale},
 		span(), span(), span(), span(`${um == null ? '-' : um.toFixed()} \u03BCm`));
 
-var tooltipValueView = (code, color, onClick) =>
-	div({className: styles.tooltip},
+var tooltipValueView = (code, color, onClick, frozen, hasScale) =>
+	div({className: styles.tooltip, style: {top: hasScale ? '28px' : '4px'}},
 		div({className: legendStyles.colorBox,
 			style: {backgroundColor: color}}),
 		code,
-		icon({onClick}, 'close')
+		frozen ? icon({onClick}, 'close') : null
 	);
 
 var labelFormat = v => v.toPrecision(2);
@@ -107,7 +107,7 @@ var getOverlay = path =>
 	path.startsWith('s3://') ?
 		presignOverlay(path).flatMap(({url, original_filename: originalFilename}) =>
 			fetchOverlay(url).map(ipc => ({ipc, originalFilename}))) :
-		fetchOverlay(path).map(ipc => ({ipc}));
+		fetchOverlay(path).map(ipc => ({ipc, originalFilename: 'Mapped cells'}));
 
 function forceRedraw(deck) {
 	if (deck) {
@@ -120,6 +120,7 @@ export default el(class SinglecellView extends PureComponent {
 	state = {
 		tooltipID: undefined,
 		tooltipValue: undefined,
+		tooltipFrozen: false,
 		scale: null,
 		showControls: true,
 		radius: 1.5,
@@ -204,10 +205,19 @@ export default el(class SinglecellView extends PureComponent {
 	findSample = memoize1((samples, id) => indexOf(samples, id, true));
 	getScale = memoize1(phenotypeScale);
 	onTooltip = i => {
-		this.setState({tooltipValue: i, tooltipID: undefined});
+		if (!this.state.tooltipFrozen) {
+			this.setState({tooltipValue: i, tooltipID: undefined});
+		}
+	};
+	onTooltipClick = i => {
+		if (this.state.tooltipFrozen) {
+			this.setState({tooltipFrozen: false, tooltipValue: i, tooltipID: undefined});
+		} else if (i !== undefined) {
+			this.setState({tooltipFrozen: true, tooltipValue: i, tooltipID: undefined});
+		}
 	};
 	onClose = () => {
-		this.setState({tooltipID: undefined, tooltipValue: undefined});
+		this.setState({tooltipID: undefined, tooltipValue: undefined, tooltipFrozen: false});
 	};
 	onControls = () => {
 		this.setState({showControls: !this.state.showControls});
@@ -230,7 +240,7 @@ export default el(class SinglecellView extends PureComponent {
 			onOverlayRadius, onReload, onTileData} = this,
 			{image, state, onState, onShadow, title: titleProp} = this.props,
 			{hidden, referenceFilters = [], layer, imageState, overlay,
-				hideOverlay, overlayFilters = []} = state || {},
+				hideOverlay, overlayFilters = [], overlayTitle} = state || {},
 			error = this.state.error,
 			unit = false,
 			{container, tooltipValue, showControls, radius, overlayRadius,
@@ -244,9 +254,10 @@ export default el(class SinglecellView extends PureComponent {
 
 		return div({className: styles.content},
 			div({className: styles.title},
-				name ? span(name) : '',
-				span({className: styles.spacer}),
-				count ? span(`${count.toLocaleString()} cells`) : ''),
+				name ? span(count ? `${name} (${count.toLocaleString()} cells)` : name) : '',
+				overlay && overlayTitle ?
+					span(` / ${overlayTitle} (${overlay.x.length.toLocaleString()} cells)`) :
+					''),
 			span({className: styles.fps, ref: this.onFPSRef}),
 			div({className: styles.graphWrapper, ref: this.onRef},
 				controlsView({state: {radiusBase: 10, radius, overlayRadius},
@@ -256,11 +267,11 @@ export default el(class SinglecellView extends PureComponent {
 					null,
 				...(unit ? [scale(this.state.scale)] : []),
 				...(tooltipValue != null ?
-					[tooltipValueView(codes[tooltipValue], tooltipColor, onClose)]
+					[tooltipValueView(codes[tooltipValue], tooltipColor, onClose, this.state.tooltipFrozen, unit)]
 					: []),
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
-					onTooltip, radius, overlayRadius, viewState, hidden, referenceFilters, image,
+					onTooltip, onTooltipClick: this.onTooltipClick, radius, overlayRadius, viewState, hidden, referenceFilters, image,
 					imageState, overlay, overlayFilters, hideOverlay, layer, container,
 					key: 'drawing'})));
 	}
