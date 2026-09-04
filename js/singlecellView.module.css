@@ -19,12 +19,12 @@
 	position: relative;
 	margin-right: 5px;
 	border: 1px solid black;
-	cursor: grab;
+	cursor: default;
 	flex: 1;
 }
 
 .graphWrapper:active {
-	cursor: grabbing;
+	cursor: default;
 }
 
 .layerSelect {
