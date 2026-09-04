@@ -294,6 +294,23 @@ TOOLS = [
         },
     },
     {
+        'name': 'list_references',
+        'description': (
+            'List all available reference atlases, including those not yet run against '
+            'this dataset. Use this when the user asks about alternative references, '
+            'whether a better-fit reference exists, or wants to compare what references '
+            'cover. Each entry includes organism, size, tissue coverage, cell types, '
+            'disease states, developmental stages, and whether it has already been run '
+            'against this dataset. '
+            'Do not claim only one reference is available without calling this tool first.'
+        ),
+        'input_schema': {
+            'type': 'object',
+            'properties': {},
+            'required': [],
+        },
+    },
+    {
         'name': 'get_marker_genes',
         'description': (
             'Look up the known marker genes for one or more cell types in a reference atlas. '
@@ -443,6 +460,45 @@ def _dispatch_tool(name, tool_input, job):
                 'available_cell_types': available,
             }
         return {'results': results}
+
+    if name == 'list_references':
+        from .models import Reference
+        metadata = _load_metadata()
+        run_ref_ids = set(
+            str(p.reference_id)
+            for p in job.projections.filter(status='complete').select_related('reference')
+        )
+        active_refs = (
+            Reference.objects
+            .filter(is_active=True)
+            .select_related('group')
+            .order_by('group__title', 'version_label')
+        )
+        results = []
+        for ref in active_refs:
+            ref_id = str(ref.id)
+            meta = metadata.get(ref_id, {})
+            entry = {
+                'name': str(ref),
+                'already_run': ref_id in run_ref_ids,
+            }
+            organism = meta.get('organism')
+            if organism:
+                entry['organism'] = ', '.join(o.get('label', '') for o in organism) if isinstance(organism, list) else str(organism)
+            if meta.get('cell_number'):
+                entry['total_cells'] = meta['cell_number']
+            if meta.get('abstract'):
+                entry['abstract'] = _strip_html(meta['abstract'])[:400]
+            if meta.get('tissue'):
+                entry['tissues'] = [t['label'] for t in meta['tissue'][:12]]
+            if meta.get('cell_type'):
+                entry['cell_types'] = [ct['label'] for ct in meta['cell_type']]
+            if meta.get('disease'):
+                entry['disease_states'] = [d['label'] for d in meta['disease']]
+            if meta.get('development_stage'):
+                entry['development_stages'] = [s['label'] for s in meta['development_stage'][:8]]
+            results.append(entry)
+        return {'references': results}
 
     logger.warning('Unknown tool called: %r', name)
     return {'error': f'Unknown tool: {name!r}'}
@@ -838,6 +894,9 @@ def _build_system_prompt(job, chunks=None):
 
     lines += [
         "",
+        "Other reference atlases may be available beyond those listed above. "
+        "Use the list_references tool before telling the user that only one reference "
+        "exists or that no better-fit reference is available.",
         "Answer questions about this mapping job, the reference datasets, cell types, "
         "and what results might mean biologically. Be concise. If asked something "
         "outside this context, note that you are specialized for brain cell mapping.",
