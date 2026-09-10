@@ -613,6 +613,8 @@ def uce_callback(request):
             if job.status not in ('running', 'error'):
                 return JsonResponse({'status': 'ignored'})
             job.status = 'complete'
+            if 'git_commit' in data:
+                job.result = {**job.result, 'uce_git_commit': data['git_commit']}
             job.save()
             pending_projections = list(job.projections.filter(status='pending'))
 
