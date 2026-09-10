@@ -52,13 +52,25 @@ var scale = um =>
 	div({className: styles.scale},
 		span(), span(), span(), span(`${um == null ? '-' : um.toFixed()} \u03BCm`));
 
-var tooltipValueView = (code, color, onClick, frozen, hasScale) =>
+var hoverTooltipView = ({label, color}, onClose, frozen, hasScale) =>
 	div({className: styles.tooltip, style: {top: hasScale ? '28px' : '4px'}},
-		div({className: legendStyles.colorBox,
-			style: {backgroundColor: color}}),
-		code,
-		frozen ? icon({onClick}, 'close') : null
+		color ? div({className: legendStyles.colorBox, style: {backgroundColor: color}}) : null,
+		Array.isArray(label)
+			? div({className: styles.tooltipLines}, ...label.map(l => div(l)))
+			: label,
+		frozen ? icon({onClick: onClose, className: styles.tooltipClose}, 'close') : null
 	);
+
+var detailPanelView = (rows, onClose) =>
+	div({className: styles.detailPanel},
+		div({className: styles.detailPanelHeader},
+			span('Cell metadata'),
+			icon({onClick: onClose, className: styles.detailPanelClose}, 'close')),
+		div({className: styles.detailPanelBody},
+			...rows.flatMap(({key, value}) => [
+				span({className: styles.detailKey, title: key}, key),
+				span({className: styles.detailValue, title: value}, value)
+			])));
 
 var labelFormat = v => v.toPrecision(2);
 var dotSlider = (labelTxt, range, value, onChange) =>
@@ -119,9 +131,9 @@ function forceRedraw(deck) {
 
 export default el(class SinglecellView extends PureComponent {
 	state = {
-		tooltipID: undefined,
-		tooltipValue: undefined,
+		hoverTooltip: null,
 		tooltipFrozen: false,
+		detailPanel: null,
 		scale: null,
 		showControls: true,
 		radius: 1.5,
@@ -206,20 +218,54 @@ export default el(class SinglecellView extends PureComponent {
 	};
 	findSample = memoize1((samples, id) => indexOf(samples, id, true));
 	getScale = memoize1(phenotypeScale);
+	_refTooltip = i => {
+		if (i == null) { return null; }
+		var {imageState, layer} = this.props.state || {};
+		var phenotype = getIn(imageState, ['phenotypes', layer]) || {};
+		var codes = (phenotype.int_to_category || []).slice(1);
+		return {label: codes[i], color: this.getScale(phenotype)(i), source: 'ref'};
+	};
+	// onTooltip and onOverlayTooltip both fire on every hover event (from different
+	// branches of tiledScatterplot.onHover), each passing undefined for the other's
+	// source. Track source so each handler only clears its own tooltip, not the other's.
 	onTooltip = i => {
-		if (!this.state.tooltipFrozen) {
-			this.setState({tooltipValue: i, tooltipID: undefined});
+		if (this.state.tooltipFrozen || this.state.detailPanel) { return; }
+		if (i == null) {
+			if (this.state.hoverTooltip?.source === 'ref') {
+				this.setState({hoverTooltip: null});
+			}
+		} else {
+			this.setState({hoverTooltip: this._refTooltip(i)});
+		}
+	};
+	onOverlayTooltip = entries => {
+		if (this.state.tooltipFrozen || this.state.detailPanel) { return; }
+		if (!entries) {
+			if (this.state.hoverTooltip?.source === 'overlay') {
+				this.setState({hoverTooltip: null});
+			}
+		} else {
+			this.setState({hoverTooltip: {
+				label: entries.map(({varName, value}) => `${varName}: ${value}`),
+				source: 'overlay'
+			}});
 		}
 	};
 	onTooltipClick = i => {
-		if (this.state.tooltipFrozen) {
-			this.setState({tooltipFrozen: false, tooltipValue: i, tooltipID: undefined});
-		} else if (i !== undefined) {
-			this.setState({tooltipFrozen: true, tooltipValue: i, tooltipID: undefined});
+		if (i !== undefined) {
+			this.setState({tooltipFrozen: true, hoverTooltip: this._refTooltip(i), detailPanel: null});
+		} else {
+			this.setState({tooltipFrozen: false, hoverTooltip: null, detailPanel: null});
 		}
 	};
 	onClose = () => {
-		this.setState({tooltipID: undefined, tooltipValue: undefined, tooltipFrozen: false});
+		this.setState({hoverTooltip: null, tooltipFrozen: false});
+	};
+	onDetailPanel = rows => {
+		this.setState({detailPanel: rows, hoverTooltip: null, tooltipFrozen: false});
+	};
+	onCloseDetail = () => {
+		this.setState({detailPanel: null});
 	};
 	onControls = () => {
 		this.setState({showControls: !this.state.showControls});
@@ -245,12 +291,9 @@ export default el(class SinglecellView extends PureComponent {
 				hideOverlay, overlayFilters = [], overlayTitle, overlayCount} = state || {},
 			error = this.state.error,
 			unit = false,
-			{container, tooltipValue, showControls, radius, overlayRadius,
-				viewState} = this.state,
+			{container, hoverTooltip, tooltipFrozen, detailPanel, showControls, radius,
+				overlayRadius, viewState} = this.state,
 			loading = !imageState,
-			phenotype = getIn(imageState, ['phenotypes', layer]) || {},
-			codes = (phenotype.int_to_category || []).slice(1),
-			tooltipColor = this.getScale(phenotype)(tooltipValue),
 			count = get(imageState, 'count'),
 			name = titleProp || get(imageState, 'reference_name');
 
@@ -268,12 +311,17 @@ export default el(class SinglecellView extends PureComponent {
 				get(state, 'showColorPicker') ? colorPicker({state, onState, layer}) :
 					null,
 				...(unit ? [scale(this.state.scale)] : []),
-				...(tooltipValue != null ?
-					[tooltipValueView(codes[tooltipValue], tooltipColor, onClose, this.state.tooltipFrozen, unit)]
+				...(hoverTooltip ?
+					[hoverTooltipView(hoverTooltip, onClose, tooltipFrozen, unit)]
+					: []),
+				...(detailPanel ?
+					[detailPanelView(detailPanel, this.onCloseDetail)]
 					: []),
 				getStatusView({loading, error, onReload, key: 'status'}),
 				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
-					onTooltip, onTooltipClick: this.onTooltipClick, radius, overlayRadius, viewState, hidden, referenceFilters, image,
+					onTooltip, onOverlayTooltip: this.onOverlayTooltip,
+					onTooltipClick: this.onTooltipClick, onDetailPanel: this.onDetailPanel,
+					radius, overlayRadius, viewState, hidden, referenceFilters, image,
 					imageState, overlay, overlayFilters, hideOverlay, layer, container,
 					key: 'drawing'})));
 	}

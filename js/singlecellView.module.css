@@ -62,7 +62,12 @@
 	z-index: 10;
 }
 
-.tooltip :nth-child(2) {
+.tooltipLines {
+	display: flex;
+	flex-direction: column;
+}
+
+.tooltip .tooltipClose {
     float: right;
     font-size: 100%;
     cursor: pointer;
@@ -136,4 +141,60 @@
 	right: 0%;
 	bottom: 100%;
 	color: #B0B0B0
+}
+
+.detailPanel {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	background-color: #FFFFFF;
+	border: 1px solid rgba(0, 0, 0, 0.2);
+	border-radius: 4px;
+	z-index: 10;
+	width: 480px;
+	max-width: calc(100% - 16px);
+	max-height: calc(100% - 16px);
+	overflow-y: auto;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.detailPanelHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 6px 8px;
+	font-weight: bold;
+	font-size: 13px;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.detailPanelClose {
+	cursor: pointer;
+	font-size: 18px !important;
+	opacity: 0.6;
+}
+
+.detailPanelClose:hover {
+	opacity: 1;
+}
+
+.detailPanelBody {
+	display: grid;
+	grid-template-columns: fit-content(35ch) 1fr;
+	gap: 2px 12px;
+	padding: 6px 10px;
+	font-size: 13px;
+}
+
+.detailKey {
+	opacity: 0.6;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+
+.detailValue {
+	min-width: 0;
+	word-break: break-word;
 }

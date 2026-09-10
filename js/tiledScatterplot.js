@@ -192,14 +192,47 @@ class TiledScatterplot extends PureComponent {
 		if (ev.index >= 0 && ev.tile) {
 			let [, , i] = ev.tile.layers[0].props.data[ev.index];
 			this.props.onTooltip(i);
+			this.props.onOverlayTooltip(undefined);
+		} else if (ev.index >= 0 && ev.layer?.id === 'scatterplot-overlay') {
+			const {overlay, overlayFilters} = this.props;
+			const activeFilters = overlay ? (overlayFilters || []) : [];
+			if (activeFilters.length > 0) {
+				const entries = activeFilters.map(f => {
+					const code = overlay[f.var]?.[ev.index];
+					const dict = overlay._dicts?.[f.var];
+					const value = dict
+						? (code < 0 ? '—' : (dict[code] ?? String(code)))
+						: String(code ?? '');
+					return {varName: f.var, value};
+				});
+				this.props.onOverlayTooltip(entries);
+			} else {
+				this.props.onOverlayTooltip(undefined);
+			}
+			this.props.onTooltip(undefined);
 		} else {
 			this.props.onTooltip(undefined);
+			this.props.onOverlayTooltip(undefined);
 		}
 	});
 	onTooltipClick = ev => {
 		if (ev.index >= 0 && ev.tile) {
 			let [, , i] = ev.tile.layers[0].props.data[ev.index];
 			this.props.onTooltipClick(i);
+		} else if (ev.index >= 0 && ev.layer?.id === 'scatterplot-overlay') {
+			var {overlay} = this.props;
+			if (overlay) {
+				var names = Object.keys(overlay).filter(k => k !== 'x' && k !== 'y' && k !== '_dicts');
+				var rows = names.map(varName => {
+					var code = overlay[varName]?.[ev.index];
+					var dict = overlay._dicts?.[varName];
+					var value = dict
+						? (code < 0 ? '—' : (dict[code] ?? String(code)))
+						: String(code ?? '');
+					return {key: varName, value};
+				});
+				this.props.onDetailPanel(rows);
+			}
 		} else {
 			this.props.onTooltipClick(undefined);
 		}
