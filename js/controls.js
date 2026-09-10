@@ -197,7 +197,7 @@ export default el(class extends PureComponent {
 				props: {onState, state}} = this,
 			{tab: value} = this.state,
 			{imageState, layer, referenceFilters = [], overlayFilters = [], overlay,
-				hideOverlay, overlayTitle} = state,
+				hideOverlay} = state,
 			layers = get(imageState, 'phenotypes', []),
 			layerSelector = layerSelect(layers, layer, onLayer),
 			oVars = overlayVariables(overlay),
