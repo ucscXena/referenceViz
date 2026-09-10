@@ -733,8 +733,29 @@ def _build_system_prompt(job, chunks=None):
         f"The user uploaded a file named '{job.original_filename}'.",
     ]
 
+    raw_cell_count = (job.result or {}).get('raw_cell_count')
     cell_count = job.cell_count()
-    if cell_count:
+    if raw_cell_count and cell_count:
+        dropped = raw_cell_count - cell_count
+        pct = round(100 * dropped / raw_cell_count, 1)
+        lines.append(
+            f"UCE quality filtering removes cells with too few detected genes, "
+            f"and genes detected in too few cells."
+        )
+        if dropped > 0:
+            lines.append(
+                f"Their dataset originally contained {int(raw_cell_count):,} cells. "
+                f"After UCE quality filtering, {int(cell_count):,} cells remain "
+                f"({pct}% of cells were filtered out). "
+                f"All mapping results and gene expression analyses are based on the "
+                f"{int(cell_count):,} filtered cells only."
+            )
+        else:
+            lines.append(
+                f"Their dataset contains {int(cell_count):,} cells. "
+                f"UCE quality filtering removed no cells."
+            )
+    elif cell_count:
         lines.append(f"Their dataset contains {int(cell_count):,} cells.")
 
     for proj in projections:
