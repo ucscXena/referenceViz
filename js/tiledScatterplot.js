@@ -219,6 +219,14 @@ class TiledScatterplot extends PureComponent {
 		if (ev.index >= 0 && ev.tile) {
 			let [, , i] = ev.tile.layers[0].props.data[ev.index];
 			this.props.onTooltipClick(i);
+			// Transform world coordinate into overlay data space so ring uses the same
+			// modelMatrix as the overlay layer and scales correctly at all zoom levels.
+			var {imageState} = this.props;
+			var {image_scalef: scale = 1, offset = [0, 0]} = imageState;
+			var adj = 1 << (imageState.levels - 1);
+			var s = scale / adj;
+			var [wx, wy] = ev.coordinate || [0, 0];
+			this.props.onSelectPoint({x: (wx - offset[0] / adj) / s, y: (wy - offset[1] / adj) / s});
 		} else if (ev.index >= 0 && ev.layer?.id === 'scatterplot-overlay') {
 			var {overlay} = this.props;
 			if (overlay) {
@@ -232,9 +240,11 @@ class TiledScatterplot extends PureComponent {
 					return {key: varName, value};
 				});
 				this.props.onDetailPanel(rows);
+				this.props.onSelectPoint({x: overlay.x[ev.index], y: overlay.y[ev.index]});
 			}
 		} else {
 			this.props.onTooltipClick(undefined);
+			this.props.onSelectPoint(null);
 		}
 	};
 	onViewState = debounce(400, this.props.onViewState);
@@ -248,7 +258,8 @@ class TiledScatterplot extends PureComponent {
 			{layer, onTileData} = props,
 			// XXX color0? Probably should be cut
 			{image, imageState, overlay, overlayFilters = [],
-				hideOverlay, radius, overlayRadius, hidden = [], referenceFilters = []} = props,
+				hideOverlay, radius, overlayRadius, hidden = [], referenceFilters = [],
+				selectedPoint} = props,
 			phenotype = getIn(imageState, ['phenotypes', layer]) || {},
 			colorfn = this.getScale(phenotype),
 			{image_scalef: scale = 1, offset = [0, 0]} = imageState,
@@ -289,7 +300,35 @@ class TiledScatterplot extends PureComponent {
 					onTileData
 				}),
 				...(overlay ? [overlayLayer({data: overlay, visible: !hideOverlay,
-					overlayRadius, modelMatrix, overlayFilters})] : [])
+					overlayRadius, modelMatrix, overlayFilters})] : []),
+			...(selectedPoint ? [
+				new ScatterplotLayer({
+					id: 'selected-ring-outer',
+					data: [selectedPoint],
+					getPosition: d => [d.x, d.y],
+					modelMatrix,
+					stroked: true,
+					filled: false,
+					getRadius: 10,
+					radiusUnits: 'pixels',
+					getLineColor: [0, 0, 0, 210],
+					lineWidthUnits: 'pixels',
+					lineWidthMinPixels: 2,
+				}),
+				new ScatterplotLayer({
+					id: 'selected-ring-inner',
+					data: [selectedPoint],
+					getPosition: d => [d.x, d.y],
+					modelMatrix,
+					stroked: true,
+					filled: false,
+					getRadius: 7,
+					radiusUnits: 'pixels',
+					getLineColor: [255, 255, 255, 255],
+					lineWidthUnits: 'pixels',
+					lineWidthMinPixels: 2,
+				}),
+			] : [])
 			],
 			views: this._views,
 			controller: true,

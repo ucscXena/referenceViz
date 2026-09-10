@@ -134,6 +134,7 @@ export default el(class SinglecellView extends PureComponent {
 		hoverTooltip: null,
 		tooltipFrozen: false,
 		detailPanel: null,
+		selectedPoint: null,
 		scale: null,
 		showControls: true,
 		radius: 1.5,
@@ -255,17 +256,20 @@ export default el(class SinglecellView extends PureComponent {
 		if (i !== undefined) {
 			this.setState({tooltipFrozen: true, hoverTooltip: this._refTooltip(i), detailPanel: null});
 		} else {
-			this.setState({tooltipFrozen: false, hoverTooltip: null, detailPanel: null});
+			this.setState({tooltipFrozen: false, hoverTooltip: null, detailPanel: null, selectedPoint: null});
 		}
 	};
 	onClose = () => {
-		this.setState({hoverTooltip: null, tooltipFrozen: false});
+		this.setState({hoverTooltip: null, tooltipFrozen: false, selectedPoint: null});
 	};
 	onDetailPanel = rows => {
 		this.setState({detailPanel: rows, hoverTooltip: null, tooltipFrozen: false});
 	};
 	onCloseDetail = () => {
-		this.setState({detailPanel: null});
+		this.setState({detailPanel: null, selectedPoint: null});
+	};
+	onSelectPoint = point => {
+		this.setState({selectedPoint: point || null});
 	};
 	onControls = () => {
 		this.setState({showControls: !this.state.showControls});
@@ -291,8 +295,8 @@ export default el(class SinglecellView extends PureComponent {
 				hideOverlay, overlayFilters = [], overlayTitle, overlayCount} = state || {},
 			error = this.state.error,
 			unit = false,
-			{container, hoverTooltip, tooltipFrozen, detailPanel, showControls, radius,
-				overlayRadius, viewState} = this.state,
+			{container, hoverTooltip, tooltipFrozen, detailPanel, selectedPoint,
+				showControls, radius, overlayRadius, viewState} = this.state,
 			loading = !imageState,
 			count = get(imageState, 'count'),
 			name = titleProp || get(imageState, 'reference_name');
@@ -321,6 +325,7 @@ export default el(class SinglecellView extends PureComponent {
 				tiledScatterplot({...handlers, onViewState, onDeck, onTileData,
 					onTooltip, onOverlayTooltip: this.onOverlayTooltip,
 					onTooltipClick: this.onTooltipClick, onDetailPanel: this.onDetailPanel,
+					onSelectPoint: this.onSelectPoint, selectedPoint,
 					radius, overlayRadius, viewState, hidden, referenceFilters, image,
 					imageState, overlay, overlayFilters, hideOverlay, layer, container,
 					key: 'drawing'})));
