@@ -2,7 +2,7 @@
 // color scale variants
 
 import * as _ from './underscore_ext.js';
-import { rgb, HSVtoRGB, RGBToHex } from './color_helper.js';
+import { rgb, RGBToHex } from './color_helper.js';
 
 // d3_category20, replace #7f7f7f gray (that aliases with our N/A gray of #808080) with dark grey #434348
 var categoryMore = [
@@ -46,17 +46,36 @@ var category = (count, custom) => {
 	return fn;
 };
 
-// Ordinal (ordered) scale: hue sweeps from blue (low) to red (high) via purple
-// at constant saturation and value. Avoids white (background) and black (highlight).
+// Viridis control points [t, r, g, b], sampled from the canonical matplotlib LUT.
+// Perceptually uniform; accessible to color-blind viewers; readable in greyscale.
+var viridisPoints = [
+	[0.000,  68,   1,  84],
+	[0.125,  65,  68, 135],
+	[0.250,  59,  82, 139],
+	[0.375,  49, 104, 137],
+	[0.500,  33, 145, 140],
+	[0.625,  53, 183, 121],
+	[0.750,  94, 201,  98],
+	[0.875, 187, 215,  51],
+	[1.000, 253, 231,  37],
+];
+
+var sampleViridis = t => {
+	var i = 0;
+	while (i < viridisPoints.length - 2 && viridisPoints[i + 1][0] <= t) { i++; }
+	var [t0, r0, g0, b0] = viridisPoints[i];
+	var [t1, r1, g1, b1] = viridisPoints[i + 1];
+	var s = (t - t0) / (t1 - t0);
+	return [Math.round(r0 + s * (r1 - r0)), Math.round(g0 + s * (g1 - g0)), Math.round(b0 + s * (b1 - b0))];
+};
+
+// Ordinal (ordered) scale: viridis from dark purple (low) to yellow (high).
 var ordinal = count => {
-	var s = 0.8, val = 0.85;
 	var rgbs = Array.from({length: count}, (_, i) => {
 		var t = count <= 1 ? 0.5 : i / (count - 1);
-		var {r, g, b} = HSVtoRGB(0.6 + t * 0.4, s, val);
-		return [r, g, b];
+		return sampleViridis(t);
 	});
 	var hexes = rgbs.map(([r, g, b]) => RGBToHex(r, g, b));
-
 	var fn = i => hexes[i] || hexes[0];
 	fn.rgb = i => rgbs[i] || rgbs[0];
 	return fn;
