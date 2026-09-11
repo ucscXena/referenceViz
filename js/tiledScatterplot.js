@@ -183,7 +183,9 @@ var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters =
 	});
 
 // Tile PNG cache shared across component instances: URL → Promise<upng.Image>
-// Coalesces concurrent fetches and reuses parsed results across clicks.
+// LRU eviction via Map insertion order: hit → delete+reinsert (moves to end);
+// miss → evict first entry when full, then insert.
+const TILE_CACHE_MAX = 500;
 const tileCache = new Map();
 
 class TiledScatterplot extends PureComponent {
@@ -224,15 +226,21 @@ class TiledScatterplot extends PureComponent {
 		var {image, imageState: {fileformat = 'png'}} = this.props;
 		var {x, y, z} = tileIndex;
 		var url = `${image}/p${phenotypeIndex}-${z}-${y}-${x}.${fileformat}`;
-		if (!tileCache.has(url)) {
-			tileCache.set(url,
-				fetch(url, {credentials: 'include', headers: {'X-Redirect-To': location.origin}})
-					.then(r => r.blob())
-					.then(b => b.arrayBuffer())
-					.then(b => upng.decode(b))
-			);
+		if (tileCache.has(url)) {
+			var hit = tileCache.get(url);
+			tileCache.delete(url);
+			tileCache.set(url, hit); // move to end (most recently used)
+			return hit;
 		}
-		return tileCache.get(url);
+		if (tileCache.size >= TILE_CACHE_MAX) {
+			tileCache.delete(tileCache.keys().next().value); // evict LRU
+		}
+		var promise = fetch(url, {credentials: 'include', headers: {'X-Redirect-To': location.origin}})
+			.then(r => r.blob())
+			.then(b => b.arrayBuffer())
+			.then(b => upng.decode(b));
+		tileCache.set(url, promise);
+		return promise;
 	};
 	_fetchAllPhenotypes = async (px, py, tileIndex) => {
 		var {imageState: {phenotypes = []}} = this.props;
