@@ -182,11 +182,16 @@ var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters =
 		extensions: [new DataFilterExtension({filterSize: 3})],
 	});
 
+// Tile PNG cache shared across component instances: URL → Promise<upng.Image>
+// Coalesces concurrent fetches and reuses parsed results across clicks.
+const tileCache = new Map();
+
 class TiledScatterplot extends PureComponent {
 	static displayName = 'TiledScatterplot';
 	getScale = memoize1(phenotypeScale);
 	_initialViewState = null;
 	_views = new OrthographicView({far: -1, near: 1});
+	_pendingClickId = 0;
 
 	onHover = debounce(60, ev => {
 		if (ev.index >= 0 && ev.tile) {
@@ -215,23 +220,51 @@ class TiledScatterplot extends PureComponent {
 			this.props.onOverlayTooltip(undefined);
 		}
 	});
-	onTooltipClick = ev => {
+	_fetchTile = (phenotypeIndex, tileIndex) => {
+		var {image, imageState: {fileformat = 'png'}} = this.props;
+		var {x, y, z} = tileIndex;
+		var url = `${image}/p${phenotypeIndex}-${z}-${y}-${x}.${fileformat}`;
+		if (!tileCache.has(url)) {
+			tileCache.set(url,
+				fetch(url, {credentials: 'include', headers: {'X-Redirect-To': location.origin}})
+					.then(r => r.blob())
+					.then(b => b.arrayBuffer())
+					.then(b => upng.decode(b))
+			);
+		}
+		return tileCache.get(url);
+	};
+	_fetchAllPhenotypes = async (px, py, tileIndex) => {
+		var {imageState: {phenotypes = []}} = this.props;
+		return Promise.all(phenotypes.map(async (phenotype, i) => {
+			var img = await this._fetchTile(i, tileIndex);
+			var fn = img.depth > 8 ? get16Value(img) : get8Value(img);
+			var pixelValue = fn(px, py);
+			var cats = phenotype.int_to_category || [];
+			var value = pixelValue === 0 ? '—' : (cats[pixelValue] ?? String(pixelValue));
+			return {key: phenotype.name, value};
+		}));
+	};
+	onTooltipClick = async ev => {
 		if (ev.index >= 0 && ev.tile) {
-			let [, , i] = ev.tile.layers[0].props.data[ev.index];
-			this.props.onTooltipClick(i);
-			// Transform world coordinate into overlay data space so ring uses the same
-			// modelMatrix as the overlay layer and scales correctly at all zoom levels.
+			var clickId = ++this._pendingClickId;
+			let [px, py, colorCode] = ev.tile.layers[0].props.data[ev.index];
+			this.props.onTooltipClick(colorCode); // freeze hover tooltip while loading
 			var {imageState} = this.props;
 			var {image_scalef: scale = 1, offset = [0, 0]} = imageState;
 			var adj = 1 << (imageState.levels - 1);
 			var s = scale / adj;
 			var [wx, wy] = ev.coordinate || [0, 0];
 			this.props.onSelectPoint({x: (wx - offset[0] / adj) / s, y: (wy - offset[1] / adj) / s});
+			var rows = await this._fetchAllPhenotypes(px, py, ev.tile.index);
+			if (clickId !== this._pendingClickId) { return; } // superseded by newer click
+			this.props.onDetailPanel(rows);
 		} else if (ev.index >= 0 && ev.layer?.id === 'scatterplot-overlay') {
+			++this._pendingClickId;
 			var {overlay} = this.props;
 			if (overlay) {
 				var names = Object.keys(overlay).filter(k => k !== 'x' && k !== 'y' && k !== '_dicts');
-				var rows = names.map(varName => {
+				var overlayRows = names.map(varName => {
 					var code = overlay[varName]?.[ev.index];
 					var dict = overlay._dicts?.[varName];
 					var value = dict
@@ -239,10 +272,11 @@ class TiledScatterplot extends PureComponent {
 						: String(code ?? '');
 					return {key: varName, value};
 				});
-				this.props.onDetailPanel(rows);
+				this.props.onDetailPanel(overlayRows);
 				this.props.onSelectPoint({x: overlay.x[ev.index], y: overlay.y[ev.index]});
 			}
 		} else {
+			++this._pendingClickId;
 			this.props.onTooltipClick(undefined);
 			this.props.onSelectPoint(null);
 		}
