@@ -16,8 +16,9 @@ var lengthStyle = (width, length) =>
 	({fontFamily: 'monospace', marginLeft: pad(width, length), marginRight: '1ch'});
 
 function codedLegend({column: {filtered = [], codes, lengths, codesInView}, onClick, isOrdered, showColors, refCodes}) {
-	var data = isOrdered ? codesInView.slice().sort((a, b) => a - b) : sortBy(codesInView, c => lengths[c]),
-		width = Math.max(...codesInView.map(c => lengths[c])).toString().length,
+	var nullCount = lengths[-1] || 0,
+		data = isOrdered ? codesInView.slice().sort((a, b) => a - b) : sortBy(codesInView, c => lengths[c]),
+		width = Math.max(nullCount, ...codesInView.map(c => lengths[c])).toString().length,
 		count = codes.length,
 		colors = showColors ? data.map(d => isOrdered
 			? Let((t = count <= 1 ? 0.5 : d / (count - 1)) =>
@@ -28,10 +29,14 @@ function codedLegend({column: {filtered = [], codes, lengths, codesInView}, onCl
 			lengths[d].toString()), codes[d])),
 		titles = data.map(d => codes[d]),
 		f = new Set(filtered),
-		checked = data.map(d => !f.has(d));
+		checked = data.map(d => !f.has(d)),
+		noDataLabel = nullCount > 0
+			? span(span({style: lengthStyle(width, nullCount)},
+				nullCount.toString()), ' (no data)')
+			: null;
 
 	return legend({colors, checked, codes: data, labels, titles, onClick, max: Infinity,
-		inline: false});
+		inline: false, noDataLabel});
 }
 
 var firstMatch = (el, selector) =>
@@ -58,13 +63,15 @@ var onCode = (state, onState, filterIndex, codes) => ev => {
 var groupLengths = memoize1(data => mapObject(groupBy(data, x => x), v => v.length));
 
 // Count cells per code for filter at filterIndex, considering only cells that
-// pass all other active filters.
+// pass all other active filters. Null codes (-1) in other filters are always
+// hidden (matching the visualization), and null cells in this feature are
+// counted separately under key -1.
 var filteredGroupLengths = memoize1((overlay, overlayFilters, filterIndex) => {
 	var {var: varName} = overlayFilters[filterIndex],
 		otherFilters = overlayFilters.filter((_, j) => j !== filterIndex),
-		hiddenSets = otherFilters.map(f => new Set(f.filtered)),
+		hiddenSets = otherFilters.map(f => new Set([-1, ...f.filtered])),
 		codes = overlay._dicts[varName],
-		counts = {};
+		counts = {'-1': 0};
 	for (var c = 0; c < codes.length; c++) {
 		counts[c] = 0;
 	}

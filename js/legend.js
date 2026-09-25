@@ -23,7 +23,7 @@ class Legend extends PureComponent {
 	render() {
 		var {labels, colors, titles, max, labelheader, footnotes, addBreakend = 0,
 				codes, checked, highlighted, addNullNotation = 0, inline, onClick,
-				percentages} = this.props,
+				percentages, noDataLabel} = this.props,
 			style = classNames(onClick && compStyles.clickable,
 				inline && compStyles.inline),
 			ellipsis = labels.length > max,
@@ -64,7 +64,12 @@ class Legend extends PureComponent {
 							labelheader) : null,
 						items,
 						addBreakend ? breakend : null,
-						addNullNotation ? nullNotation : null) :
+						addNullNotation ? nullNotation : null,
+						noDataLabel ? div({className: compStyles.item,
+								style: {opacity: 0.5, pointerEvents: 'none'}},
+							div({className: compStyles.colorBox}),
+							typography({component: 'label', className: compStyles.label,
+								variant: 'caption'}, noDataLabel)) : null) :
 					null,
 				ellipsis ? div('...') : null,
 				footnotes ? footnotesItems : null));
