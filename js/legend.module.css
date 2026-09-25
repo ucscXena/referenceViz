@@ -11,7 +11,9 @@
 }
 
 .item {
-	overflow: auto
+	display: flex;
+	align-items: flex-start;
+	overflow: hidden;
 }
 
 .clickable .item, .clickable .item label {
@@ -19,27 +21,26 @@
 }
 
 .inline .item {
-	display: inline-block;
+	display: inline-flex;
 }
 
 .percentage {
-	float: left;
+	flex-shrink: 0;
 	font-weight: normal;
 	padding: 4px 2px 4px 0;
 	white-space: nowrap;
 }
 
 .label {
-	float: left;
+	flex: 1;
+	min-width: 0;
 	font-weight: normal; /* BS override */
-	overflow: hidden;
 	padding: 4px 4px 4px 2px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow-wrap: break-word;
 }
 
 .colorBox {
-	float: left;
+	flex-shrink: 0;
 	margin: 4px;
 	height: 15px;
 	width: 15px;
