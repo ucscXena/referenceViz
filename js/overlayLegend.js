@@ -5,24 +5,31 @@ import legendStyles from './legend.module.css';
 var {item} = legendStyles;
 import {span} from './react-hyper';
 
-import {conj, contains, getIn, groupBy, mapObject, memoize1, merge, range,
+import {Let, conj, contains, getIn, groupBy, mapObject, memoize1, merge, range,
     sortBy, without} from './underscore_ext.js';
 import * as gaEvents from './gaEvents';
+import {categoryMore, sampleViridis} from './colorScales';
+import {RGBToHex} from './color_helper.js';
 
 var pad = (width, x) => `${width - x.toString().length}ch`;
 var lengthStyle = (width, length) =>
 	({fontFamily: 'monospace', marginLeft: pad(width, length), marginRight: '1ch'});
 
-function codedLegend({column: {filtered = [], codes, lengths, codesInView}, onClick}) {
-	var data = sortBy(codesInView, c => lengths[c]),
-		width = lengths[data[data.length - 1]].toString().length,
+function codedLegend({column: {filtered = [], codes, lengths, codesInView}, onClick, isOrdered, showColors}) {
+	var data = isOrdered ? codesInView.slice().sort((a, b) => a - b) : sortBy(codesInView, c => lengths[c]),
+		width = Math.max(...codesInView.map(c => lengths[c])).toString().length,
+		count = codes.length,
+		colors = showColors ? data.map(d => isOrdered
+			? Let((t = count <= 1 ? 0.5 : d / (count - 1)) =>
+				RGBToHex(...sampleViridis(t)))
+			: categoryMore[d % categoryMore.length]) : undefined,
 		labels = data.map(d => span(span({style: lengthStyle(width, lengths[d])},
 			lengths[d].toString()), codes[d])),
 		titles = data.map(d => codes[d]),
 		f = new Set(filtered),
 		checked = data.map(d => !f.has(d));
 
-	return legend({checked, codes: data, labels, titles, onClick, max: Infinity,
+	return legend({colors, checked, codes: data, labels, titles, onClick, max: Infinity,
 		inline: false});
 }
 
@@ -76,12 +83,15 @@ export default function(state, onState, filterIndex = 0) {
 	var {overlay, overlayFilters} = state;
 	var {var: overlayVar, filtered: overlayFiltered} = overlayFilters[filterIndex];
 	var codes = overlay._dicts[overlayVar],
+		isOrdered = overlay._ordered?.[overlayVar],
 		lengths = overlayFilters.length > 1 ?
 			filteredGroupLengths(overlay, overlayFilters, filterIndex) :
 			groupLengths(overlay[overlayVar]);
 
 	return codedLegend({
 			onClick: onCode(state, onState, filterIndex, codes),
+			isOrdered,
+			showColors: filterIndex === 0,
 			column: {
 				codes,
 				lengths,

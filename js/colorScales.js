@@ -102,5 +102,6 @@ export {
 	colorScale,
 	phenotypeScale,
 	categoryMore,
-	categoryMoreRgb
+	categoryMoreRgb,
+	sampleViridis
 };

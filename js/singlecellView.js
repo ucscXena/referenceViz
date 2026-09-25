@@ -155,9 +155,10 @@ export default el(class SinglecellView extends PureComponent {
 					var names = pluck(table.schema.fields, 'name');
 					var dicts = table.batches[0].data.children.map(f =>
 						f.dictionary && f.dictionary.toArray());
+					var ordered = table.schema.fields.map(f => !!f.type?.isOrdered);
 					var data = pluck(table.batches[0].data.children, 'values');
-					var overlay = assoc(object(names, data), '_dicts',
-						object(names, dicts));
+					var overlay = assoc(assoc(object(names, data), '_dicts',
+						object(names, dicts)), '_ordered', object(names, ordered));
 					var overlayVars = without(names, 'x', 'y');
 					var overlayFilters = overlayVars.length ?
 						[{var: overlayVars[0], filtered: []}] : [];
@@ -248,6 +249,7 @@ export default el(class SinglecellView extends PureComponent {
 		} else {
 			this.setState({hoverTooltip: {
 				label: entries.map(({varName, value}) => `${varName}: ${value}`),
+				color: entries[0]?.color,
 				source: 'overlay'
 			}});
 		}

@@ -11,7 +11,8 @@ import {debounce} from './rx';
 import {get, getIn, Let, memoize1} from './underscore_ext.js';
 import '@luma.gl/debug';
 import upng from 'upng-js';
-import {phenotypeScale} from './colorScales';
+import {phenotypeScale, categoryMore, categoryMoreRgb, sampleViridis} from './colorScales';
+import {RGBToHex} from './color_helper.js';
 
 var deckGL = el(DeckGL);
 
@@ -156,7 +157,7 @@ var initialZoom = props => {
 
 var currentScale = (levels, zoom, scale) => Math.pow(2, levels - zoom - 1) / scale;
 
-var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters = []}) =>
+var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters = [], overlayColorVar}) =>
 	new ScatterplotLayer({
 		id: 'scatterplot-overlay',
 		data: {...data, length: data.x.length},
@@ -169,10 +170,25 @@ var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters =
 		radiusUnits: 'pixels',
 		getRadius: overlayRadius,
 		radiusMinPixels: 0.5,
-		getFillColor: [0, 0, 0],
+		stroked: true,
+		getLineColor: [0, 0, 0, 200],
+		lineWidthUnits: 'pixels',
+		lineWidthMinPixels: 1,
+		getFillColor: overlayColorVar
+			? Let((isOrdered = data._ordered?.[overlayColorVar],
+				count = data._dicts?.[overlayColorVar]?.length ?? 1) =>
+				(_, {index, data: d}) => {
+					var code = d[overlayColorVar]?.[index];
+					if (code == null || code < 0) { return [180, 180, 180]; }
+					return isOrdered
+						? sampleViridis(count <= 1 ? 0.5 : code / (count - 1))
+						: categoryMoreRgb[code % categoryMoreRgb.length];
+				})
+			: [0, 0, 0],
 		updateTriggers: {
 			getRadius: [overlayRadius],
 			getFilterValue: [overlayFilters],
+			getFillColor: [overlayColorVar],
 		},
 		filterRange: [[1, 1], [1, 1], [1, 1]],
 		filterEnabled: overlayFilters.length > 0,
@@ -204,12 +220,20 @@ class TiledScatterplot extends PureComponent {
 			const {overlay, overlayFilters} = this.props;
 			const activeFilters = overlay ? (overlayFilters || []) : [];
 			if (activeFilters.length > 0) {
-				const entries = activeFilters.map(f => {
+				const entries = activeFilters.map((f, fi) => {
 					const code = overlay[f.var]?.[ev.index];
 					const dict = overlay._dicts?.[f.var];
 					const value = dict
 						? (code < 0 ? '—' : (dict[code] ?? String(code)))
 						: String(code ?? '');
+					if (fi === 0 && code != null && code >= 0) {
+						const isOrdered = overlay._ordered?.[f.var];
+						const count = dict?.length ?? 1;
+						const color = isOrdered
+							? RGBToHex(...sampleViridis(count <= 1 ? 0.5 : code / (count - 1)))
+							: categoryMore[code % categoryMore.length];
+						return {varName: f.var, value, color};
+					}
 					return {varName: f.var, value};
 				});
 				this.props.onOverlayTooltip(entries);
@@ -342,7 +366,8 @@ class TiledScatterplot extends PureComponent {
 					onTileData
 				}),
 				...(overlay ? [overlayLayer({data: overlay, visible: !hideOverlay,
-					overlayRadius, modelMatrix, overlayFilters})] : []),
+					overlayRadius, modelMatrix, overlayFilters,
+					overlayColorVar: overlayFilters[0]?.var})] : []),
 			...(selectedPoint ? [
 				new ScatterplotLayer({
 					id: 'selected-ring-outer',
