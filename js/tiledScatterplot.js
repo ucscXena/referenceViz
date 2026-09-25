@@ -11,7 +11,7 @@ import {debounce} from './rx';
 import {get, getIn, Let, memoize1} from './underscore_ext.js';
 import '@luma.gl/debug';
 import upng from 'upng-js';
-import {phenotypeScale, categoryMore, categoryMoreRgb, sampleViridis} from './colorScales';
+import {phenotypeScale, categoryMore, categoryMoreRgb, sampleViridis, matchedRefCodes} from './colorScales';
 import {RGBToHex} from './color_helper.js';
 
 var deckGL = el(DeckGL);
@@ -157,7 +157,7 @@ var initialZoom = props => {
 
 var currentScale = (levels, zoom, scale) => Math.pow(2, levels - zoom - 1) / scale;
 
-var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters = [], overlayColorVar}) =>
+var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters = [], overlayColorVar, imageState}) =>
 	new ScatterplotLayer({
 		id: 'scatterplot-overlay',
 		data: {...data, length: data.x.length},
@@ -176,13 +176,14 @@ var overlayLayer = ({data, modelMatrix, overlayRadius, visible, overlayFilters =
 		lineWidthMinPixels: 1,
 		getFillColor: overlayColorVar
 			? Let((isOrdered = data._ordered?.[overlayColorVar],
-				count = data._dicts?.[overlayColorVar]?.length ?? 1) =>
+				count = data._dicts?.[overlayColorVar]?.length ?? 1,
+				refCodes = !isOrdered ? matchedRefCodes(overlayColorVar, data, imageState) : null) =>
 				(_, {index, data: d}) => {
 					var code = d[overlayColorVar]?.[index];
 					if (code == null || code < 0) { return [180, 180, 180]; }
-					return isOrdered
-						? sampleViridis(count <= 1 ? 0.5 : code / (count - 1))
-						: categoryMoreRgb[code % categoryMoreRgb.length];
+					if (isOrdered) { return sampleViridis(count <= 1 ? 0.5 : code / (count - 1)); }
+					var paletteCode = refCodes?.[code] ?? code;
+					return categoryMoreRgb[paletteCode % categoryMoreRgb.length];
 				})
 			: [0, 0, 0],
 		updateTriggers: {
@@ -229,9 +230,14 @@ class TiledScatterplot extends PureComponent {
 					if (fi === 0 && code != null && code >= 0) {
 						const isOrdered = overlay._ordered?.[f.var];
 						const count = dict?.length ?? 1;
-						const color = isOrdered
-							? RGBToHex(...sampleViridis(count <= 1 ? 0.5 : code / (count - 1)))
-							: categoryMore[code % categoryMore.length];
+						let color;
+						if (isOrdered) {
+							color = RGBToHex(...sampleViridis(count <= 1 ? 0.5 : code / (count - 1)));
+						} else {
+							const rCodes = matchedRefCodes(f.var, overlay, this.props.imageState);
+							const paletteCode = rCodes?.[code] ?? code;
+							color = categoryMore[paletteCode % categoryMore.length];
+						}
 						return {varName: f.var, value, color};
 					}
 					return {varName: f.var, value};
@@ -295,7 +301,7 @@ class TiledScatterplot extends PureComponent {
 			++this._pendingClickId;
 			var {overlay} = this.props;
 			if (overlay) {
-				var names = Object.keys(overlay).filter(k => k !== 'x' && k !== 'y' && k !== '_dicts');
+				var names = Object.keys(overlay).filter(k => k !== 'x' && k !== 'y' && k !== '_dicts' && k !== '_ordered');
 				var overlayRows = names.map(varName => {
 					var code = overlay[varName]?.[ev.index];
 					var dict = overlay._dicts?.[varName];
@@ -366,7 +372,7 @@ class TiledScatterplot extends PureComponent {
 					onTileData
 				}),
 				...(overlay ? [overlayLayer({data: overlay, visible: !hideOverlay,
-					overlayRadius, modelMatrix, overlayFilters,
+					overlayRadius, modelMatrix, overlayFilters, imageState,
 					overlayColorVar: overlayFilters[0]?.var})] : []),
 			...(selectedPoint ? [
 				new ScatterplotLayer({

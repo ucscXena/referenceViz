@@ -68,7 +68,7 @@ var overlayButton = (onClick, checked) =>
 		typography({component: 'label', className: legendStyles.label},
 			'Mapped data'));
 
-var overlayVariables = overlay => keys(omit(overlay, 'x', 'y', '_dicts'));
+var overlayVariables = overlay => keys(omit(overlay, 'x', 'y', '_dicts', '_ordered'));
 
 
 export default el(class extends PureComponent {

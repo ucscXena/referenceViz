@@ -98,10 +98,26 @@ var phenotypeScale = phenotype =>
 	colorScale([phenotype.type || 'category',
 	            (phenotype.int_to_category || []).length - 1]);
 
+// For overlay features named prediction_by_<id>_top<n>, returns an array indexed
+// by overlay code whose values are the matching reference palette codes (or null
+// when the category name isn't in the reference). Returns null if the feature
+// name doesn't match the pattern or no corresponding reference phenotype is found.
+var matchedRefCodes = (overlayVar, overlay, imageState) => {
+	var m = overlayVar?.match(/^prediction_by_(.+)_top\d+$/);
+	if (!m) { return null; }
+	var phenotypes = imageState?.phenotypes || [];
+	var refPhenotype = phenotypes.find(p => p.name === m[1]);
+	if (!refPhenotype) { return null; }
+	var refNameToCode = new Map((refPhenotype.int_to_category || []).map((name, i) => [name, i]));
+	var overlayDict = overlay._dicts?.[overlayVar] || [];
+	return overlayDict.map(name => refNameToCode.has(name) ? refNameToCode.get(name) - 1 : null);
+};
+
 export {
 	colorScale,
 	phenotypeScale,
 	categoryMore,
 	categoryMoreRgb,
-	sampleViridis
+	sampleViridis,
+	matchedRefCodes
 };
