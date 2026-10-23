@@ -12,8 +12,8 @@ from django_rq import job
 from .aws import boto_client, delete_s3_key, delete_s3_uri, delete_s3_prefix, notify_staff
 from .batch import (check_batch_job, check_batch_jobs, submit_batch_job,
                     submit_uce_batch_job, submit_preprocess_batch_job,
-                    submit_shard_batch_job, submit_merge_batch_job,
-                    _ecr_image_digest)
+                    submit_shard_batch_job, submit_uce_brain_shard_batch_job,
+                    submit_merge_batch_job, _ecr_image_digest)
 from .models import Job, Projection
 
 # 60 checks × 5 min = 300 min max wait for UCE
@@ -32,6 +32,7 @@ def run_analysis(job_id, mixed_precision='bf16'):
     """
     RQ task: submit UCE embedding job to Batch and exit immediately.
     Routes to the sharding pipeline when USE_SHARDED_PIPELINE is True.
+    Within the sharding pipeline, the GPU step is determined by uce_model.pipeline.
     A follow-up task polls for completion.
     """
     if getattr(settings, 'USE_SHARDED_PIPELINE', False):
@@ -109,10 +110,14 @@ def run_sharded_analysis(job_id, mixed_precision='bf16'):
             job_name=f'uce-pre-{str(job_id)[:8]}',
         )
         job_instance.batch_job_id = preprocess_job_id
+        pipeline = job_instance.uce_model.pipeline
+        image_repo = ('uce-brain-pipeline'
+                      if pipeline == job_instance.uce_model.PIPELINE_UCE_BRAIN
+                      else 'uce-pipeline')  # PIPELINE_UCE uses the original uce-pipeline image
         job_instance.result = {
             'sharded':             True,
             'uce_s3_uri':          uce_s3_uri,
-            'uce_image_digest':    _ecr_image_digest('uce-pipeline'),
+            'uce_image_digest':    _ecr_image_digest(image_repo),
             'preprocess_batch_job_id': preprocess_job_id,
             'output_s3_prefix':    output_s3_prefix,
             'shard_output_prefix': shard_out_prefix,
@@ -193,17 +198,27 @@ def _submit_shards(job_id):
     shard_out_prefix = result['shard_output_prefix']
     mixed_precision  = result.get('mixed_precision', 'bf16')
 
+    pipeline = job_instance.uce_model.pipeline
     shard_batch_job_ids = []
     for i, shard_uri in enumerate(shard_s3_uris):
         shard_output_uri = f"{shard_out_prefix}/shard_{i:03d}_uce_adata.h5ad"
-        batch_job_id = submit_shard_batch_job(
-            input_s3_uri=shard_uri,
-            output_s3_uri=shard_output_uri,
-            model_s3=job_instance.uce_model.model_url,
-            species=species,
-            mixed_precision=mixed_precision,
-            job_name=f'uce-shard-{str(job_id)[:8]}-{i:03d}',
-        )
+        if pipeline == job_instance.uce_model.PIPELINE_UCE_BRAIN:  # 'uce-brain'
+            batch_job_id = submit_uce_brain_shard_batch_job(
+                input_s3_uri=shard_uri,
+                output_s3_uri=shard_output_uri,
+                model_s3=job_instance.uce_model.model_url,
+                species=species,
+                job_name=f'uce-brain-{str(job_id)[:8]}-{i:03d}',
+            )
+        else:
+            batch_job_id = submit_shard_batch_job(
+                input_s3_uri=shard_uri,
+                output_s3_uri=shard_output_uri,
+                model_s3=job_instance.uce_model.model_url,
+                species=species,
+                mixed_precision=mixed_precision,
+                job_name=f'uce-shard-{str(job_id)[:8]}-{i:03d}',
+            )
         shard_batch_job_ids.append(batch_job_id)
 
     result.update({

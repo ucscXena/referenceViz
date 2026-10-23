@@ -123,6 +123,23 @@ def submit_shard_batch_job(input_s3_uri, output_s3_uri, model_s3,
     return response['jobId']
 
 
+def submit_uce_brain_shard_batch_job(input_s3_uri, output_s3_uri, model_s3,
+                                    species, job_name='uce-brain-shard'):
+    batch = boto_client('batch')
+    response = batch.submit_job(
+        jobName=job_name,
+        jobQueue=settings.UCE_BRAIN_GPU_QUEUE,
+        jobDefinition=settings.UCE_BRAIN_SHARD_JOB_DEFINITION,
+        parameters={
+            'input_s3':  input_s3_uri,
+            'output_s3': output_s3_uri,
+            'model_s3':  model_s3,
+            'species':   species,
+        },
+    )
+    return response['jobId']
+
+
 def submit_merge_batch_job(manifest_s3, shard_output_prefix, output_s3,
                            callback_url='none', job_name='uce-sharding-merge'):
     batch = boto_client('batch')

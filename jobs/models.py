@@ -8,8 +8,18 @@ from pgvector.django import VectorField
 
 class UCEModel(models.Model):
     """A UCE embedding model version. Admin-managed; one row should have is_default=True."""
+
+    PIPELINE_UCE       = 'uce'
+    PIPELINE_UCE_BRAIN = 'uce-brain'
+    PIPELINE_CHOICES = [
+        (PIPELINE_UCE,       'UCE'),
+        (PIPELINE_UCE_BRAIN, 'UCE Brain'),
+    ]
+
     name = models.CharField(max_length=100, unique=True)
     model_url = models.CharField(max_length=500)  # passed as model_s3 to Batch
+    pipeline = models.CharField(max_length=20, choices=PIPELINE_CHOICES,
+                                default=PIPELINE_UCE)
     is_default = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
