@@ -527,7 +527,8 @@ document.addEventListener('click', e => {
     .then(r => r.json())
     .then(d => {
       if (d.status === 'queued') {
-        btn.closest('tr')?.querySelector('.uce-status-cell')?.querySelectorAll('.btn-retry-uce').forEach(b => b.remove());
+        const uceCell = btn.closest('tr')?.querySelector('.uce-status-cell');
+        if (uceCell) uceCell.innerHTML = '<span class="status-pending">Pending</span>';
       } else {
         btn.textContent = 'Retry';
         btn.disabled = false;
