@@ -80,9 +80,6 @@ class Job(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='jobs')
-    uce_model = models.ForeignKey(UCEModel, null=True, on_delete=models.PROTECT,
-                                  related_name='jobs')
-    batch_job_id = models.CharField(max_length=255, blank=True)
     original_filename = models.CharField(max_length=255, blank=True)
     s3_input_key = models.CharField(max_length=500, blank=True)
     s3_output_key = models.CharField(max_length=500, blank=True)
@@ -103,8 +100,58 @@ class Job(models.Model):
     def short_uploaded_file(self):
         return self.original_filename or 'unknown'
 
+    def sync_status(self):
+        statuses = set(self.embeddings.values_list('status', flat=True))
+        if not statuses:
+            return
+        if 'complete' in statuses:
+            new = 'complete'
+        elif 'running' in statuses:
+            new = 'running'
+        elif 'pending' in statuses:
+            new = 'pending'
+        else:
+            new = 'error'
+        if self.status != new:
+            self.status = new
+            self.save(update_fields=['status'])
+
     def uce_s3_uri(self):
-        """UCE embedding URI — supports old ('s3_uri') and new ('uce_s3_uri') key names."""
+        """UCE embedding URI from the most relevant embedding."""
+        emb = self.embeddings.filter(status='complete').first()
+        if emb is None:
+            emb = self.embeddings.first()
+        return emb.uce_s3_uri() if emb else None
+
+    def cell_count(self):
+        emb = self.embeddings.filter(status='complete').first()
+        return emb.cell_count() if emb else None
+
+
+class UCEEmbedding(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('running', 'Running'),
+        ('complete', 'Complete'),
+        ('error', 'Error'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='embeddings')
+    uce_model = models.ForeignKey(UCEModel, on_delete=models.PROTECT, related_name='embeddings')
+    batch_job_id = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    result = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('job', 'uce_model')]
+
+    def __str__(self):
+        return f'UCEEmbedding {str(self.id)[:8]} for Job {str(self.job_id)[:8]} ({self.status})'
+
+    def uce_s3_uri(self):
         if self.result:
             return self.result.get('uce_s3_uri') or self.result.get('s3_uri')
         return None
@@ -155,6 +202,8 @@ class Projection(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='projections')
     reference = models.ForeignKey(Reference, on_delete=models.CASCADE, related_name='projections')
+    embedding = models.ForeignKey('UCEEmbedding', null=True, blank=True,
+                                  on_delete=models.SET_NULL, related_name='projections')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     public = models.BooleanField(default=False)
     batch_job_id = models.CharField(max_length=255, blank=True)

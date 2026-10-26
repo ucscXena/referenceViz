@@ -512,9 +512,10 @@ def _gene_expression_uris(job, reference_name):
     For non-sharded jobs the UCE output contains the filtered expression matrix.
     Either way the result is aligned with the arrow file (post-filter cell set).
     """
-    result = job.result or {}
-    if result.get('sharded'):
-        h5ad_uri = result.get('filtered_expression_s3_uri')
+    emb = job.embeddings.filter(status='complete').first()
+    emb_result = (emb.result or {}) if emb else {}
+    if emb_result.get('sharded'):
+        h5ad_uri = emb_result.get('filtered_expression_s3_uri')
         if not h5ad_uri:
             raise ValueError('Filtered expression file not available for this job')
     else:
@@ -733,8 +734,9 @@ def _build_system_prompt(job, chunks=None):
         f"The user uploaded a file named '{job.original_filename}'.",
     ]
 
-    raw_cell_count = (job.result or {}).get('raw_cell_count')
-    cell_count = job.cell_count()
+    emb = job.embeddings.filter(status='complete').first()
+    raw_cell_count = (emb.result or {}).get('raw_cell_count') if emb else None
+    cell_count = emb.cell_count() if emb else None
     if raw_cell_count and cell_count:
         dropped = raw_cell_count - cell_count
         pct = round(100 * dropped / raw_cell_count, 1)

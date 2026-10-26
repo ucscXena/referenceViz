@@ -20,7 +20,7 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 
 from .aws import boto_client, delete_s3_key, delete_s3_uri, delete_s3_prefix
-from .models import Job, Projection, Reference, ReferenceGroup, ShareToken, UCEModel, UserProfile
+from .models import Job, Projection, Reference, ReferenceGroup, ShareToken, UCEEmbedding, UCEModel, UserProfile
 from .tasks import run_analysis, _submit_projection
 
 logger = logging.getLogger(__name__)
@@ -281,15 +281,26 @@ def multipart_complete(request):
     if ref_id:
         reference = get_object_or_404(
             Reference.objects.select_related('uce_model'), pk=ref_id)
-        Projection.objects.get_or_create(job=job, reference=reference)
-        job.uce_model = reference.uce_model
+        embedding, _ = UCEEmbedding.objects.get_or_create(
+            job=job, uce_model=reference.uce_model,
+            defaults={'status': 'pending'},
+        )
+        proj, _ = Projection.objects.get_or_create(job=job, reference=reference,
+                                                    defaults={'embedding': embedding})
+        if not proj.embedding_id:
+            proj.embedding = embedding
+            proj.save(update_fields=['embedding'])
     else:
-        job.uce_model = UCEModel.objects.get(is_default=True)
+        uce_model = UCEModel.objects.get(is_default=True)
+        embedding, _ = UCEEmbedding.objects.get_or_create(
+            job=job, uce_model=uce_model,
+            defaults={'status': 'pending'},
+        )
 
     job.status = 'pending'
-    job.save()
+    job.save(update_fields=['status'])
 
-    run_analysis.delay(str(job.id), mixed_precision)
+    run_analysis.delay(str(embedding.id), mixed_precision)
     return JsonResponse({'status': 'queued'})
 
 
@@ -330,35 +341,67 @@ def confirm_upload(request, job_id):
     if ref_id:
         reference = get_object_or_404(
             Reference.objects.select_related('uce_model'), pk=ref_id)
-        Projection.objects.get_or_create(job=job, reference=reference)
-        uce_model = reference.uce_model
+        embedding, _ = UCEEmbedding.objects.get_or_create(
+            job=job, uce_model=reference.uce_model,
+            defaults={'status': 'pending'},
+        )
+        proj, _ = Projection.objects.get_or_create(job=job, reference=reference,
+                                                    defaults={'embedding': embedding})
+        if not proj.embedding_id:
+            proj.embedding = embedding
+            proj.save(update_fields=['embedding'])
     else:
         uce_model = UCEModel.objects.get(is_default=True)
+        embedding, _ = UCEEmbedding.objects.get_or_create(
+            job=job, uce_model=uce_model,
+            defaults={'status': 'pending'},
+        )
 
-    job.uce_model = uce_model
-    job.save()
-    run_analysis.delay(str(job.id), mixed_precision)
+    job.status = 'pending'
+    job.save(update_fields=['status'])
+    run_analysis.delay(str(embedding.id), mixed_precision)
     return JsonResponse({'status': 'queued'})
 
 
 @login_required
 @require_POST
 def project_existing(request, job_id):
-    """Start a projection for an existing Job (UCE embedding already computed)."""
+    """Start a projection for an existing Job (UCE embedding already computed or to be started)."""
     job = get_object_or_404(Job, pk=str(job_id), user=request.user)
     data = json.loads(request.body)
     ref_id = data.get('ref_id')
-    reference = get_object_or_404(Reference, pk=ref_id)
+    reference = get_object_or_404(Reference.objects.select_related('uce_model'), pk=ref_id)
+    target_uce_model = reference.uce_model
 
-    projection, created = Projection.objects.get_or_create(job=job, reference=reference)
+    embedding, emb_created = UCEEmbedding.objects.get_or_create(
+        job=job, uce_model=target_uce_model,
+        defaults={'status': 'pending'},
+    )
 
-    if not created and projection.status == 'complete':
+    projection, proj_created = Projection.objects.get_or_create(
+        job=job, reference=reference,
+        defaults={'embedding': embedding},
+    )
+
+    if not proj_created and projection.status == 'complete':
         return JsonResponse({'redirect': '/jobs/'})
 
-    if job.status == 'complete':
-        uce_s3_uri = (job.uce_s3_uri() or
-            f"s3://{settings.AWS_S3_BUCKET}/uce-results/{job.id}/output.h5ad")
-        _submit_projection(projection, uce_s3_uri)
+    if projection.embedding_id != embedding.id:
+        projection.embedding = embedding
+        projection.save(update_fields=['embedding'])
+
+    if embedding.status == 'complete':
+        uce_s3_uri = embedding.uce_s3_uri()
+        if uce_s3_uri:
+            _submit_projection(projection, uce_s3_uri)
+    elif embedding.status in ('error',) or emb_created:
+        embedding.status = 'pending'
+        embedding.batch_job_id = ''
+        embedding.result = {}
+        embedding.save()
+        job.sync_status()
+        run_analysis.delay(str(embedding.id))
+    # else: embedding is pending/running — projection will be submitted when it completes
 
     return JsonResponse({'status': 'queued', 'redirect': '/jobs/'})
 
@@ -398,12 +441,20 @@ def job_status(request, pk):
     """JSON endpoint for client-side polling. Returns UCE status and all projections."""
     job = get_object_or_404(Job, pk=str(pk), user=request.user)
     data = {'status': job.status}
-    if job.status == 'error' and job.result:
-        data['error'] = job.result.get('error', '')
+
+    active_embedding = (
+        job.embeddings.filter(status__in=('pending', 'running')).order_by('-created_at').first()
+        or (job.embeddings.filter(status='error').order_by('-updated_at').first()
+            if job.status == 'error' else None)
+    )
+
+    if job.status == 'error':
+        if active_embedding and active_embedding.result:
+            data['error'] = active_embedding.result.get('error', '')
         data['has_upload'] = bool(job.s3_input_key)
-    if job.status in ('pending', 'running'):
-        result = job.result or {}
-        data['cell_count'] = job.cell_count()
+    if job.status in ('pending', 'running') and active_embedding:
+        result = active_embedding.result or {}
+        data['cell_count'] = active_embedding.cell_count()
         batch_status = result.get('batch_status')
         if batch_status:
             data['batch_status'] = batch_status
@@ -464,13 +515,17 @@ def presign_overlay(request):
 def rerun_projection(request, pk):
     """Reset a completed projection and resubmit it to Batch."""
     projection = get_object_or_404(
-        Projection.objects.select_related('job', 'reference'),
+        Projection.objects.select_related('job', 'reference', 'embedding'),
         pk=str(pk), job__user=request.user,
     )
-    job = projection.job
-    if job.status != 'complete':
+    emb = projection.embedding
+    if emb and emb.status == 'complete':
+        uce_s3_uri = emb.uce_s3_uri()
+    elif not emb:
+        # backward compat for projections without an embedding pointer
+        uce_s3_uri = projection.job.uce_s3_uri()
+    else:
         return JsonResponse({'error': 'UCE embedding must be complete to re-run mapping.'}, status=400)
-    uce_s3_uri = job.uce_s3_uri()
     if not uce_s3_uri:
         return JsonResponse({'error': 'No UCE embedding found for this job.'}, status=400)
     result = projection.result or {}
@@ -591,8 +646,8 @@ def uce_callback(request):
         return JsonResponse({'error': 'uce_s3_uri required'}, status=400)
 
     try:
-        job = Job.objects.get(result__uce_s3_uri=uce_s3_uri)
-    except Job.DoesNotExist:
+        embedding = UCEEmbedding.objects.select_related('job').get(result__uce_s3_uri=uce_s3_uri)
+    except UCEEmbedding.DoesNotExist:
         return JsonResponse({'status': 'not_found'}, status=404)
 
     if status == 'running':
@@ -600,23 +655,24 @@ def uce_callback(request):
         if 'git_commit' in updates:
             updates['uce_git_commit'] = updates.pop('git_commit')
         with transaction.atomic():
-            job = Job.objects.select_for_update().get(pk=job.pk)
-            if job.status != 'running':
+            embedding = UCEEmbedding.objects.select_for_update().select_related('job').get(pk=embedding.pk)
+            if embedding.status != 'running':
                 return JsonResponse({'status': 'ignored'})
-            job.result = {**job.result, **updates}
-            job.save()
+            embedding.result = {**(embedding.result or {}), **updates}
+            embedding.save()
         return JsonResponse({'status': 'ok'})
 
     if status == 'success':
         with transaction.atomic():
-            job = Job.objects.select_for_update().get(pk=job.pk)
-            if job.status not in ('running', 'error'):
+            embedding = UCEEmbedding.objects.select_for_update().select_related('job').get(pk=embedding.pk)
+            if embedding.status not in ('running', 'error'):
                 return JsonResponse({'status': 'ignored'})
-            job.status = 'complete'
+            embedding.status = 'complete'
             if 'git_commit' in data:
-                job.result = {**job.result, 'uce_git_commit': data['git_commit']}
-            job.save()
-            pending_projections = list(job.projections.filter(status='pending'))
+                embedding.result = {**(embedding.result or {}), 'uce_git_commit': data['git_commit']}
+            embedding.save()
+            embedding.job.sync_status()
+            pending_projections = list(embedding.projections.filter(status='pending'))
 
         for projection in pending_projections:
             _submit_projection(projection, uce_s3_uri)
@@ -625,13 +681,14 @@ def uce_callback(request):
     if status == 'error':
         error_msg = data.get('error', 'Unknown error from UCE container')
         with transaction.atomic():
-            job = Job.objects.select_for_update().get(pk=job.pk)
-            if job.status != 'running':
+            embedding = UCEEmbedding.objects.select_for_update().select_related('job').get(pk=embedding.pk)
+            if embedding.status != 'running':
                 return JsonResponse({'status': 'ignored'})
-            job.status = 'error'
-            job.result = {**job.result, 'error': error_msg}
-            job.save()
-        _notify_user_uce_error(job)
+            embedding.status = 'error'
+            embedding.result = {**(embedding.result or {}), 'error': error_msg}
+            embedding.save()
+            embedding.job.sync_status()
+        _notify_user_uce_error(embedding.job)
         return JsonResponse({'status': 'ok'})
 
     return JsonResponse({'error': 'invalid status'}, status=400)
@@ -827,19 +884,31 @@ def clone_job(request, token):
     new_job = Job.objects.create(
         id=new_job_id,
         user=request.user,
-        uce_model=original_job.uce_model,
         original_filename=original_job.original_filename,
         status='pending',
         result=new_result,
     )
 
+    # Create UCEEmbedding stubs so clone_job_files can copy the S3 files into them.
+    emb_id_map = {}
+    for orig_emb in original_job.embeddings.filter(status='complete').select_related('uce_model'):
+        new_emb = UCEEmbedding.objects.create(
+            job=new_job,
+            uce_model=orig_emb.uce_model,
+            status='pending',
+            result={},
+        )
+        emb_id_map[str(orig_emb.id)] = new_emb
+
     # Create projection rows immediately so the job list can show what's coming.
     # Store the original projection id in result so the RQ task can match them up.
     new_projection_ids = []
     for proj in original_job.projections.filter(status='complete').select_related('reference'):
+        new_emb = emb_id_map.get(str(proj.embedding_id)) if proj.embedding_id else None
         new_proj = Projection.objects.create(
             job=new_job,
             reference=proj.reference,
+            embedding=new_emb,
             status='pending',
             public=False,
             result={'_clone_source': str(proj.id)},
@@ -881,17 +950,20 @@ def cancel_upload(request, pk):
 @login_required
 @require_POST
 def retry_uce(request, pk):
-    """Re-queue a UCE job that is in error state."""
+    """Re-queue failed UCE embeddings for a job in error state."""
     job = get_object_or_404(Job, pk=pk, user=request.user)
-    if job.status != 'error':
-        return JsonResponse({'error': 'job is not in error state'}, status=400)
     if not job.s3_input_key:
         return JsonResponse({'error': 'no uploaded file to retry'}, status=400)
-    job.status = 'pending'
-    job.batch_job_id = ''
-    job.result = {}
-    job.save()
-    run_analysis.delay(str(job.id))
+    errored = list(job.embeddings.filter(status='error'))
+    if not errored:
+        return JsonResponse({'error': 'no failed embedding to retry'}, status=400)
+    for embedding in errored:
+        embedding.status = 'pending'
+        embedding.batch_job_id = ''
+        embedding.result = {}
+        embedding.save()
+        run_analysis.delay(str(embedding.id))
+    job.sync_status()
     return JsonResponse({'status': 'queued'})
 
 
@@ -913,12 +985,16 @@ def _delete_job_s3_files(job):
             except Exception:
                 pass
 
-    # UCE embedding (kept until job is deleted)
+    # UCE embeddings (kept until job is deleted)
+    for emb in job.embeddings.all():
+        emb_result = emb.result or {}
+        delete_s3_uri(emb_result.get('uce_s3_uri') or emb_result.get('s3_uri'))
+        delete_s3_uri(emb_result.get('filtered_expression_s3_uri'))
+        delete_s3_prefix(emb_result.get('output_s3_prefix'))
+
+    # Backward compat: old jobs may have UCE data in job.result instead of an embedding
     delete_s3_uri(result.get('uce_s3_uri') or result.get('s3_uri'))
     delete_s3_uri(result.get('filtered_expression_s3_uri'))
-
-    # Sharding intermediates (shard h5ads + UCE shard outputs + manifest).
-    # Already cleaned up on successful merge, but may still exist for errored jobs.
     delete_s3_prefix(result.get('output_s3_prefix'))
 
     # Input file and UCE request JSON (normally gone after completion,

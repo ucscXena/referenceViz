@@ -14,7 +14,7 @@ from .batch import (check_batch_job, check_batch_jobs, submit_batch_job,
                     submit_uce_batch_job, submit_preprocess_batch_job,
                     submit_shard_batch_job, submit_uce_brain_shard_batch_job,
                     submit_merge_batch_job, _ecr_image_digest)
-from .models import Job, Projection
+from .models import Job, Projection, UCEEmbedding
 
 # 60 checks × 5 min = 300 min max wait for UCE
 MAX_CHECK_ATTEMPTS = 60
@@ -28,7 +28,7 @@ MAX_PROJECTION_ATTEMPTS = 60
 
 
 @job('default')
-def run_analysis(job_id, mixed_precision='bf16'):
+def run_analysis(embedding_id, mixed_precision='bf16'):
     """
     RQ task: submit UCE embedding job to Batch and exit immediately.
     Routes to the sharding pipeline when USE_SHARDED_PIPELINE is True.
@@ -36,46 +36,48 @@ def run_analysis(job_id, mixed_precision='bf16'):
     A follow-up task polls for completion.
     """
     if getattr(settings, 'USE_SHARDED_PIPELINE', False):
-        run_sharded_analysis(job_id, mixed_precision)
+        run_sharded_analysis(embedding_id, mixed_precision)
         return
 
     try:
-        job_instance = Job.objects.select_related('uce_model').get(id=job_id)
-    except Job.DoesNotExist:
-        return  # job was deleted before the task ran
+        embedding = UCEEmbedding.objects.select_related('job', 'uce_model').get(id=embedding_id)
+    except UCEEmbedding.DoesNotExist:
+        return  # deleted before the task ran
 
-    job_instance.status = 'running'
-    job_instance.save()
+    embedding.status = 'running'
+    embedding.save()
+    embedding.job.sync_status()
 
     try:
-        input_s3_uri = f"s3://{settings.AWS_S3_BUCKET}/{job_instance.s3_input_key}"
-        uce_s3_uri = f"s3://{settings.AWS_S3_BUCKET}/uce-results/{job_id}/output.h5ad"
+        input_s3_uri = f"s3://{settings.AWS_S3_BUCKET}/{embedding.job.s3_input_key}"
+        uce_s3_uri = f"s3://{settings.AWS_S3_BUCKET}/uce-results/{embedding_id}/output.h5ad"
         callback_url = f"{settings.SERVER_BASE_URL}/jobs/uce-callback/"
         batch_job_id = submit_uce_batch_job(
             input_s3_uri=input_s3_uri,
             output_s3_uri=uce_s3_uri,
             callback_url=callback_url,
-            model_s3=job_instance.uce_model.model_url,
+            model_s3=embedding.uce_model.model_url,
             mixed_precision=mixed_precision,
-            job_name=f'uce-{str(job_id)[:8]}',
+            job_name=f'uce-{str(embedding_id)[:8]}',
         )
-        job_instance.batch_job_id = batch_job_id
-        job_instance.result = {
+        embedding.batch_job_id = batch_job_id
+        embedding.result = {
             'uce_s3_uri': uce_s3_uri,
             'uce_image_digest': _ecr_image_digest('uce-pipeline'),
         }
-        job_instance.save()
+        embedding.save()
 
         django_rq.get_queue('default').enqueue_in(
-            timedelta(minutes=5), check_job_result, str(job_id)
+            timedelta(minutes=5), check_job_result, str(embedding_id)
         )
     except Exception as e:
-        job_instance.result = {'error': str(e), 'traceback': traceback.format_exc()}
-        job_instance.status = 'error'
-        job_instance.save()
+        embedding.result = {'error': str(e), 'traceback': traceback.format_exc()}
+        embedding.status = 'error'
+        embedding.save()
+        embedding.job.sync_status()
         notify_staff(
-            subject=f'UCE job failed to submit: {str(job_id)[:8]}',
-            message=f'UCE job {job_id} failed to submit to Batch.\nUser: {job_instance.user}\nError: {e}',
+            subject=f'UCE job failed to submit: {str(embedding_id)[:8]}',
+            message=f'UCE embedding {embedding_id} failed to submit to Batch.\nUser: {embedding.job.user}\nError: {e}',
         )
 
 
@@ -83,38 +85,39 @@ def run_analysis(job_id, mixed_precision='bf16'):
 # Sharding pipeline tasks
 # ---------------------------------------------------------------------------
 
-def run_sharded_analysis(job_id, mixed_precision='bf16'):
+def run_sharded_analysis(embedding_id, mixed_precision='bf16'):
     """Submit the preprocess Batch job to start the sharding pipeline."""
     try:
-        job_instance = Job.objects.select_related('uce_model').get(id=job_id)
-    except Job.DoesNotExist:
+        embedding = UCEEmbedding.objects.select_related('job', 'uce_model').get(id=embedding_id)
+    except UCEEmbedding.DoesNotExist:
         return
 
-    job_instance.status = 'running'
-    job_instance.save()
+    embedding.status = 'running'
+    embedding.save()
+    embedding.job.sync_status()
 
     try:
         bucket = settings.AWS_S3_BUCKET
-        input_s3_uri      = f"s3://{bucket}/{job_instance.s3_input_key}"
-        output_s3_prefix  = f"s3://{bucket}/uce-preprocess/{job_id}"
-        uce_s3_uri        = f"s3://{bucket}/uce-results/{job_id}/output_uce_adata.h5ad"
+        input_s3_uri      = f"s3://{bucket}/{embedding.job.s3_input_key}"
+        output_s3_prefix  = f"s3://{bucket}/uce-preprocess/{embedding_id}"
+        uce_s3_uri        = f"s3://{bucket}/uce-results/{embedding_id}/output_uce_adata.h5ad"
         shard_out_prefix  = f"{output_s3_prefix}/uce"
 
         callback_url = f"{settings.SERVER_BASE_URL}/jobs/uce-callback/"
         preprocess_job_id = submit_preprocess_batch_job(
             input_s3_uri=input_s3_uri,
             output_s3_prefix=output_s3_prefix,
-            model_s3=job_instance.uce_model.model_url,
+            model_s3=embedding.uce_model.model_url,
             callback_url=callback_url,
             uce_s3_uri=uce_s3_uri,
-            job_name=f'uce-pre-{str(job_id)[:8]}',
+            job_name=f'uce-pre-{str(embedding_id)[:8]}',
         )
-        job_instance.batch_job_id = preprocess_job_id
-        pipeline = job_instance.uce_model.pipeline
+        embedding.batch_job_id = preprocess_job_id
+        pipeline = embedding.uce_model.pipeline
         image_repo = ('uce-brain-pipeline'
-                      if pipeline == job_instance.uce_model.PIPELINE_UCE_BRAIN
-                      else 'uce-pipeline')  # PIPELINE_UCE uses the original uce-pipeline image
-        job_instance.result = {
+                      if pipeline == embedding.uce_model.PIPELINE_UCE_BRAIN
+                      else 'uce-pipeline')
+        embedding.result = {
             'sharded':             True,
             'uce_s3_uri':          uce_s3_uri,
             'uce_image_digest':    _ecr_image_digest(image_repo),
@@ -123,69 +126,72 @@ def run_sharded_analysis(job_id, mixed_precision='bf16'):
             'shard_output_prefix': shard_out_prefix,
             'mixed_precision':     mixed_precision,
         }
-        job_instance.save()
+        embedding.save()
 
         django_rq.get_queue('default').enqueue_in(
-            timedelta(minutes=2), check_preprocess_result, str(job_id)
+            timedelta(minutes=2), check_preprocess_result, str(embedding_id)
         )
     except Exception as e:
-        job_instance.result = {'error': str(e), 'traceback': traceback.format_exc()}
-        job_instance.status = 'error'
-        job_instance.save()
+        embedding.result = {'error': str(e), 'traceback': traceback.format_exc()}
+        embedding.status = 'error'
+        embedding.save()
+        embedding.job.sync_status()
         notify_staff(
-            subject=f'UCE sharding preprocess failed to submit: {str(job_id)[:8]}',
-            message=f'Job {job_id} failed to submit preprocess to Batch.\nUser: {job_instance.user}\nError: {e}',
+            subject=f'UCE sharding preprocess failed to submit: {str(embedding_id)[:8]}',
+            message=f'Embedding {embedding_id} failed to submit preprocess to Batch.\nUser: {embedding.job.user}\nError: {e}',
         )
 
 
 @job('default')
-def check_preprocess_result(job_id, attempt=0):
+def check_preprocess_result(embedding_id, attempt=0):
     """Poll the preprocess Batch job. On success, read the manifest and submit N shard jobs."""
     from django.db import transaction
     with transaction.atomic():
-        job_instance = Job.objects.select_for_update().get(id=job_id)
-        if job_instance.status not in ('running', 'pending'):
+        embedding = UCEEmbedding.objects.select_for_update().select_related('job').get(id=embedding_id)
+        if embedding.status not in ('running', 'pending'):
             return
 
-        result = dict(job_instance.result or {})
+        result = dict(embedding.result or {})
         preprocess_job_id = result.get('preprocess_batch_job_id')
         status, detail, batch_status = check_batch_job(preprocess_job_id)
 
         if status == 'error':
             result['error'] = f'Preprocess failed: {detail}'
-            job_instance.result = result
-            job_instance.status = 'error'
-            job_instance.save()
+            embedding.result = result
+            embedding.status = 'error'
+            embedding.save()
+            embedding.job.sync_status()
             notify_staff(
-                subject=f'UCE preprocess failed: {str(job_id)[:8]}',
-                message=f'Preprocess Batch job {preprocess_job_id} failed.\nUser: {job_instance.user}\nReason: {detail}',
+                subject=f'UCE preprocess failed: {str(embedding_id)[:8]}',
+                message=f'Preprocess Batch job {preprocess_job_id} failed.\nUser: {embedding.job.user}\nReason: {detail}',
             )
             return
 
         if status != 'complete':
             result['batch_status'] = f'preprocess: {batch_status}'
-            job_instance.result = result
-            job_instance.save(update_fields=['result'])
+            embedding.result = result
+            embedding.save(update_fields=['result'])
 
     if status == 'complete':
-        _submit_shards(job_id)
+        _submit_shards(embedding_id)
     elif attempt >= MAX_CHECK_ATTEMPTS:
-        job_instance.result = {**job_instance.result,
-                               'error': f'Preprocess not finished after {MAX_CHECK_ATTEMPTS * 2} minutes'}
-        job_instance.status = 'error'
-        job_instance.save()
+        embedding.result = {**embedding.result,
+                            'error': f'Preprocess not finished after {MAX_CHECK_ATTEMPTS * 2} minutes'}
+        embedding.status = 'error'
+        embedding.save()
+        embedding.job.sync_status()
     else:
         django_rq.get_queue('default').enqueue_in(
-            timedelta(minutes=2), check_preprocess_result, str(job_id), attempt + 1
+            timedelta(minutes=2), check_preprocess_result, str(embedding_id), attempt + 1
         )
 
 
-def _submit_shards(job_id):
+def _submit_shards(embedding_id):
     """Download the manifest and submit one shard UCE job per shard."""
     import json
     import boto3 as _boto3
-    job_instance = Job.objects.select_related('uce_model').get(id=job_id)
-    result = dict(job_instance.result or {})
+    embedding = UCEEmbedding.objects.select_related('job', 'uce_model').get(id=embedding_id)
+    result = dict(embedding.result or {})
 
     manifest_s3 = f"{result['output_s3_prefix']}/manifest.json"
     bucket, key = manifest_s3.removeprefix('s3://').split('/', 1)
@@ -198,26 +204,26 @@ def _submit_shards(job_id):
     shard_out_prefix = result['shard_output_prefix']
     mixed_precision  = result.get('mixed_precision', 'bf16')
 
-    pipeline = job_instance.uce_model.pipeline
+    pipeline = embedding.uce_model.pipeline
     shard_batch_job_ids = []
     for i, shard_uri in enumerate(shard_s3_uris):
         shard_output_uri = f"{shard_out_prefix}/shard_{i:03d}_uce_adata.h5ad"
-        if pipeline == job_instance.uce_model.PIPELINE_UCE_BRAIN:  # 'uce-brain'
+        if pipeline == embedding.uce_model.PIPELINE_UCE_BRAIN:
             batch_job_id = submit_uce_brain_shard_batch_job(
                 input_s3_uri=shard_uri,
                 output_s3_uri=shard_output_uri,
-                model_s3=job_instance.uce_model.model_url,
+                model_s3=embedding.uce_model.model_url,
                 species=species,
-                job_name=f'uce-brain-{str(job_id)[:8]}-{i:03d}',
+                job_name=f'uce-brain-{str(embedding_id)[:8]}-{i:03d}',
             )
         else:
             batch_job_id = submit_shard_batch_job(
                 input_s3_uri=shard_uri,
                 output_s3_uri=shard_output_uri,
-                model_s3=job_instance.uce_model.model_url,
+                model_s3=embedding.uce_model.model_url,
                 species=species,
                 mixed_precision=mixed_precision,
-                job_name=f'uce-shard-{str(job_id)[:8]}-{i:03d}',
+                job_name=f'uce-shard-{str(embedding_id)[:8]}-{i:03d}',
             )
         shard_batch_job_ids.append(batch_job_id)
 
@@ -229,25 +235,25 @@ def _submit_shards(job_id):
         'shards_complete':     0,
         'batch_status':        f'0/{n_shards} shards complete',
     })
-    job_instance.batch_job_id = shard_batch_job_ids[0]  # first shard for console link
-    job_instance.result = result
-    job_instance.save()
+    embedding.batch_job_id = shard_batch_job_ids[0]  # first shard for console link
+    embedding.result = result
+    embedding.save()
 
     django_rq.get_queue('default').enqueue_in(
-        timedelta(minutes=5), check_shard_results, str(job_id)
+        timedelta(minutes=5), check_shard_results, str(embedding_id)
     )
 
 
 @job('default')
-def check_shard_results(job_id, attempt=0):
+def check_shard_results(embedding_id, attempt=0):
     """Poll all shard UCE jobs. On all-complete, submit the merge job."""
     from django.db import transaction
     with transaction.atomic():
-        job_instance = Job.objects.select_for_update().get(id=job_id)
-        if job_instance.status not in ('running', 'pending'):
+        embedding = UCEEmbedding.objects.select_for_update().select_related('job').get(id=embedding_id)
+        if embedding.status not in ('running', 'pending'):
             return
 
-        result = dict(job_instance.result or {})
+        result = dict(embedding.result or {})
         shard_batch_job_ids = result.get('shard_batch_job_ids', [])
         n_shards = len(shard_batch_job_ids)
 
@@ -261,40 +267,42 @@ def check_shard_results(job_id, attempt=0):
         if n_failed:
             failed_reasons = [d for s, d, _ in shard_statuses if s == 'error']
             result['error'] = f'{n_failed}/{n_shards} shards failed: {failed_reasons[0]}'
-            job_instance.result = result
-            job_instance.status = 'error'
-            job_instance.save()
+            embedding.result = result
+            embedding.status = 'error'
+            embedding.save()
+            embedding.job.sync_status()
             notify_staff(
-                subject=f'UCE shard(s) failed: {str(job_id)[:8]}',
-                message=f'{n_failed}/{n_shards} shard jobs failed for job {job_id}.\nUser: {job_instance.user}\nReason: {failed_reasons[0]}',
+                subject=f'UCE shard(s) failed: {str(embedding_id)[:8]}',
+                message=f'{n_failed}/{n_shards} shard jobs failed for embedding {embedding_id}.\nUser: {embedding.job.user}\nReason: {failed_reasons[0]}',
             )
             return
 
-        job_instance.result = result
-        job_instance.save(update_fields=['result'])
+        embedding.result = result
+        embedding.save(update_fields=['result'])
         all_done = (n_complete == n_shards)
 
     if all_done:
-        _submit_merge(job_id)
+        _submit_merge(embedding_id)
     elif attempt >= MAX_CHECK_ATTEMPTS:
-        job_instance.result = {**job_instance.result,
-                               'error': f'Shards not finished after {MAX_CHECK_ATTEMPTS * 5} minutes'}
-        job_instance.status = 'error'
-        job_instance.save()
+        embedding.result = {**embedding.result,
+                            'error': f'Shards not finished after {MAX_CHECK_ATTEMPTS * 5} minutes'}
+        embedding.status = 'error'
+        embedding.save()
+        embedding.job.sync_status()
         notify_staff(
-            subject=f'UCE shard jobs timed out: {str(job_id)[:8]}',
-            message=f'Shard jobs for {job_id} did not finish within {MAX_CHECK_ATTEMPTS * 5} minutes.\nUser: {job_instance.user}',
+            subject=f'UCE shard jobs timed out: {str(embedding_id)[:8]}',
+            message=f'Shard jobs for embedding {embedding_id} did not finish within {MAX_CHECK_ATTEMPTS * 5} minutes.\nUser: {embedding.job.user}',
         )
     else:
         django_rq.get_queue('default').enqueue_in(
-            timedelta(minutes=5), check_shard_results, str(job_id), attempt + 1
+            timedelta(minutes=5), check_shard_results, str(embedding_id), attempt + 1
         )
 
 
-def _submit_merge(job_id):
+def _submit_merge(embedding_id):
     """Submit the merge Batch job after all shards complete."""
-    job_instance = Job.objects.get(id=job_id)
-    result = dict(job_instance.result or {})
+    embedding = UCEEmbedding.objects.select_related('job').get(id=embedding_id)
+    result = dict(embedding.result or {})
     uce_s3_uri = result['uce_s3_uri']
 
     callback_url = f"{settings.SERVER_BASE_URL}/jobs/uce-callback/"
@@ -304,62 +312,65 @@ def _submit_merge(job_id):
             shard_output_prefix=result['shard_output_prefix'],
             output_s3=uce_s3_uri,
             callback_url=callback_url,
-            job_name=f'uce-merge-{str(job_id)[:8]}',
+            job_name=f'uce-merge-{str(embedding_id)[:8]}',
         )
         result['merge_batch_job_id'] = merge_batch_job_id
         result['batch_status']       = 'merge running'
-        job_instance.batch_job_id    = merge_batch_job_id
-        job_instance.result          = result
-        job_instance.save()
+        embedding.batch_job_id       = merge_batch_job_id
+        embedding.result             = result
+        embedding.save()
 
         django_rq.get_queue('default').enqueue_in(
-            timedelta(minutes=2), check_merge_result, str(job_id)
+            timedelta(minutes=2), check_merge_result, str(embedding_id)
         )
     except Exception as e:
         result['error'] = f'Merge submit failed: {e}'
-        job_instance.result = result
-        job_instance.status = 'error'
-        job_instance.save()
+        embedding.result = result
+        embedding.status = 'error'
+        embedding.save()
+        embedding.job.sync_status()
         notify_staff(
-            subject=f'UCE merge failed to submit: {str(job_id)[:8]}',
-            message=f'Merge job for {job_id} failed to submit.\nUser: {job_instance.user}\nError: {e}',
+            subject=f'UCE merge failed to submit: {str(embedding_id)[:8]}',
+            message=f'Merge job for embedding {embedding_id} failed to submit.\nUser: {embedding.job.user}\nError: {e}',
         )
 
 
 @job('default')
-def check_merge_result(job_id, attempt=0):
-    """Poll the merge Batch job. On success, mark the job complete and submit projections."""
+def check_merge_result(embedding_id, attempt=0):
+    """Poll the merge Batch job. On success, mark embedding complete and submit projections."""
     from django.db import transaction
     with transaction.atomic():
-        job_instance = Job.objects.select_for_update().get(id=job_id)
-        if job_instance.status not in ('running', 'pending'):
+        embedding = UCEEmbedding.objects.select_for_update().select_related('job').get(id=embedding_id)
+        if embedding.status not in ('running', 'pending'):
             return
 
-        result = dict(job_instance.result or {})
+        result = dict(embedding.result or {})
         merge_batch_job_id = result.get('merge_batch_job_id')
         status, detail, batch_status = check_batch_job(merge_batch_job_id)
         uce_s3_uri = result.get('uce_s3_uri')
 
         if status == 'error':
             result['error'] = f'Merge failed: {detail}'
-            job_instance.result = result
-            job_instance.status = 'error'
-            job_instance.save()
+            embedding.result = result
+            embedding.status = 'error'
+            embedding.save()
+            embedding.job.sync_status()
             notify_staff(
-                subject=f'UCE merge failed: {str(job_id)[:8]}',
-                message=f'Merge Batch job {merge_batch_job_id} failed.\nUser: {job_instance.user}\nReason: {detail}',
+                subject=f'UCE merge failed: {str(embedding_id)[:8]}',
+                message=f'Merge Batch job {merge_batch_job_id} failed.\nUser: {embedding.job.user}\nReason: {detail}',
             )
             return
 
         if status == 'complete':
-            job_instance.status = 'complete'
-            job_instance.save()
-            pending_projections = list(job_instance.projections.filter(status='pending'))
+            embedding.status = 'complete'
+            embedding.save()
+            embedding.job.sync_status()
+            pending_projections = list(embedding.projections.filter(status='pending'))
             output_s3_prefix = result.get('output_s3_prefix')
         else:
             result['batch_status'] = f'merge: {batch_status}'
-            job_instance.result = result
-            job_instance.save(update_fields=['result'])
+            embedding.result = result
+            embedding.save(update_fields=['result'])
             pending_projections = None
 
     if pending_projections is not None:
@@ -367,18 +378,19 @@ def check_merge_result(job_id, attempt=0):
             _submit_projection(projection, uce_s3_uri)
         delete_s3_prefix(output_s3_prefix)
     elif attempt >= MAX_CHECK_ATTEMPTS:
-        job_instance.result = {**job_instance.result,
-                               'error': f'Merge not finished after {MAX_CHECK_ATTEMPTS * 2} minutes'}
-        job_instance.status = 'error'
-        job_instance.save()
+        embedding.result = {**embedding.result,
+                            'error': f'Merge not finished after {MAX_CHECK_ATTEMPTS * 2} minutes'}
+        embedding.status = 'error'
+        embedding.save()
+        embedding.job.sync_status()
     else:
         django_rq.get_queue('default').enqueue_in(
-            timedelta(minutes=2), check_merge_result, str(job_id), attempt + 1
+            timedelta(minutes=2), check_merge_result, str(embedding_id), attempt + 1
         )
 
 
 @job('default')
-def check_job_result(job_id, attempt=0):
+def check_job_result(embedding_id, attempt=0):
     """
     RQ task: poll Batch once for a completed UCE job.
     Re-enqueues itself (up to MAX_CHECK_ATTEMPTS) if the job is still running.
@@ -386,44 +398,43 @@ def check_job_result(job_id, attempt=0):
     """
     from django.db import transaction
     with transaction.atomic():
-        job_instance = Job.objects.select_for_update().get(id=job_id)
-        if job_instance.status not in ('running', 'pending'):
+        embedding = UCEEmbedding.objects.select_for_update().select_related('job').get(id=embedding_id)
+        if embedding.status not in ('running', 'pending'):
             return  # already resolved — callback beat us here
 
         try:
-            batch_job_id = job_instance.batch_job_id
-            uce_s3_uri = (job_instance.result.get('uce_s3_uri') or
-                f"s3://{settings.AWS_S3_BUCKET}/uce-results/{job_id}/output.h5ad")
+            batch_job_id = embedding.batch_job_id
+            uce_s3_uri = (embedding.result or {}).get('uce_s3_uri') or \
+                f"s3://{settings.AWS_S3_BUCKET}/uce-results/{embedding_id}/output.h5ad"
             status, detail, batch_status = check_batch_job(batch_job_id)
 
             if status == 'complete':
-                job_instance.status = 'complete'
-                job_instance.save()
-                s3_input_key = job_instance.s3_input_key
-                pending_projections = list(job_instance.projections.filter(status='pending'))
+                embedding.status = 'complete'
+                embedding.save()
+                embedding.job.sync_status()
+                pending_projections = list(embedding.projections.filter(status='pending'))
             elif status == 'error':
-                job_instance.result = {'error': detail}
-                job_instance.status = 'error'
-                job_instance.save()
+                embedding.result = {'error': detail}
+                embedding.status = 'error'
+                embedding.save()
+                embedding.job.sync_status()
                 notify_staff(
-                    subject=f'UCE job failed: {str(job_id)[:8]}',
-                    message=f'UCE Batch job {job_id} failed.\nUser: {job_instance.user}\nReason: {detail}',
+                    subject=f'UCE job failed: {str(embedding_id)[:8]}',
+                    message=f'UCE Batch job for embedding {embedding_id} failed.\nUser: {embedding.job.user}\nReason: {detail}',
                 )
                 pending_projections = []
-                s3_input_key = None
             else:
                 pending_projections = None  # still running
-                s3_input_key = None
-                result = dict(job_instance.result or {})
+                result = dict(embedding.result or {})
                 old_started_at = result.get('started_at')
                 old_batch_status = result.get('batch_status')
                 old_runnable_since = result.get('runnable_since')
                 result['batch_status'] = batch_status
                 if batch_status in ('RUNNING', 'STARTING'):
                     result.setdefault('started_at', timezone.now().isoformat())
-                    result.pop('runnable_since', None)  # clear on transition to running
+                    result.pop('runnable_since', None)
                 elif batch_status in ('SUBMITTED', 'PENDING', 'RUNNABLE'):
-                    result.pop('started_at', None)  # spot preemption — reset clock
+                    result.pop('started_at', None)
                     if batch_status == 'RUNNABLE':
                         result.setdefault('runnable_since', timezone.now().isoformat())
                     else:
@@ -431,47 +442,49 @@ def check_job_result(job_id, attempt=0):
                 if (result.get('started_at') != old_started_at
                         or result.get('batch_status') != old_batch_status
                         or result.get('runnable_since') != old_runnable_since):
-                    job_instance.result = result
-                    job_instance.save(update_fields=['result'])
+                    embedding.result = result
+                    embedding.save(update_fields=['result'])
         except Exception as e:
-            job_instance.result = {'error': str(e), 'traceback': traceback.format_exc()}
-            job_instance.status = 'error'
-            job_instance.save()
+            embedding.result = {'error': str(e), 'traceback': traceback.format_exc()}
+            embedding.status = 'error'
+            embedding.save()
+            embedding.job.sync_status()
             return
 
     # Outside the transaction: AWS API calls
     if pending_projections is None:
         # Check whether to fall back from Spot to On-Demand
-        result = job_instance.result or {}
+        result = embedding.result or {}
         runnable_since = result.get('runnable_since')
         if runnable_since and not result.get('ondemand_fallback'):
             from datetime import datetime
             elapsed = timezone.now() - datetime.fromisoformat(runnable_since)
             if elapsed.total_seconds() >= RUNNABLE_TIMEOUT_MINUTES * 60:
-                _fallback_to_ondemand(job_instance, attempt)
+                _fallback_to_ondemand(embedding, attempt)
                 return
 
         # Still running
         if attempt >= MAX_CHECK_ATTEMPTS:
-            result = dict(job_instance.result or {})
+            result = dict(embedding.result or {})
             result['error'] = f"UCE Batch job not finished after {MAX_CHECK_ATTEMPTS * 5} minutes"
-            job_instance.result = result  # preserves uce_s3_uri so late callbacks can find this job
-            job_instance.status = 'error'
-            job_instance.save()
+            embedding.result = result  # preserves uce_s3_uri so late callbacks can find this embedding
+            embedding.status = 'error'
+            embedding.save()
+            embedding.job.sync_status()
             notify_staff(
-                subject=f'UCE job timed out: {str(job_id)[:8]}',
-                message=f'UCE Batch job {job_id} did not finish within {MAX_CHECK_ATTEMPTS * 5} minutes.\nUser: {job_instance.user}',
+                subject=f'UCE job timed out: {str(embedding_id)[:8]}',
+                message=f'UCE Batch job for embedding {embedding_id} did not finish within {MAX_CHECK_ATTEMPTS * 5} minutes.\nUser: {embedding.job.user}',
             )
             return
         django_rq.get_queue('default').enqueue_in(
-            timedelta(minutes=5), check_job_result, str(job_id), attempt + 1
+            timedelta(minutes=5), check_job_result, str(embedding_id), attempt + 1
         )
     elif status == 'complete':
         for projection in pending_projections:
             _submit_projection(projection, uce_s3_uri)
 
 
-def _fallback_to_ondemand(job_instance, attempt):
+def _fallback_to_ondemand(embedding, attempt):
     """
     Cancel the stuck Spot job and resubmit to the On-Demand queue.
     Called when a job has been RUNNABLE for longer than RUNNABLE_TIMEOUT_MINUTES.
@@ -479,45 +492,45 @@ def _fallback_to_ondemand(job_instance, attempt):
     batch = boto_client('batch')
     try:
         batch.terminate_job(
-            jobId=job_instance.batch_job_id,
+            jobId=embedding.batch_job_id,
             reason=f'No Spot capacity after {RUNNABLE_TIMEOUT_MINUTES} min; switching to On-Demand',
         )
     except Exception as e:
-        logger.warning('Failed to terminate Spot job %s: %s', job_instance.batch_job_id, e)
+        logger.warning('Failed to terminate Spot job %s: %s', embedding.batch_job_id, e)
 
-    result = dict(job_instance.result or {})
+    result = dict(embedding.result or {})
     uce_s3_uri = result.get('uce_s3_uri',
-        f"s3://{settings.AWS_S3_BUCKET}/uce-results/{job_instance.id}/output.h5ad")
-    input_s3_uri = f"s3://{settings.AWS_S3_BUCKET}/{job_instance.s3_input_key}"
+        f"s3://{settings.AWS_S3_BUCKET}/uce-results/{embedding.id}/output.h5ad")
+    input_s3_uri = f"s3://{settings.AWS_S3_BUCKET}/{embedding.job.s3_input_key}"
     callback_url = f"{settings.SERVER_BASE_URL}/jobs/uce-callback/"
 
     new_batch_job_id = submit_uce_batch_job(
         input_s3_uri=input_s3_uri,
         output_s3_uri=uce_s3_uri,
         callback_url=callback_url,
-        model_s3=job_instance.uce_model.model_url,
+        model_s3=embedding.uce_model.model_url,
         job_queue=settings.UCE_BATCH_JOB_QUEUE_ONDEMAND,
-        job_name=f'uce-od-{str(job_instance.id)[:8]}',
+        job_name=f'uce-od-{str(embedding.id)[:8]}',
     )
 
     result.pop('runnable_since', None)
     result['ondemand_fallback'] = timezone.now().isoformat()
     result['batch_status'] = 'SUBMITTED'
-    job_instance.batch_job_id = new_batch_job_id
-    job_instance.result = result
-    job_instance.save()
+    embedding.batch_job_id = new_batch_job_id
+    embedding.result = result
+    embedding.save()
 
     notify_staff(
-        subject=f'UCE job switched to On-Demand: {str(job_instance.id)[:8]}',
+        subject=f'UCE job switched to On-Demand: {str(embedding.id)[:8]}',
         message=(
-            f'UCE job {job_instance.id} sat RUNNABLE for >{RUNNABLE_TIMEOUT_MINUTES} min '
+            f'UCE embedding {embedding.id} sat RUNNABLE for >{RUNNABLE_TIMEOUT_MINUTES} min '
             f'(no Spot capacity). Resubmitted to On-Demand queue.\n'
-            f'User: {job_instance.user}\nNew Batch job: {new_batch_job_id}'
+            f'User: {embedding.job.user}\nNew Batch job: {new_batch_job_id}'
         ),
     )
 
     django_rq.get_queue('default').enqueue_in(
-        timedelta(minutes=5), check_job_result, str(job_instance.id), attempt + 1
+        timedelta(minutes=5), check_job_result, str(embedding.id), attempt + 1
     )
 
 
@@ -630,14 +643,20 @@ def clone_job_files(new_job_id, original_job_id, projection_ids):
     s3 = boto_client('s3')
 
     try:
-        # Copy UCE embedding
-        original_uce_uri = original_job.uce_s3_uri()
-        if original_uce_uri:
-            _, orig_key = original_uce_uri.replace('s3://', '').split('/', 1)
-            new_uce_key = f'uce-results/{new_job_id}/output.h5ad'
-            _s3_copy(s3, bucket, orig_key, new_uce_key)
-            new_job.result = {**new_job.result, 'uce_s3_uri': f's3://{bucket}/{new_uce_key}'}
-            new_job.save(update_fields=['result'])
+        # Copy UCE embeddings: match new embedding by uce_model_id
+        for orig_emb in original_job.embeddings.filter(status='complete').select_related('uce_model'):
+            new_emb = new_job.embeddings.filter(uce_model_id=orig_emb.uce_model_id).first()
+            if not new_emb:
+                continue
+            orig_uce_uri = orig_emb.uce_s3_uri()
+            if orig_uce_uri:
+                _, orig_key = orig_uce_uri.replace('s3://', '').split('/', 1)
+                new_uce_key = f'uce-results/{new_emb.id}/output.h5ad'
+                _s3_copy(s3, bucket, orig_key, new_uce_key)
+                new_emb.result = {**(orig_emb.result or {}), 'uce_s3_uri': f's3://{bucket}/{new_uce_key}'}
+                new_emb.status = 'complete'
+                new_emb.save()
+        new_job.sync_status()
 
         # Copy input h5ad
         if original_job.s3_input_key:

@@ -30,7 +30,7 @@ from .aws import boto_client
 from django.contrib.auth.admin import UserAdmin as DefaultUserAdmin
 from django.contrib.auth.models import User
 
-from .models import ConversationMessage, Job, JobEvent, Projection, ProjectionEvent, Reference, ReferenceGroup, UCEModel, UserProfile
+from .models import ConversationMessage, Job, JobEvent, Projection, ProjectionEvent, Reference, ReferenceGroup, UCEEmbedding, UCEModel, UserProfile
 from .tasks import run_analysis
 
 
@@ -74,6 +74,21 @@ def _batch_link(batch_job_id):
     return format_html('<a href="{}" target="_blank">{}</a>', url, label)
 
 
+class UCEEmbeddingInline(admin.TabularInline):
+    model = UCEEmbedding
+    extra = 0
+    fields = ('uce_model', 'status', 'batch_job_link', 'uce_download_link', 'created_at', 'updated_at')
+    readonly_fields = ('uce_model', 'status', 'batch_job_link', 'uce_download_link', 'created_at', 'updated_at')
+
+    def batch_job_link(self, obj):
+        return _batch_link(obj.batch_job_id)
+    batch_job_link.short_description = 'Batch Job'
+
+    def uce_download_link(self, obj):
+        return _presigned_link(obj.uce_s3_uri(), 'Download')
+    uce_download_link.short_description = 'UCE Embedding'
+
+
 class ProjectionInline(admin.TabularInline):
     model = Projection
     extra = 0
@@ -107,16 +122,19 @@ def retry_uce_action(modeladmin, request, queryset):
     retried = 0
     skipped = 0
     for job in queryset:
-        if job.status != 'error' or not job.s3_input_key:
+        errored = list(job.embeddings.filter(status='error'))
+        if not errored or not job.s3_input_key:
             skipped += 1
             continue
-        job.status = 'pending'
-        job.batch_job_id = ''
-        job.result = {}
-        job.save()
-        run_analysis.delay(str(job.id))
+        for embedding in errored:
+            embedding.status = 'pending'
+            embedding.batch_job_id = ''
+            embedding.result = {}
+            embedding.save()
+            run_analysis.delay(str(embedding.id))
+        job.sync_status()
         retried += 1
-    modeladmin.message_user(request, f'Retried {retried} job(s); skipped {skipped} (not in error state or no upload).')
+    modeladmin.message_user(request, f'Retried {retried} job(s); skipped {skipped} (no failed embedding or no upload).')
 
 
 @admin.register(Job)
@@ -125,7 +143,7 @@ class JobAdmin(admin.ModelAdmin):
     list_filter = ('status',)
     ordering = ('-created_at',)
     readonly_fields = ('id', 'batch_job_links', 'created_at', 'updated_at', 'uce_download_link', 'system_prompt_link')
-    inlines = [ProjectionInline]
+    inlines = [UCEEmbeddingInline, ProjectionInline]
     actions = [retry_uce_action]
     change_list_template = 'admin/jobs/job/change_list.html'
 
@@ -255,28 +273,34 @@ class JobAdmin(admin.ModelAdmin):
     filename_display.admin_order_field = 'original_filename'
 
     def batch_job_link(self, obj):
-        # List view: show the most current job only (merge > preprocess > regular).
-        if obj.result and obj.result.get('sharded'):
-            job_id = obj.result.get('merge_batch_job_id') or obj.result.get('preprocess_batch_job_id')
-            prefix = 'merge' if obj.result.get('merge_batch_job_id') else 'pre'
+        # List view: show the most recent active embedding's batch job.
+        emb = obj.embeddings.order_by('-created_at').first()
+        if not emb:
+            return '—'
+        result = emb.result or {}
+        if result.get('sharded'):
+            job_id = result.get('merge_batch_job_id') or result.get('preprocess_batch_job_id')
+            prefix = 'merge' if result.get('merge_batch_job_id') else 'pre'
             link = _batch_link(job_id)
             return mark_safe(f'{prefix}: {link}') if job_id else '—'
-        return _batch_link(obj.batch_job_id)
+        return _batch_link(emb.batch_job_id)
     batch_job_link.short_description = 'Batch Job'
-    batch_job_link.admin_order_field = 'batch_job_id'
 
     def batch_job_links(self, obj):
-        # Detail view: show both preprocess and merge links for sharded jobs.
-        if obj.result and obj.result.get('sharded'):
-            preprocess_id = obj.result.get('preprocess_batch_job_id')
-            merge_id = obj.result.get('merge_batch_job_id')
-            parts = []
-            if preprocess_id:
-                parts.append(f'pre: {_batch_link(preprocess_id)}')
-            if merge_id:
-                parts.append(f'merge: {_batch_link(merge_id)}')
-            return mark_safe(' · '.join(parts)) if parts else '—'
-        return _batch_link(obj.batch_job_id)
+        # Detail view: show all embeddings' batch job links.
+        parts = []
+        for emb in obj.embeddings.order_by('-created_at'):
+            result = emb.result or {}
+            if result.get('sharded'):
+                preprocess_id = result.get('preprocess_batch_job_id')
+                merge_id = result.get('merge_batch_job_id')
+                if preprocess_id:
+                    parts.append(f'pre: {_batch_link(preprocess_id)}')
+                if merge_id:
+                    parts.append(f'merge: {_batch_link(merge_id)}')
+            elif emb.batch_job_id:
+                parts.append(f'{emb.uce_model.name}: {_batch_link(emb.batch_job_id)}')
+        return mark_safe(' · '.join(parts)) if parts else '—'
     batch_job_links.short_description = 'Batch Job'
 
     def get_form(self, request, obj=None, **kwargs):
