@@ -622,7 +622,7 @@ def download_result(request, pk):
 @login_required
 def delete_selected_jobs(request):
     selected_ids = request.POST.getlist('job_ids')
-    jobs = Job.objects.filter(user=request.user, id__in=selected_ids).prefetch_related('projections')
+    jobs = Job.objects.filter(user=request.user, id__in=selected_ids).prefetch_related('embeddings', 'projections')
 
     for job in jobs:
         _delete_job_s3_files(job)
