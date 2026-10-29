@@ -104,12 +104,13 @@ class Job(models.Model):
         statuses = set(self.embeddings.values_list('status', flat=True))
         if not statuses:
             return
-        if 'complete' in statuses:
-            new = 'complete'
-        elif 'running' in statuses:
+        # Active work takes priority; only call it 'complete' when nothing is still in flight.
+        if 'running' in statuses:
             new = 'running'
         elif 'pending' in statuses:
             new = 'pending'
+        elif 'complete' in statuses:
+            new = 'complete'
         else:
             new = 'error'
         if self.status != new:

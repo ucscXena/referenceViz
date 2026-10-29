@@ -467,7 +467,7 @@ def job_status(request, pk):
             data['uce_progress'] = result['uce_progress']
 
     projections = []
-    for proj in Projection.objects.select_related('reference__group').filter(job_id=str(job.pk)):
+    for proj in Projection.objects.select_related('reference__group', 'embedding').filter(job_id=str(job.pk)):
         p = {
             'id': str(proj.id),
             'reference_name': proj.reference.name,
@@ -477,8 +477,12 @@ def job_status(request, pk):
             p['has_download'] = True
             p['reference_id'] = proj.reference_id
             p['s3_uri'] = proj.result['s3_uri']
-        if proj.status == 'error' and proj.result:
-            p['error'] = proj.result.get('error', '')
+        if proj.status == 'error':
+            p['error'] = (proj.result or {}).get('error', '')
+            if proj.embedding:
+                p['can_rerun'] = proj.embedding.status == 'complete' and bool(proj.embedding.uce_s3_uri())
+            else:
+                p['can_rerun'] = bool(job.uce_s3_uri())
         if proj.status in ('pending', 'running'):
             batch_status = (proj.result or {}).get('batch_status')
             if batch_status:

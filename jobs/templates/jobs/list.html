@@ -67,8 +67,10 @@
             <div class="action-btns">
               <button type="button" class="action-btn explore-btn" data-viz-url="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" data-job-id="{{ job.id }}" title="Explore results"><span class="material-icons">explore</span>Explore</button>
               <a href="{% url 'download_projection' proj.pk %}" class="action-btn" title="Download results"><span class="material-icons">download</span>Download</a>
-              <button type="button" class="action-btn kebab-btn" data-proj-id="{{ proj.id }}" data-job-id="{{ job.id }}" data-viz-url="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" data-public="{{ proj.public|yesno:'true,false' }}" title="More options"><span class="material-icons">more_vert</span></button>
+              <button type="button" class="action-btn kebab-btn" data-proj-id="{{ proj.id }}" data-job-id="{{ job.id }}" data-viz-url="/visualization/{{ proj.reference.id }}/?overlay={{ proj.result.s3_uri|urlencode }}" data-public="{{ proj.public|yesno:'true,false' }}" data-proj-status="complete" data-can-rerun="true" title="More options"><span class="material-icons">more_vert</span></button>
             </div>
+          {% elif proj.status == 'error' %}
+            <button type="button" class="action-btn kebab-btn" data-proj-id="{{ proj.id }}" data-job-id="{{ job.id }}" data-proj-status="error" data-can-rerun="{% if proj.embedding and proj.embedding.status == 'complete' %}true{% elif not proj.embedding and proj.job.uce_s3_uri %}true{% else %}false{% endif %}" title="More options"><span class="material-icons">more_vert</span></button>
           {% else %}
             —
           {% endif %}
@@ -493,6 +495,11 @@ document.addEventListener('click', e => {
   e.stopPropagation();
   if (activeKebabBtn === btn && kebabPopover.style.display) { hideKebabPopover(); return; }
   activeKebabBtn = btn;
+  const isComplete = (btn.dataset.projStatus || 'complete') === 'complete';
+  const canRerun = btn.dataset.canRerun === 'true';
+  kebabPopover.querySelector('.kebab-share').style.display = isComplete ? '' : 'none';
+  kebabPopover.querySelector('.popover-divider').style.display = isComplete ? '' : 'none';
+  kebabPopover.querySelector('.kebab-rerun').style.display = (isComplete || canRerun) ? '' : 'none';
   kebabPopover.style.display = 'flex';
   const rect = btn.getBoundingClientRect();
   kebabPopover.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
@@ -706,6 +713,9 @@ document.addEventListener('click', e => {
             if (statusCell) {
               if (proj.status === 'error') {
                 statusCell.innerHTML = `<span class="status-error">Error <a href="/jobs/${jobId}/" class="status-error-info" title="View error details"><span class="material-icons">help_outline</span></a></span>`;
+                if (downloadCell) {
+                  downloadCell.innerHTML = `<button type="button" class="action-btn kebab-btn" data-proj-id="${proj.id}" data-job-id="${jobId}" data-proj-status="error" data-can-rerun="${proj.can_rerun ? 'true' : 'false'}" title="More options"><span class="material-icons">more_vert</span></button>`;
+                }
               } else {
                 const projWaiting = proj.status === 'running' && proj.batch_status && QUEUED_BATCH.has(proj.batch_status);
                 const label = projWaiting ? 'Waiting' : (proj.status === 'running' ? 'Mapping' : (LABELS[proj.status] || proj.status));
@@ -717,7 +727,7 @@ document.addEventListener('click', e => {
               downloadCell.innerHTML = `<div class="action-btns">` +
                 `<button type="button" class="action-btn explore-btn" data-viz-url="${vizUrl}" data-job-id="${jobId}" title="Explore results"><span class="material-icons">explore</span>Explore</button>` +
                 `<a href="/jobs/projections/${proj.id}/download/" class="action-btn" title="Download results"><span class="material-icons">download</span>Download</a>` +
-                `<button type="button" class="action-btn kebab-btn" data-proj-id="${proj.id}" data-job-id="${jobId}" data-viz-url="${vizUrl}" data-public="false" title="More options"><span class="material-icons">more_vert</span></button>` +
+                `<button type="button" class="action-btn kebab-btn" data-proj-id="${proj.id}" data-job-id="${jobId}" data-viz-url="${vizUrl}" data-public="false" data-proj-status="complete" data-can-rerun="true" title="More options"><span class="material-icons">more_vert</span></button>` +
                 `</div>`;
             }
           });
