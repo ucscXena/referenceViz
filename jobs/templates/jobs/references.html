@@ -13,43 +13,37 @@
     <thead>
       <tr>
         <th>Name</th>
-        <th>Version</th>
-        <th class="col-warning"></th>
         <th></th>
       </tr>
     </thead>
     <tbody>
       {% for group in groups %}
       <tr>
-        <td>{{ group.title }}</td>
-        <td class="ref-version-cell">
-          {% if group.active_versions|length > 1 %}
-          <select class="ref-version-select"
-                  id="ver-{{ group.id }}"
-                  data-default="{{ group.default_version_id }}"
-                  onchange="onVersionChange(this)">
-            <optgroup label="Latest">
-              <option value="{{ group.default_version_id }}" data-is-default="true" selected>
-                {{ group.default_version.version_label|default:group.default_version_id }}
-              </option>
-            </optgroup>
-            <optgroup label="Older versions">
-              {% for ref in group.active_versions %}
-              {% if ref.id != group.default_version_id %}
-              <option value="{{ ref.id }}" data-is-default="false">
-                {{ ref.version_label|default:ref.id }}
-              </option>
-              {% endif %}
-              {% endfor %}
-            </optgroup>
-          </select>
-          {% else %}
-          <span class="ref-version-single">{{ group.default_version.version_label|default:"—" }}</span>
-          {% endif %}
-        </td>
-        <td class="col-warning">
-          <span class="ref-old-warning" id="warn-{{ group.id }}">
-            Older reference — latest is recommended.
+        <td>
+          <span class="ref-name">{{ group.title }}</span>
+          <span class="ref-version-meta" id="vmeta-{{ group.id }}">
+            <span class="ref-version-label-inline" id="vlabel-{{ group.id }}">{{ group.default_version.version_label|default:"—" }}</span>
+            {% if group.active_versions|length > 1 %}
+            <span class="ref-old-warning" id="vwarn-{{ group.id }}" style="display:none">(older reference)</span>
+            <button type="button" class="ref-version-change" id="vchange-{{ group.id }}" onclick="showVersionSelect('{{ group.id }}')">Change</button>
+            <button type="button" class="ref-version-update" id="vupdate-{{ group.id }}" data-default="{{ group.default_version_id }}" data-default-label="{{ group.default_version.version_label|default:group.default_version_id }}" onclick="updateToLatest('{{ group.id }}')" style="display:none">Update to latest</button>
+            <select class="ref-version-select" id="ver-{{ group.id }}" data-default="{{ group.default_version_id }}" onchange="onVersionChange(this)" style="display:none">
+              <optgroup label="Latest">
+                <option value="{{ group.default_version_id }}" data-is-default="true" selected>
+                  {{ group.default_version.version_label|default:group.default_version_id }}
+                </option>
+              </optgroup>
+              <optgroup label="Older versions">
+                {% for ref in group.active_versions %}
+                {% if ref.id != group.default_version_id %}
+                <option value="{{ ref.id }}" data-is-default="false">
+                  {{ ref.version_label|default:ref.id }}
+                </option>
+                {% endif %}
+                {% endfor %}
+              </optgroup>
+            </select>
+            {% endif %}
           </span>
         </td>
         <td>
@@ -106,38 +100,104 @@
   text-decoration: none;
 }
 .back-link:hover { text-decoration: underline; }
-.ref-version-cell { width: 160px; }
+.ref-name {
+  display: block;
+}
+.ref-version-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+.ref-version-label-inline {
+  font-size: 0.78rem;
+  color: #999;
+}
+.ref-version-change {
+  font-size: 0.78rem;
+  color: #999;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ref-version-change--warn {
+  color: #b45309;
+}
+.ref-version-label-inline--warn {
+  color: #b45309;
+}
 .ref-version-select {
-  font-size: 0.875rem;
-  padding: 4px 6px;
+  font-size: 0.8rem;
+  padding: 2px 4px;
   border: 1px solid #ccc;
   border-radius: 4px;
-  width: 100%;
 }
-.col-warning { width: 220px; }
 .ref-old-warning {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: #b45309;
-  visibility: hidden;
 }
-.ref-old-warning.visible {
-  visibility: visible;
-}
-.ref-version-single {
-  font-size: 0.875rem;
-  color: #666;
+.ref-version-update {
+  font-size: 0.78rem;
+  color: #1976d2;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 </style>
 
 <script>
+function updateToLatest(groupId) {
+  var updateBtn = document.getElementById('vupdate-' + groupId);
+  var select = document.getElementById('ver-' + groupId);
+  select.value = updateBtn.dataset.default;
+  // Sync selected attribute
+  for (var i = 0; i < select.options.length; i++) {
+    select.options[i].selected = select.options[i].value === updateBtn.dataset.default;
+  }
+  onVersionChange(select);
+}
+
+function showVersionSelect(groupId) {
+  document.getElementById('vlabel-' + groupId).style.display = 'none';
+  document.getElementById('vchange-' + groupId).style.display = 'none';
+  var sel = document.getElementById('ver-' + groupId);
+  sel.style.display = '';
+  sel.focus();
+}
+
 function onVersionChange(select) {
   var groupId = select.id.replace('ver-', '');
   var selectedOption = select.options[select.selectedIndex];
   var isDefault = selectedOption.dataset.isDefault === 'true';
 
   document.getElementById('btn-' + groupId).href = '{% url "job_create" %}?ref=' + select.value;
-  document.getElementById('warn-' + groupId).classList.toggle('visible', !isDefault);
-}
 
+  // Collapse back to fine print
+  select.style.display = 'none';
+  var label = document.getElementById('vlabel-' + groupId);
+  label.textContent = selectedOption.textContent.trim();
+  label.style.display = '';
+  var changeBtn = document.getElementById('vchange-' + groupId);
+  changeBtn.style.display = '';
+  var warn = document.getElementById('vwarn-' + groupId);
+  var updateBtn = document.getElementById('vupdate-' + groupId);
+  if (!isDefault) {
+    label.classList.add('ref-version-label-inline--warn');
+    if (warn) warn.style.display = '';
+    changeBtn.style.display = 'none';
+    if (updateBtn) updateBtn.style.display = '';
+  } else {
+    label.classList.remove('ref-version-label-inline--warn');
+    if (warn) warn.style.display = 'none';
+    changeBtn.style.display = '';
+    if (updateBtn) updateBtn.style.display = 'none';
+  }
+}
 </script>
 {% endblock %}
