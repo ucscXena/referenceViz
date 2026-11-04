@@ -8,8 +8,8 @@
     <a href="{% url 'job_list' %}" class="back-link">&#8592; Back to mappings</a>
   </div>
 
-  <!-- ── Step 1: Choose a file ── -->
-  <div class="step-label">1. Choose a file</div>
+  <!-- ── Step 1: Select a file ── -->
+  <div class="step-label">1. Select a file</div>
   <div class="file-panels">
 
     <!-- Left: upload new -->
@@ -18,13 +18,13 @@
         <input type="file" id="file-input" accept=".h5ad" style="display:none">
         <label for="file-input" class="upload-label">
           <span class="upload-icon">&#8679;</span>
-          <span id="upload-label-text">Drop a .h5ad file here, or click to browse</span>
+          <span id="upload-label-text">Drop a .h5ad file here, or click to select</span>
         </label>
       </div>
       <div id="upload-selected" style="display:none" class="file-selected-row">
         <span class="material-icons file-selected-icon">insert_drive_file</span>
         <span id="upload-selected-name" class="file-selected-name"></span>
-        <button type="button" class="file-clear-btn" id="upload-clear" title="Clear">
+        <button type="button" class="file-clear-btn" id="upload-clear" title="Clear selection">
           <span class="material-icons">close</span>
         </button>
       </div>
@@ -49,7 +49,7 @@
 
     <!-- Right: existing files -->
     <div class="file-panel" id="panel-existing">
-      <div class="existing-label">Use a previously uploaded file</div>
+      <div class="existing-label">Select a previously uploaded file</div>
       {% if recent_jobs %}
       <div class="recent-scroll">
         <ul class="recent-list" id="recent-list">
@@ -73,8 +73,8 @@
 
   </div>
 
-  <!-- ── Step 2: Choose references ── -->
-  <div class="step-label" style="margin-top:1.75rem;">2. Choose references</div>
+  <!-- ── Step 2: Select references ── -->
+  <div class="step-label" style="margin-top:1.75rem;">2. Select references</div>
 
   {% if groups %}
   <table class="job-table ref-table">
@@ -306,7 +306,7 @@ document.querySelectorAll('.recent-btn').forEach(btn => {
     const clearBtn = document.createElement('button');
     clearBtn.type = 'button';
     clearBtn.className = 'file-clear-btn recent-clear-btn';
-    clearBtn.title = 'Clear';
+    clearBtn.title = 'Clear selection';
     clearBtn.innerHTML = '<span class="material-icons">close</span>';
     clearBtn.addEventListener('click', e => {
       e.stopPropagation();
