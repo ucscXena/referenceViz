@@ -458,6 +458,17 @@ submitBtn.addEventListener('click', async () => {
   }
 });
 
+// Pre-select reference from ?ref= query param
+(function() {
+  const refId = new URLSearchParams(window.location.search).get('ref');
+  if (!refId) return;
+  const cb = document.getElementById('ref-' + refId);
+  if (cb) {
+    cb.checked = true;
+    checkSubmitReady();
+  }
+})();
+
 // Convert dates to local timezone
 document.querySelectorAll('time[datetime]').forEach(el => {
   el.textContent = new Date(el.getAttribute('datetime')).toLocaleDateString(undefined, {
