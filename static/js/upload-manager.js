@@ -102,8 +102,10 @@
     return data.parts; // [{PartNumber, ETag}]
   }
 
-  async function completeUpload(jobId, uploadId, key, parts, refId, mixedPrecision, fileSize) {
-    const resp = await post('/jobs/upload/complete/', {jobId, uploadId, key, parts, refId, mixedPrecision, fileSize});
+  async function completeUpload(jobId, uploadId, key, parts, refId, mixedPrecision, fileSize, refIds) {
+    const body = refIds ? {jobId, uploadId, key, parts, refIds, mixedPrecision, fileSize}
+                        : {jobId, uploadId, key, parts, refId, mixedPrecision, fileSize};
+    const resp = await post('/jobs/upload/complete/', body);
     if (!resp.ok) {
       const body = await resp.json().catch(() => ({}));
       if (body.error === 'upload_truncated') {
@@ -123,7 +125,7 @@
   // ── Upload loop ───────────────────────────────────────────────────────────
 
   async function runUpload(db, state) {
-    const {uploadId, key, jobId, file, refId, mixedPrecision} = state;
+    const {uploadId, key, jobId, file, refId, refIds, mixedPrecision} = state;
     let etags = Object.assign({}, state.etags);
 
     console.log('[upload-manager] runUpload: job', jobId, 'file valid?', !!(file && typeof file.slice === 'function'));
@@ -194,7 +196,7 @@
       .map(([n, e]) => ({PartNumber: parseInt(n, 10), ETag: e}))
       .sort((a, b) => a.PartNumber - b.PartNumber);
 
-    await completeUpload(jobId, uploadId, key, parts, refId, mixedPrecision, file.size);
+    await completeUpload(jobId, uploadId, key, parts, refId, mixedPrecision, file.size, refIds);
     await dbDelete(db, uploadId).catch(() => {});
     bc.postMessage({type: 'complete', jobId});
   }
@@ -246,7 +248,7 @@
       if (state) await dbDelete(db, state.uploadId);
     },
 
-    async start(file, jobId, uploadId, key, {refId = null, mixedPrecision = 'bf16'} = {}) {
+    async start(file, jobId, uploadId, key, {refId = null, refIds = null, mixedPrecision = 'bf16'} = {}) {
       if (!SUPPORTED) {
         throw new Error(
           'Background uploads require IndexedDB and Web Locks (secure context — HTTPS or localhost). ' +
@@ -254,7 +256,7 @@
         );
       }
       const db = await openDb();
-      const state = {uploadId, key, jobId, file, refId, mixedPrecision, etags: {}, partSize: choosePartSize(file.size)};
+      const state = {uploadId, key, jobId, file, refId, refIds, mixedPrecision, etags: {}, partSize: choosePartSize(file.size)};
       try {
         await dbPut(db, state);
       } catch (e) {

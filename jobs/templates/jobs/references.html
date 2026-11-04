@@ -1,17 +1,86 @@
 {% extends "base.html" %}
-{% block title %}References — UCSC Brain Explorer{% endblock %}
+{% block title %}Map New Cells — UCSC Brain Explorer{% endblock %}
 {% block base_content %}
 <div class="base-container wide">
 
   <div class="list-toolbar">
-    <h1 class="list-title">References</h1>
+    <h1 class="list-title">Map New Cells</h1>
     <a href="{% url 'job_list' %}" class="back-link">&#8592; Back to mappings</a>
   </div>
+
+  <!-- ── Step 1: Choose a file ── -->
+  <div class="step-label">1. Choose a file</div>
+  <div class="file-panels">
+
+    <!-- Left: upload new -->
+    <div class="file-panel" id="panel-upload">
+      <div class="upload-area" id="upload-area">
+        <input type="file" id="file-input" accept=".h5ad" style="display:none">
+        <label for="file-input" class="upload-label">
+          <span class="upload-icon">&#8679;</span>
+          <span id="upload-label-text">Drop a .h5ad file here, or click to browse</span>
+        </label>
+      </div>
+      <div id="upload-selected" style="display:none" class="file-selected-row">
+        <span class="material-icons file-selected-icon">insert_drive_file</span>
+        <span id="upload-selected-name" class="file-selected-name"></span>
+        <button type="button" class="file-clear-btn" id="upload-clear" title="Clear">
+          <span class="material-icons">close</span>
+        </button>
+      </div>
+      <details class="upload-help">
+        <summary class="upload-help-summary">What data do we accept?</summary>
+        <ul class="upload-help-list">
+          <li>We take any raw or normalized data.</li>
+          <li>We recognize Ensembl and Hugo gene IDs.</li>
+          <li>We map data across species.</li>
+          <li>We currently map human, mouse, rhesus macaque, zebrafish, and others. <a href="https://www.nature.com/articles/s41586-026-10689-z" target="_blank" rel="noopener">Full list</a></li>
+        </ul>
+      </details>
+
+      <div id="progress" style="display:none; margin-top:0.75rem;">
+        <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+        <p id="progress-msg" class="progress-msg">Preparing…</p>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="file-panel-divider"><span>or</span></div>
+
+    <!-- Right: existing files -->
+    <div class="file-panel" id="panel-existing">
+      <div class="existing-label">Use a previously uploaded file</div>
+      {% if recent_jobs %}
+      <div class="recent-scroll">
+        <ul class="recent-list" id="recent-list">
+          {% for rj in recent_jobs %}
+          <li class="recent-item" data-job-id="{{ rj.id }}">
+            <button class="recent-btn" type="button">
+              <span class="recent-filename">
+                {{ rj.original_filename }}
+                {% if rj.cell_count %}<span class="recent-cell-count">{{ rj.cell_count }} cells</span>{% endif %}
+              </span>
+              <time datetime="{{ rj.created_at|date:"c" }}" class="recent-date">{{ rj.created_at|date:"Y-m-d" }}</time>
+            </button>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% else %}
+      <p class="no-recent">No previously uploaded files yet.</p>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- ── Step 2: Choose references ── -->
+  <div class="step-label" style="margin-top:1.75rem;">2. Choose references</div>
 
   {% if groups %}
   <table class="job-table ref-table">
     <thead>
       <tr>
+        <th class="col-check-ref"></th>
         <th>Name</th>
         <th></th>
       </tr>
@@ -19,39 +88,39 @@
     <tbody>
       {% for group in groups %}
       <tr>
-        <td>
-          <span class="ref-name">{{ group.title }}</span>
-          <span class="ref-version-meta" id="vmeta-{{ group.id }}">
-            <span class="ref-version-label-inline" id="vlabel-{{ group.id }}">{{ group.default_version.version_label|default:"—" }}</span>
-            {% if group.active_versions|length > 1 %}
-            <span class="ref-old-warning" id="vwarn-{{ group.id }}" style="display:none">(older reference)</span>
-            <button type="button" class="ref-version-change" id="vchange-{{ group.id }}" onclick="showVersionSelect('{{ group.id }}')">Change</button>
-            <button type="button" class="ref-version-update" id="vupdate-{{ group.id }}" data-default="{{ group.default_version_id }}" data-default-label="{{ group.default_version.version_label|default:group.default_version_id }}" onclick="updateToLatest('{{ group.id }}')" style="display:none">Update to latest</button>
-            <select class="ref-version-select" id="ver-{{ group.id }}" data-default="{{ group.default_version_id }}" onchange="onVersionChange(this)" style="display:none">
-              <optgroup label="Latest">
-                <option value="{{ group.default_version_id }}" data-is-default="true" selected>
-                  {{ group.default_version.version_label|default:group.default_version_id }}
-                </option>
-              </optgroup>
-              <optgroup label="Older versions">
-                {% for ref in group.active_versions %}
-                {% if ref.id != group.default_version_id %}
-                <option value="{{ ref.id }}" data-is-default="false">
-                  {{ ref.version_label|default:ref.id }}
-                </option>
-                {% endif %}
-                {% endfor %}
-              </optgroup>
-            </select>
-            {% endif %}
-          </span>
+        <td class="col-check-ref">
+          <input type="checkbox" class="ref-checkbox" value="{{ group.default_version_id }}" id="ref-{{ group.id }}" data-group-id="{{ group.id }}">
         </td>
         <td>
-          <a href="{% url 'job_create' %}?ref={{ group.default_version_id }}"
-             class="base-button ref-map-btn"
-             id="btn-{{ group.id }}"
-             style="padding:5px 12px; font-size:0.85rem; white-space:nowrap;">Map cells</a>
+          <label for="ref-{{ group.id }}" class="ref-row-label">
+            <a href="/references/{{ group.id }}/" class="ref-name-link" target="_blank">{{ group.title }}</a>
+            <span class="ref-version-meta" id="vmeta-{{ group.id }}">
+              <span class="ref-version-label-inline" id="vlabel-{{ group.id }}">{{ group.default_version.version_label|default:"—" }}</span>
+              {% if group.active_versions|length > 1 %}
+              <span class="ref-old-warning" id="vwarn-{{ group.id }}" style="display:none">(older reference)</span>
+              <button type="button" class="ref-version-change" id="vchange-{{ group.id }}" onclick="showVersionSelect('{{ group.id }}'); event.preventDefault();">Change</button>
+              <button type="button" class="ref-version-update" id="vupdate-{{ group.id }}" data-default="{{ group.default_version_id }}" data-default-label="{{ group.default_version.version_label|default:group.default_version_id }}" onclick="updateToLatest('{{ group.id }}'); event.preventDefault();" style="display:none">Update to latest</button>
+              <select class="ref-version-select" id="ver-{{ group.id }}" data-group-id="{{ group.id }}" data-default="{{ group.default_version_id }}" onchange="onVersionChange(this)" style="display:none">
+                <optgroup label="Latest">
+                  <option value="{{ group.default_version_id }}" data-is-default="true" selected>
+                    {{ group.default_version.version_label|default:group.default_version_id }}
+                  </option>
+                </optgroup>
+                <optgroup label="Older versions">
+                  {% for ref in group.active_versions %}
+                  {% if ref.id != group.default_version_id %}
+                  <option value="{{ ref.id }}" data-is-default="false">
+                    {{ ref.version_label|default:ref.id }}
+                  </option>
+                  {% endif %}
+                  {% endfor %}
+                </optgroup>
+              </select>
+              {% endif %}
+            </span>
+          </label>
         </td>
+        <td></td>
       </tr>
       {% endfor %}
     </tbody>
@@ -60,7 +129,342 @@
   <p style="color:#888;">No references defined. Add them via <a href="{% url 'admin:jobs_reference_changelist' %}">Django admin</a>.</p>
   {% endif %}
 
+  <div class="submit-row">
+    <button id="submit-btn" class="base-button" disabled>Start analysis</button>
+  </div>
+
 </div>
+
+<script>
+const csrfToken = '{{ csrf_token }}';
+
+// ── State ──
+let selectedFile = null;       // File object (new upload)
+let selectedJobId = null;      // existing job id (remap)
+let activePanel = null;        // 'upload' | 'existing' | null
+
+// ── Elements ──
+const uploadArea    = document.getElementById('upload-area');
+const fileInput     = document.getElementById('file-input');
+const uploadSelected = document.getElementById('upload-selected');
+const uploadSelectedName = document.getElementById('upload-selected-name');
+const uploadClear   = document.getElementById('upload-clear');
+const progressDiv   = document.getElementById('progress');
+const progressBar   = document.getElementById('progress-bar');
+const progressMsg   = document.getElementById('progress-msg');
+const panelUpload   = document.getElementById('panel-upload');
+const panelExisting = document.getElementById('panel-existing');
+const submitBtn     = document.getElementById('submit-btn');
+
+// ── Panel activation ──
+function setActivePanel(panel) {
+  activePanel = panel;
+  panelUpload.classList.toggle('panel-inactive', panel === 'existing');
+  panelExisting.classList.toggle('panel-inactive', panel === 'upload');
+  hideSwitchWarning();
+  checkSubmitReady();
+}
+
+function showSwitchWarning(targetPanel, anchorEvent) {
+  hideSwitchWarning();
+  const popover = document.createElement('div');
+  popover.className = 'switch-popover';
+  popover.id = 'switch-warning';
+  popover.innerHTML =
+    `<p class="switch-popover-text">Clear previously selected file?</p>` +
+    `<div class="switch-popover-btns">` +
+    `<button type="button" class="switch-warning-proceed">Clear</button>` +
+    `<button type="button" class="switch-warning-cancel">Cancel</button>` +
+    `</div>`;
+  popover.querySelector('.switch-warning-proceed').addEventListener('click', () => {
+    if (targetPanel === 'upload') clearExisting();
+    else clearUpload();
+    hideSwitchWarning();
+  });
+  popover.querySelector('.switch-warning-cancel').addEventListener('click', hideSwitchWarning);
+  document.body.appendChild(popover);
+
+  // Position near click point, keeping within viewport
+  const x = anchorEvent.clientX + window.scrollX;
+  const y = anchorEvent.clientY + window.scrollY;
+  popover.style.left = x + 'px';
+  popover.style.top  = (y + 12) + 'px';
+
+  // Nudge left if it would overflow the right edge
+  requestAnimationFrame(() => {
+    const rect = popover.getBoundingClientRect();
+    if (rect.right > window.innerWidth - 8) {
+      popover.style.left = (x - rect.width) + 'px';
+    }
+  });
+}
+
+function hideSwitchWarning() {
+  const w = document.getElementById('switch-warning');
+  if (w) w.remove();
+}
+
+document.addEventListener('click', e => {
+  const w = document.getElementById('switch-warning');
+  if (w && !w.contains(e.target)) hideSwitchWarning();
+}, true);
+
+function clearUpload() {
+  selectedFile = null;
+  fileInput.value = '';
+  uploadArea.style.display = '';
+  uploadSelected.style.display = 'none';
+  progressDiv.style.display = 'none';
+  progressBar.style.width = '0%';
+  progressBar.style.background = '';
+  if (activePanel === 'upload') {
+    activePanel = null;
+    panelUpload.classList.remove('panel-inactive');
+    panelExisting.classList.remove('panel-inactive');
+  }
+  checkSubmitReady();
+}
+
+function clearExisting() {
+  selectedJobId = null;
+  document.querySelectorAll('.recent-item').forEach(li => {
+    li.classList.remove('recent-selected');
+    const x = li.querySelector('.recent-clear-btn');
+    if (x) x.remove();
+  });
+  if (activePanel === 'existing') {
+    activePanel = null;
+    panelUpload.classList.remove('panel-inactive');
+    panelExisting.classList.remove('panel-inactive');
+  }
+  checkSubmitReady();
+}
+
+function checkSubmitReady() {
+  const hasFile = selectedFile || selectedJobId;
+  const hasRef  = document.querySelectorAll('.ref-checkbox:checked').length > 0;
+  submitBtn.disabled = !(hasFile && hasRef);
+}
+
+// ── Clicking an inactive panel shows the switch warning ──
+panelUpload.addEventListener('click', e => {
+  if (activePanel === 'existing' && !e.target.closest('#switch-warning')) {
+    showSwitchWarning('upload', e);
+  }
+});
+panelExisting.addEventListener('click', e => {
+  if (activePanel === 'upload' && !e.target.closest('#switch-warning')) {
+    showSwitchWarning('existing', e);
+  }
+});
+
+// ── Upload panel ──
+function setFileSelected(file) {
+  selectedFile = file;
+  uploadArea.style.display = 'none';
+  uploadSelectedName.textContent = file.name;
+  uploadSelected.style.display = 'flex';
+  setActivePanel('upload');
+}
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) setFileSelected(fileInput.files[0]);
+});
+
+uploadArea.addEventListener('dragover', e => {
+  e.preventDefault();
+  uploadArea.classList.add('drag-over');
+});
+uploadArea.addEventListener('dragleave', e => {
+  if (!uploadArea.contains(e.relatedTarget)) uploadArea.classList.remove('drag-over');
+});
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadArea.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  fileInput.files = dt.files;
+  setFileSelected(file);
+});
+
+uploadClear.addEventListener('click', clearUpload);
+
+// ── Existing files panel ──
+document.querySelectorAll('.recent-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.recent-item').forEach(li => {
+      li.classList.remove('recent-selected');
+      const x = li.querySelector('.recent-clear-btn');
+      if (x) x.remove();
+    });
+    const li = btn.closest('.recent-item');
+    li.classList.add('recent-selected');
+    selectedJobId = li.dataset.jobId;
+
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'file-clear-btn recent-clear-btn';
+    clearBtn.title = 'Clear';
+    clearBtn.innerHTML = '<span class="material-icons">close</span>';
+    clearBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      clearExisting();
+    });
+    btn.appendChild(clearBtn);
+
+    setActivePanel('existing');
+  });
+});
+
+// ── Reference checkboxes ──
+document.querySelectorAll('.ref-checkbox').forEach(cb => {
+  cb.addEventListener('change', checkSubmitReady);
+});
+
+// ── Version picker ──
+function updateToLatest(groupId) {
+  var updateBtn = document.getElementById('vupdate-' + groupId);
+  var select = document.getElementById('ver-' + groupId);
+  select.value = updateBtn.dataset.default;
+  for (var i = 0; i < select.options.length; i++) {
+    select.options[i].selected = select.options[i].value === updateBtn.dataset.default;
+  }
+  onVersionChange(select);
+}
+
+function showVersionSelect(groupId) {
+  document.getElementById('vlabel-' + groupId).style.display = 'none';
+  document.getElementById('vchange-' + groupId).style.display = 'none';
+  var warn = document.getElementById('vwarn-' + groupId);
+  if (warn) warn.style.display = 'none';
+  var update = document.getElementById('vupdate-' + groupId);
+  if (update) update.style.display = 'none';
+  var sel = document.getElementById('ver-' + groupId);
+  sel.style.display = '';
+  sel.focus();
+}
+
+function onVersionChange(select) {
+  var groupId = select.dataset.groupId;
+  var selectedOption = select.options[select.selectedIndex];
+  var isDefault = selectedOption.dataset.isDefault === 'true';
+  var newRefId = select.value;
+
+  // Update the checkbox value for this group
+  var cb = document.getElementById('ref-' + groupId);
+  if (cb) cb.value = newRefId;
+
+  // Collapse back to fine print
+  select.style.display = 'none';
+  var label = document.getElementById('vlabel-' + groupId);
+  label.textContent = selectedOption.textContent.trim();
+  label.style.display = '';
+
+  var warn = document.getElementById('vwarn-' + groupId);
+  var changeBtn = document.getElementById('vchange-' + groupId);
+  var updateBtn = document.getElementById('vupdate-' + groupId);
+
+  if (!isDefault) {
+    label.classList.add('ref-version-label-inline--warn');
+    if (warn) warn.style.display = '';
+    if (changeBtn) changeBtn.style.display = 'none';
+    if (updateBtn) updateBtn.style.display = '';
+  } else {
+    label.classList.remove('ref-version-label-inline--warn');
+    if (warn) warn.style.display = 'none';
+    if (changeBtn) changeBtn.style.display = '';
+    if (updateBtn) updateBtn.style.display = 'none';
+  }
+}
+
+// ── Submit ──
+submitBtn.addEventListener('click', async () => {
+  const refIds = [...document.querySelectorAll('.ref-checkbox:checked')].map(cb => cb.value);
+  if (!refIds.length) return;
+
+  submitBtn.disabled = true;
+
+  if (selectedJobId) {
+    // Remap existing
+    try {
+      const resp = await fetch(`/jobs/${selectedJobId}/project/`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({ref_ids: refIds}),
+      });
+      if (!resp.ok) throw new Error('Request failed');
+      window.location.href = '/jobs/';
+    } catch (err) {
+      submitBtn.disabled = false;
+      alert('Something went wrong. Please try again.');
+    }
+    return;
+  }
+
+  // New upload
+  const file = selectedFile;
+  progressDiv.style.display = 'block';
+  progressBar.style.width = '30%';
+  progressMsg.textContent = 'Starting upload…';
+
+  try {
+    const resp = await fetch('{% url "multipart_create" %}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+      body: JSON.stringify({filename: file.name}),
+    });
+    if (!resp.ok) throw new Error('Failed to initiate upload');
+    const {jobId, uploadId, key} = await resp.json();
+
+    const {background} = await window.UploadManager.start(file, jobId, uploadId, key, {refIds});
+
+    if (background) {
+      progressBar.style.width = '100%';
+      progressMsg.textContent = 'Upload started — redirecting…';
+      window.location.href = '/jobs/';
+    } else {
+      progressMsg.textContent = 'Uploading… do not close or leave this page.';
+      const guard = e => { e.preventDefault(); e.returnValue = ''; };
+      window.addEventListener('beforeunload', guard);
+
+      const bc = new BroadcastChannel('upload-progress');
+      bc.addEventListener('message', e => {
+        if (e.data?.jobId !== jobId) return;
+        if (e.data.type === 'progress') {
+          const pct = Math.round(e.data.done / e.data.total * 100);
+          progressBar.style.width = pct + '%';
+          progressMsg.textContent = `Uploading… ${pct}% — do not close or leave this page.`;
+        } else if (e.data.type === 'complete') {
+          bc.close();
+          window.removeEventListener('beforeunload', guard);
+          progressBar.style.width = '100%';
+          progressMsg.textContent = 'Upload complete — redirecting…';
+          window.location.href = '/jobs/';
+        } else if (e.data.type === 'error') {
+          bc.close();
+          window.removeEventListener('beforeunload', guard);
+          progressMsg.textContent = 'Error: ' + (e.data.message || 'upload failed');
+          progressBar.style.background = '#d32f2f';
+          submitBtn.disabled = false;
+        }
+      });
+    }
+  } catch (err) {
+    progressMsg.textContent = 'Error: ' + (err.message || 'upload failed');
+    progressBar.style.background = '#d32f2f';
+    submitBtn.disabled = false;
+  }
+});
+
+// Convert dates to local timezone
+document.querySelectorAll('time[datetime]').forEach(el => {
+  el.textContent = new Date(el.getAttribute('datetime')).toLocaleDateString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric'
+  });
+});
+</script>
 
 <style>
 .list-toolbar {
@@ -75,6 +479,172 @@
   color: #333;
   margin: 0;
 }
+.back-link {
+  font-size: 0.875rem;
+  color: #1c7cc7;
+  text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
+
+.step-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+  margin-bottom: 0.6rem;
+}
+
+/* ── File panels ── */
+.file-panels {
+  display: flex;
+  gap: 0;
+  align-items: stretch;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.file-panel {
+  flex: 1;
+  padding: 1.25rem;
+  background: #fff;
+  transition: opacity 0.2s;
+  min-width: 0;
+}
+.file-panel.panel-inactive {
+  opacity: 0.4;
+  cursor: pointer;
+}
+.file-panel.panel-inactive > *:not(#switch-warning) {
+  pointer-events: none;
+}
+.file-panel-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  flex-shrink: 0;
+  background: #f5f5f5;
+  border-left: 1px solid #e0e0e0;
+  border-right: 1px solid #e0e0e0;
+  font-size: 0.75rem;
+  color: #aaa;
+  font-weight: 500;
+}
+
+.upload-area {
+  border: 2px dashed #bdbdbd;
+  border-radius: 4px;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  background: #fafafa;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.upload-area:hover, .upload-area.drag-over { border-color: #1976d2; background: #e3f2fd; }
+.upload-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: #666;
+  font-size: 0.875rem;
+}
+.upload-icon { font-size: 1.75rem; color: #1976d2; line-height: 1; }
+
+.file-selected-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+.file-selected-icon { font-size: 18px; color: #1976d2; flex-shrink: 0; }
+.file-selected-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1565c0; font-weight: 500; }
+.file-clear-btn {
+  background: none; border: none; cursor: pointer; color: #888;
+  display: flex; align-items: center; padding: 2px; border-radius: 3px;
+  flex-shrink: 0; transition: color 0.15s;
+}
+.file-clear-btn:hover { color: #c62828; }
+.file-clear-btn .material-icons { font-size: 16px; }
+
+.progress-bar-wrap { background: #e0e0e0; border-radius: 4px; height: 5px; overflow: hidden; }
+.progress-bar { height: 100%; background: #1976d2; border-radius: 4px; width: 0%; transition: width 0.3s ease; }
+.progress-msg { font-size: 0.8rem; color: #555; margin: 0.4rem 0 0; }
+
+.existing-label { font-size: 0.8rem; color: #888; margin-bottom: 0.6rem; }
+.recent-scroll {
+  max-height: 140px;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+.recent-list { list-style: none; margin: 0; padding: 4px; display: flex; flex-direction: column; gap: 4px; }
+.recent-btn {
+  display: flex; justify-content: space-between; align-items: center;
+  width: 100%; padding: 7px 10px; background: #fafafa; border: 1px solid transparent;
+  border-radius: 3px; cursor: pointer; font-size: 0.85rem; text-align: left; gap: 1rem;
+}
+.recent-btn:hover { background: #e3f2fd; border-color: #90caf9; }
+.recent-selected .recent-btn { background: #e3f2fd; border-color: #1976d2; outline: 2px solid #1976d2; }
+.recent-filename { color: #333; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; flex-direction: column; gap: 1px; }
+.recent-cell-count { font-size: 0.78rem; font-weight: 400; color: #888; }
+.recent-date { color: #888; white-space: nowrap; flex-shrink: 0; font-size: 0.8rem; }
+.no-recent { font-size: 0.875rem; color: #aaa; margin: 0; }
+
+.upload-help {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: #666;
+}
+.upload-help-summary {
+  cursor: pointer;
+  color: #1976d2;
+  font-size: 0.8rem;
+  user-select: none;
+}
+.upload-help-summary:hover { text-decoration: underline; }
+.upload-help-list {
+  margin: 0.5rem 0 0 1rem;
+  padding: 0;
+  line-height: 1.6;
+}
+.upload-help-list a { color: #1976d2; }
+
+.switch-popover {
+  position: absolute;
+  z-index: 400;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.14);
+  padding: 12px 14px;
+  width: 210px;
+}
+.switch-popover-text {
+  font-size: 0.85rem;
+  color: #333;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+.switch-popover-btns { display: flex; gap: 6px; justify-content: flex-end; }
+.switch-warning-proceed {
+  padding: 4px 12px; border-radius: 4px; font-size: 0.8rem; font-weight: 500;
+  background: #1976d2; color: #fff; border: none; cursor: pointer;
+}
+.switch-warning-proceed:hover { background: #1565c0; }
+.switch-warning-cancel {
+  padding: 4px 10px; border-radius: 4px; font-size: 0.8rem;
+  background: none; color: #555; border: 1px solid #ccc; cursor: pointer;
+}
+.switch-warning-cancel:hover { background: #f5f5f5; }
+
+/* ── References table ── */
 .job-table {
   width: 100%;
   border-collapse: collapse;
@@ -83,121 +653,47 @@
 .job-table th {
   background: #f5f5f5;
   border-bottom: 2px solid #e0e0e0;
-  padding: 10px 12px;
+  padding: 8px 12px;
   text-align: left;
   font-weight: 500;
   color: #444;
 }
 .job-table td {
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid #f0f0f0;
   vertical-align: middle;
 }
 .job-table tbody tr:hover { background: #fafafa; }
-.back-link {
-  font-size: 0.875rem;
-  color: #1c7cc7;
-  text-decoration: none;
-}
-.back-link:hover { text-decoration: underline; }
-.ref-name {
-  display: block;
-}
+.col-check-ref { width: 36px; }
+.ref-row-label { display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.ref-name-link { color: #1976d2; text-decoration: none; }
+.ref-name-link:hover { text-decoration: underline; }
+
 .ref-version-meta {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-top: 2px;
 }
-.ref-version-label-inline {
-  font-size: 0.78rem;
-  color: #999;
-}
+.ref-version-label-inline { font-size: 0.78rem; color: #999; }
+.ref-version-label-inline--warn { color: #b45309; }
 .ref-version-change {
-  font-size: 0.78rem;
-  color: #999;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.ref-version-change--warn {
-  color: #b45309;
-}
-.ref-version-label-inline--warn {
-  color: #b45309;
-}
-.ref-version-select {
-  font-size: 0.8rem;
-  padding: 2px 4px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-}
-.ref-old-warning {
-  font-size: 0.78rem;
-  color: #b45309;
+  font-size: 0.78rem; color: #999; background: none; border: none;
+  padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
 }
 .ref-version-update {
-  font-size: 0.78rem;
-  color: #1976d2;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  font-size: 0.78rem; color: #1976d2; background: none; border: none;
+  padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
+.ref-old-warning { font-size: 0.78rem; color: #b45309; }
+.ref-version-select {
+  font-size: 0.8rem; padding: 2px 4px; border: 1px solid #ccc; border-radius: 4px;
+}
+
+/* ── Submit ── */
+.submit-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
 }
 </style>
-
-<script>
-function updateToLatest(groupId) {
-  var updateBtn = document.getElementById('vupdate-' + groupId);
-  var select = document.getElementById('ver-' + groupId);
-  select.value = updateBtn.dataset.default;
-  // Sync selected attribute
-  for (var i = 0; i < select.options.length; i++) {
-    select.options[i].selected = select.options[i].value === updateBtn.dataset.default;
-  }
-  onVersionChange(select);
-}
-
-function showVersionSelect(groupId) {
-  document.getElementById('vlabel-' + groupId).style.display = 'none';
-  document.getElementById('vchange-' + groupId).style.display = 'none';
-  var sel = document.getElementById('ver-' + groupId);
-  sel.style.display = '';
-  sel.focus();
-}
-
-function onVersionChange(select) {
-  var groupId = select.id.replace('ver-', '');
-  var selectedOption = select.options[select.selectedIndex];
-  var isDefault = selectedOption.dataset.isDefault === 'true';
-
-  document.getElementById('btn-' + groupId).href = '{% url "job_create" %}?ref=' + select.value;
-
-  // Collapse back to fine print
-  select.style.display = 'none';
-  var label = document.getElementById('vlabel-' + groupId);
-  label.textContent = selectedOption.textContent.trim();
-  label.style.display = '';
-  var changeBtn = document.getElementById('vchange-' + groupId);
-  changeBtn.style.display = '';
-  var warn = document.getElementById('vwarn-' + groupId);
-  var updateBtn = document.getElementById('vupdate-' + groupId);
-  if (!isDefault) {
-    label.classList.add('ref-version-label-inline--warn');
-    if (warn) warn.style.display = '';
-    changeBtn.style.display = 'none';
-    if (updateBtn) updateBtn.style.display = '';
-  } else {
-    label.classList.remove('ref-version-label-inline--warn');
-    if (warn) warn.style.display = 'none';
-    changeBtn.style.display = '';
-    if (updateBtn) updateBtn.style.display = 'none';
-  }
-}
-</script>
 {% endblock %}
