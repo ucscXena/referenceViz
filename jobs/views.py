@@ -410,14 +410,53 @@ def project_existing(request, job_id):
 def job_list(request):
     jobs = (
         Job.objects.filter(user=request.user)
-        .prefetch_related('projections__reference__group')
+        .prefetch_related('projections__reference__group', 'projections__embedding', 'embeddings')
         .order_by('-created_at')
     )
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
+
+    jobs_data = []
+    for job in jobs:
+        projs_data = []
+        for proj in job.projections.all():
+            can_rerun = False
+            if proj.embedding:
+                can_rerun = proj.embedding.status == 'complete' and bool(proj.embedding.uce_s3_uri())
+            elif job.uce_s3_uri():
+                can_rerun = True
+            projs_data.append({
+                'id': str(proj.id),
+                'reference_id': proj.reference_id,
+                'reference_name': proj.reference.name,
+                'reference_version': proj.reference.version_label or '',
+                'status': proj.status,
+                's3_uri': proj.result.get('s3_uri') if proj.result else None,
+                'public': proj.public,
+                'can_rerun': can_rerun,
+                'embedding_status': proj.embedding.status if proj.embedding else None,
+                'batch_status': proj.result.get('batch_status') if proj.result else None,
+            })
+        jobs_data.append({
+            'id': str(job.id),
+            'filename': job.original_filename or 'unknown',
+            'status': job.status,
+            'cell_count': job.cell_count(),
+            's3_input_key': job.s3_input_key,
+            'created_at': job.created_at.isoformat(),
+            'projections': projs_data,
+        })
+
+    initial_state_data = {
+        'jobs': jobs_data,
+        'user_email': request.user.email,
+        'email_on_complete': profile.email_on_complete,
+    }
+
     return render(request, 'jobs/list.html', {
         'jobs': jobs,
         'email_on_complete': profile.email_on_complete,
         'user_email': request.user.email,
+        'initial_state_data': initial_state_data,
     })
 
 
