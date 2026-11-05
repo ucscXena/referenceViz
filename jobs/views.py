@@ -75,7 +75,7 @@ def reference_groups_api(request):
 @login_required
 @require_GET
 def reference_list(request):
-    """Listing of references with version selectors."""
+    """Merged reference picker + file upload page."""
     groups = (
         ReferenceGroup.objects
         .filter(default_version__is_active=True)
@@ -88,7 +88,14 @@ def reference_list(request):
         )
         .order_by('title')
     )
-    return render(request, 'jobs/references.html', {'groups': groups})
+    recent_jobs = (
+        Job.objects.filter(user=request.user, status='complete')
+        .order_by('-created_at')[:50]
+    )
+    return render(request, 'jobs/references.html', {
+        'groups': groups,
+        'recent_jobs': recent_jobs,
+    })
 
 
 @login_required
@@ -98,7 +105,7 @@ def upload_page(request):
     reference = get_object_or_404(Reference, pk=ref_id) if ref_id else None
     recent_jobs = (
         Job.objects.filter(user=request.user, status='complete')
-        .order_by('-created_at')
+        .order_by('-created_at')[:50]
     )
     return render(request, 'jobs/create.html', {
         'reference': reference,
@@ -251,7 +258,7 @@ def multipart_complete(request):
     upload_id = data['uploadId']
     key = data['key']
     parts = data['parts']  # [{PartNumber, ETag}, ...]
-    ref_id = data.get('refId')
+    ref_ids = data.get('refIds') or ([data['refId']] if data.get('refId') else [])
     mixed_precision = data.get('mixedPrecision', 'bf16')
     expected_size = data.get('fileSize')  # bytes, sent by client for integrity check
 
@@ -278,29 +285,34 @@ def multipart_complete(request):
                 status=400,
             )
 
-    if ref_id:
-        reference = get_object_or_404(
-            Reference.objects.select_related('uce_model'), pk=ref_id)
-        embedding, _ = UCEEmbedding.objects.get_or_create(
-            job=job, uce_model=reference.uce_model,
-            defaults={'status': 'pending'},
-        )
-        proj, _ = Projection.objects.get_or_create(job=job, reference=reference,
-                                                    defaults={'embedding': embedding})
-        if not proj.embedding_id:
-            proj.embedding = embedding
-            proj.save(update_fields=['embedding'])
+    embeddings_to_run = {}  # uce_model_id -> embedding
+    if ref_ids:
+        for ref_id in ref_ids:
+            reference = get_object_or_404(
+                Reference.objects.select_related('uce_model'), pk=ref_id)
+            emb, _ = UCEEmbedding.objects.get_or_create(
+                job=job, uce_model=reference.uce_model,
+                defaults={'status': 'pending'},
+            )
+            proj, _ = Projection.objects.get_or_create(job=job, reference=reference,
+                                                        defaults={'embedding': emb})
+            if not proj.embedding_id:
+                proj.embedding = emb
+                proj.save(update_fields=['embedding'])
+            embeddings_to_run[reference.uce_model_id] = emb
     else:
         uce_model = UCEModel.objects.get(is_default=True)
-        embedding, _ = UCEEmbedding.objects.get_or_create(
+        emb, _ = UCEEmbedding.objects.get_or_create(
             job=job, uce_model=uce_model,
             defaults={'status': 'pending'},
         )
+        embeddings_to_run[uce_model.id] = emb
 
     job.status = 'pending'
     job.save(update_fields=['status'])
 
-    run_analysis.delay(str(embedding.id), mixed_precision)
+    for emb in embeddings_to_run.values():
+        run_analysis.delay(str(emb.id), mixed_precision)
     return JsonResponse({'status': 'queued'})
 
 
@@ -366,42 +378,49 @@ def confirm_upload(request, job_id):
 @login_required
 @require_POST
 def project_existing(request, job_id):
-    """Start a projection for an existing Job (UCE embedding already computed or to be started)."""
+    """Start projections for an existing Job (UCE embedding already computed or to be started)."""
     job = get_object_or_404(Job, pk=str(job_id), user=request.user)
     data = json.loads(request.body)
-    ref_id = data.get('ref_id')
-    reference = get_object_or_404(Reference.objects.select_related('uce_model'), pk=ref_id)
-    target_uce_model = reference.uce_model
+    ref_ids = data.get('ref_ids') or ([data['ref_id']] if data.get('ref_id') else [])
 
-    embedding, emb_created = UCEEmbedding.objects.get_or_create(
-        job=job, uce_model=target_uce_model,
-        defaults={'status': 'pending'},
-    )
+    embeddings_to_run = {}  # uce_model_id -> embedding
 
-    projection, proj_created = Projection.objects.get_or_create(
-        job=job, reference=reference,
-        defaults={'embedding': embedding},
-    )
+    for ref_id in ref_ids:
+        reference = get_object_or_404(Reference.objects.select_related('uce_model'), pk=ref_id)
+        target_uce_model = reference.uce_model
 
-    if not proj_created and projection.status == 'complete':
-        return JsonResponse({'redirect': '/jobs/'})
+        embedding, emb_created = UCEEmbedding.objects.get_or_create(
+            job=job, uce_model=target_uce_model,
+            defaults={'status': 'pending'},
+        )
 
-    if projection.embedding_id != embedding.id:
-        projection.embedding = embedding
-        projection.save(update_fields=['embedding'])
+        projection, proj_created = Projection.objects.get_or_create(
+            job=job, reference=reference,
+            defaults={'embedding': embedding},
+        )
 
-    if embedding.status == 'complete':
-        uce_s3_uri = embedding.uce_s3_uri()
-        if uce_s3_uri:
-            _submit_projection(projection, uce_s3_uri)
-    elif embedding.status in ('error',) or emb_created:
+        if not proj_created and projection.status == 'complete':
+            continue
+
+        if projection.embedding_id != embedding.id:
+            projection.embedding = embedding
+            projection.save(update_fields=['embedding'])
+
+        if embedding.status == 'complete':
+            uce_s3_uri = embedding.uce_s3_uri()
+            if uce_s3_uri:
+                _submit_projection(projection, uce_s3_uri)
+        elif embedding.status in ('error',) or emb_created:
+            embeddings_to_run[target_uce_model.id] = embedding
+        # else: embedding is pending/running — projection will be submitted when it completes
+
+    for embedding in embeddings_to_run.values():
         embedding.status = 'pending'
         embedding.batch_job_id = ''
         embedding.result = {}
         embedding.save()
         job.sync_status()
         run_analysis.delay(str(embedding.id))
-    # else: embedding is pending/running — projection will be submitted when it completes
 
     return JsonResponse({'status': 'queued', 'redirect': '/jobs/'})
 
