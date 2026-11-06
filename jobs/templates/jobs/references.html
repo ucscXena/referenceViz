@@ -33,11 +33,12 @@
         <ul class="upload-help-list">
           <li>We take any raw or normalized data.</li>
           <li>We take any sequencing platform or computational pipeline.</li>
-          <li>We take Ensemble or Hugo gene IDs.</li>
+          <li>We take Ensembl or Hugo gene IDs.</li>
           <li>File size must be &lt; 5.0 GB.</li>
           <li>We will map data across species, sequencing platforms, and more.</li>
           <li>We take human, mouse, rhesus macaque, zebrafish, and others. <a href="https://www.nature.com/articles/s41586-026-10689-z" target="_blank" rel="noopener">Full list</a></li>
         </ul>
+        {% if example_file_url %}<p class="upload-help-example"><a href="{{ example_file_url }}" download>Download an example file</a></p>{% endif %}
       </details>
 
       <div id="progress" style="display:none; margin-top:0.75rem;">
@@ -628,6 +629,8 @@ document.querySelectorAll('time[datetime]').forEach(el => {
   line-height: 1.6;
 }
 .upload-help-list a { color: #1976d2; }
+.upload-help-example { margin: 0.5rem 0 0; font-size: 0.85rem; }
+.upload-help-example a { color: #1976d2; }
 
 .switch-popover {
   position: absolute;

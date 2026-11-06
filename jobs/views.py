@@ -92,9 +92,21 @@ def reference_list(request):
         Job.objects.filter(user=request.user, status='complete')
         .order_by('-created_at')[:50]
     )
+    example_file_url = None
+    example_key = getattr(settings, 'EXAMPLE_FILE_S3_KEY', '')
+    if example_key:
+        try:
+            example_file_url = boto_client('s3').generate_presigned_url(
+                'get_object',
+                Params={'Bucket': settings.AWS_S3_BUCKET, 'Key': example_key},
+                ExpiresIn=3600,
+            )
+        except Exception:
+            example_file_url = '#'
     return render(request, 'jobs/references.html', {
         'groups': groups,
         'recent_jobs': recent_jobs,
+        'example_file_url': example_file_url,
     })
 
 
