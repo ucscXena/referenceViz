@@ -96,7 +96,7 @@
         </td>
         <td>
           <label for="ref-{{ group.id }}" class="ref-row-label">
-            <a href="/references/{{ group.id }}/" class="ref-name-link" target="_blank">{{ group.title }}</a>
+            <a href="/references/{{ group.default_version_id }}/" class="ref-name-link" target="_blank">{{ group.title }}</a>
             <span class="ref-version-meta" id="vmeta-{{ group.id }}">
               <span class="ref-version-label-inline" id="vlabel-{{ group.id }}">{{ group.default_version.version_label|default:"—" }}</span>
               {% if group.active_versions|length > 1 %}
