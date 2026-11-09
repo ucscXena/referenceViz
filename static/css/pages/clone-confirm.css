@@ -1,0 +1,27 @@
+.clone-spinner {
+  display: inline-block;
+  width: 13px; height: 13px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: var(--color-white);
+  border-radius: var(--radius-circle);
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.clone-note { color: var(--gray-700); font-size: var(--font-size-400); margin: 0.75rem 0 1rem; }
+.clone-cancel { margin-left: 1rem; color: var(--gray-600); font-size: var(--font-size-400); text-decoration: none; }
+.clone-cancel:hover { text-decoration: underline; }
+.clone-table {
+  border-collapse: collapse;
+  font-size: var(--font-size-400);
+  margin: 1.25rem 0 1.5rem;
+}
+.clone-table th {
+  padding: 7px 20px 7px 0;
+  text-align: left;
+  font-weight: 500;
+  color: var(--gray-700);
+  width: 6rem;
+}
+.clone-table td { padding: 7px 0; color: var(--gray-800); }

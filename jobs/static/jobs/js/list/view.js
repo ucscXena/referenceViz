@@ -254,7 +254,7 @@ function kebabPopover(ui, dispatch) {
   const kb = ui.openKebab
   if (!kb) return null
   return h('div', {
-    class: 'share-popover',
+    class: 'popover share-popover',
     style: popoverStyle(kb.rect, true),
   },
     kb.isComplete
@@ -294,7 +294,7 @@ function sharePopover(ui, dispatch) {
   const sh = ui.openShare
   if (!sh) return null
   return h('div', {
-    class: 'share-popover',
+    class: 'popover share-popover',
     style: popoverStyle(sh.rect, true),
     onClick: (e) => e.stopPropagation(),
   },
@@ -334,7 +334,7 @@ function explorePopover(ui, dispatch) {
   const ex = ui.openExplore
   if (!ex) return null
   return h('div', {
-    class: 'share-popover',
+    class: 'popover share-popover',
     style: popoverStyle(ex.rect, false),
     onClick: (e) => e.stopPropagation(),
   },
@@ -363,7 +363,7 @@ function shareModal(ui, dispatch) {
   const sm = ui.shareModal
   if (!sm) return null
   return h('div', {
-    class: 'share-mapping-overlay',
+    class: 'overlay share-mapping-overlay',
     style: 'display: flex',
     onClick: (e) => { if (e.target === e.currentTarget) dispatch('CLOSE_SHARE_MODAL') },
   },

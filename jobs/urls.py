@@ -6,7 +6,7 @@ from .chat import chat, reset_chat
 urlpatterns = [
     path('', views.job_list, name='job_list'),
     path('references/', views.reference_list, name='reference_list'),
-    path('create/', views.upload_page, name='job_create'),
+    path('references/<str:reference_id>/image/', views.reference_image, name='reference_image'),
     path('upload-url/', views.get_upload_url, name='upload_url'),
     path('upload/create/', views.multipart_create, name='multipart_create'),
     path('upload/sign/', views.multipart_sign, name='multipart_sign'),

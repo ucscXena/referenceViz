@@ -1,15 +1,17 @@
+import json
 from collections import defaultdict
 from datetime import timedelta
 
 from django import forms
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.admin.utils import quote
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
 from django.utils import timezone
-from django.utils.html import format_html, mark_safe
+from django.utils.html import format_html, format_html_join, mark_safe
 
 
 class _S3KeyWidget(forms.TextInput):
@@ -30,7 +32,7 @@ from .aws import boto_client
 from django.contrib.auth.admin import UserAdmin as DefaultUserAdmin
 from django.contrib.auth.models import User
 
-from .models import ConversationMessage, Job, JobEvent, Projection, ProjectionEvent, Reference, ReferenceGroup, UCEEmbedding, UCEModel, UserProfile
+from .models import ConversationMessage, Job, JobEvent, Projection, ProjectionEvent, Publication, Reference, ReferenceGroup, UCEEmbedding, UCEModel, UserProfile
 from .tasks import run_analysis
 
 
@@ -373,10 +375,70 @@ class UCEModelAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at',)
 
 
+class _FileLoadTextarea(forms.Textarea):
+    """Textarea with a button that fills it from a local file, for wranglers whose
+    scripts write these fields to files."""
+    accept = '.txt,.md,text/plain,text/markdown'
+    file_format = 'text'
+
+    class Media:
+        js = ('jobs/js/admin/textarea-file.js',)
+
+    def render(self, name, value, attrs=None, renderer=None):
+        html = super().render(name, value, attrs, renderer)
+        textarea_id = (attrs or {}).get('id') or self.attrs.get('id') or f'id_{name}'
+        # One wrapper, so the admin's flex row puts the controls under the textarea.
+        return format_html(
+            '<div class="textarea-file" style="flex:1">{}'
+            '<div style="margin-top:6px">'
+            '<label class="button" style="cursor:pointer; display:inline-block; padding:6px 12px">Load from file…'
+            '<input type="file" accept="{}" data-load-into="{}" data-format="{}" hidden></label>'
+            '<span class="textarea-file-status help" style="margin-left:10px; padding:0"></span>'
+            '</div></div>',
+            html, self.accept, textarea_id, self.file_format,
+        )
+
+
+class _PrettyJsonWidget(_FileLoadTextarea):
+    accept = '.json,application/json'
+    file_format = 'json'
+
+    def format_value(self, value):
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError):  # empty, or invalid input being redisplayed
+            return value or ''
+        return '' if parsed is None else json.dumps(parsed, indent=2)
+
+
+class ReferenceForm(forms.ModelForm):
+    metadata = forms.JSONField(
+        widget=_PrettyJsonWidget(attrs={
+            'rows': 25,
+            'style': 'font-family: monospace; font-size: 12px; width: 100%;',
+        }),
+        required=False,
+        help_text='Full metadata JSON blob from UCSC_Brain_Explorer_metadata.json.',
+    )
+    image_file = forms.FileField(
+        required=False,
+        label='Upload new image',
+        help_text='Upload a webp/png/jpg to replace the current image. Leave blank to keep existing.',
+    )
+
+    class Meta:
+        model = Reference
+        fields = '__all__'
+        widgets = {
+            'wrangling_notes': _FileLoadTextarea(attrs={'rows': 8}),
+        }
+
+
 @admin.register(ReferenceGroup)
 class ReferenceGroupAdmin(admin.ModelAdmin):
-    list_display = ('title', 'default_version_link', 'created_at')
+    list_display = ('title', 'display_order', 'default_version_link', 'created_at')
     readonly_fields = ('id', 'created_at')
+    fields = ('id', 'title', 'display_order', 'default_version', 'created_at')
 
     def default_version_link(self, obj):
         ref = obj.default_version
@@ -389,25 +451,99 @@ class ReferenceGroupAdmin(admin.ModelAdmin):
         return format_html('<a href="{}">{}</a>', url, label)
     default_version_link.short_description = 'Default Version'
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('default_version').defer(
+            *(f'default_version__{field}' for field in Reference.CONTENT_FIELDS))
+
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         if obj is not None:
-            form.base_fields['default_version'].queryset = (
-                Reference.objects.filter(group=obj)
-            )
+            form.base_fields['default_version'].queryset = Reference.objects.filter(group=obj)
         return form
 
 
 @admin.register(Reference)
 class ReferenceAdmin(admin.ModelAdmin):
-    list_display = ('id', 'group', 'uce_model', 'version_label', 'is_active', 's3_uri', 'created_at', 'map_link')
+    form = ReferenceForm
+    list_display = ('id', 'group', 'uce_model', 'version_label', 'is_active', 's3_uri',
+                    'has_metadata', 'has_image', 'created_at', 'map_link')
     list_filter = ('is_active', 'uce_model')
     search_fields = ('id', 'group__title')
-    readonly_fields = ('created_at',)
+    readonly_fields = ('crossref_status', 'current_image', 'created_at')
+    fieldsets = (
+        (None, {'fields': ('id', 'group', 'uce_model', 's3_uri', 'version_label', 'notes',
+                           'is_active', 'created_at')}),
+        ('Metadata', {'fields': ('metadata', 'crossref_status')}),
+        ('Image', {'fields': ('current_image', 'image_file')}),
+        ('Wrangling Notes', {'fields': ('wrangling_notes',)}),
+    )
 
     @admin.display(description='')
     def map_link(self, obj):
-        return format_html('<a href="/jobs/create/?ref={}">Map</a>', obj.pk)
+        return format_html('<a href="/jobs/references/?ref={}">Map</a>', obj.pk)
+
+    @admin.display(boolean=True, description='Metadata')
+    def has_metadata(self, obj):
+        return bool(obj.metadata)
+
+    @admin.display(boolean=True, description='Image')
+    def has_image(self, obj):
+        return bool(obj.image)
+
+    @admin.display(description='Crossref status')
+    def crossref_status(self, obj):
+        dois = obj.cited_dois()
+        if not dois:
+            return 'No DOIs in metadata'
+        rows = {p.doi: p for p in Publication.objects.filter(doi__in=dois)}
+        fetched = [d for d in dois if d in rows and not rows[d].fetch_error]
+        failed = [d for d in dois if d in rows and rows[d].fetch_error]
+        pending = len(dois) - len(fetched) - len(failed)
+        parts = [format_html('{}/{} publications fetched', len(fetched), len(dois))]
+        if pending:
+            parts.append(format_html('{} waiting to be fetched', pending))
+        if failed:
+            links = format_html_join(', ', '<a href="{}"><code>{}</code></a>', (
+                (reverse('admin:jobs_publication_change', args=[quote(d)]), d) for d in failed))
+            parts.append(format_html('<span style="color:#c00">failed: {}</span>', links))
+        return format_html_join('; ', '{}', ((part,) for part in parts))
+
+    def current_image(self, obj):
+        if not obj.image:
+            return '(none)'
+        url = reverse('reference_image', args=[obj.pk])
+        return format_html(
+            '<img src="{}" style="max-width:220px; max-height:160px; border:1px solid #ddd; border-radius:4px;">',
+            url,
+        )
+    current_image.short_description = 'Current Image'
+
+    def save_model(self, request, obj, form, change):
+        image_file = form.cleaned_data.get('image_file')
+        if image_file:
+            obj.image = image_file.read()
+            obj.image_content_type = image_file.content_type or 'image/webp'
+
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Publication)
+class PublicationAdmin(admin.ModelAdmin):
+    """Crossref details by DOI. Filled in automatically when a reference citing the
+    DOI is saved; editable for a DOI Crossref can't resolve."""
+    list_display = ('doi', 'title', 'year', 'fetch_error', 'fetched_at')
+    list_filter = (('fetch_error', admin.EmptyFieldListFilter),)
+    search_fields = ('doi', 'title', 'authors')
+    readonly_fields = ('fetched_at',)
+    actions = ('fetch_again',)
+
+    @admin.action(description='Fetch selected publications again from Crossref')
+    def fetch_again(self, request, queryset):
+        from .tasks import fetch_crossref_publications
+        dois = list(queryset.values_list('doi', flat=True))
+        run = fetch_crossref_publications if getattr(settings, 'RQSYNC', False) else fetch_crossref_publications.delay
+        run(dois)
+        self.message_user(request, f'Fetching {len(dois)} publication(s) from Crossref.')
 
 
 @admin.register(Projection)
@@ -417,7 +553,8 @@ class ProjectionAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
     readonly_fields = ('id', 'job_file', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'predictions_download_link', 'viz_link', 'created_at', 'updated_at')
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('reference__group', 'job__user')
+        return super().get_queryset(request).select_related('reference__group', 'job__user').defer(
+            *(f'reference__{field}' for field in Reference.CONTENT_FIELDS))
 
     def job_file(self, obj):
         return obj.job.original_filename or '—'

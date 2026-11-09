@@ -170,6 +170,12 @@ RQ_QUEUES = {
         'DEFAULT_TIMEOUT': 3600,  # 1 hour for long jobs
     },
 }
+# The visualization page, embedded by /visualization/<reference>/.
+PYRAMID_URL = globals().get('PYRAMID_URL', '/pyramid/')
+
+if globals().get('RQSYNC', False):
+    RQ_QUEUES['default']['ASYNC'] = False
+
 RQ_SHOW_ADMIN_LINK = True
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

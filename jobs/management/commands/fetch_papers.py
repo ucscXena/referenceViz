@@ -39,6 +39,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from jobs.aws import boto_client
+from jobs.models import Reference
 
 S3_PREFIX = 'papers/'
 
@@ -56,11 +57,6 @@ _MONTH_NAMES = [
 
 def doi_slug(doi):
     return re.sub(r'[^\w-]', '_', doi)
-
-
-def load_metadata(path):
-    with open(path) as f:
-        return json.load(f)
 
 
 def collect_papers(metadata):
@@ -438,11 +434,6 @@ class Command(BaseCommand):
                             help='Email for Unpaywall API (overrides UNPAYWALL_EMAIL env var).')
 
     def handle(self, *args, **options):
-        meta_path = getattr(settings, 'BRAIN_EXPLORER_METADATA_PATH', '')
-        if not meta_path:
-            self.stderr.write('BRAIN_EXPLORER_METADATA_PATH is not set.')
-            return
-
         unpaywall_email = (
             options.get('unpaywall_email') or
             os.environ.get('UNPAYWALL_EMAIL', '')
@@ -458,7 +449,7 @@ class Command(BaseCommand):
                 return
             s3_pull(papers_dir, bucket, self.stdout)
 
-        metadata = load_metadata(meta_path)
+        metadata = list(Reference.objects.exclude(metadata=None).values_list('metadata', flat=True))
         papers = collect_papers(metadata)
 
         if options['doi']:

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ name }} — UCSC Brain Explorer{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/pages/reference-visualization.css' %}">
+{% endblock %}
+
+{% block base_content %}
+<iframe
+  class="ref-visualization"
+  allow="fullscreen"
+  loading="lazy"
+  referrerpolicy="strict-origin-when-cross-origin"
+  sandbox="allow-scripts allow-same-origin"
+  src="{{ src }}"
+  title="Brain Explorer Visualization"></iframe>
+{% endblock %}

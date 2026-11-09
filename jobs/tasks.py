@@ -1,4 +1,5 @@
 import logging
+import time
 import traceback
 from datetime import timedelta
 
@@ -14,7 +15,7 @@ from .batch import (check_batch_job, check_batch_jobs, submit_batch_job,
                     submit_uce_batch_job, submit_preprocess_batch_job,
                     submit_shard_batch_job, submit_uce_brain_shard_batch_job,
                     submit_merge_batch_job, _ecr_image_digest)
-from .models import Job, Projection, UCEEmbedding
+from .models import Job, Projection, Publication, UCEEmbedding
 
 # 60 checks × 5 min = 300 min max wait for UCE
 MAX_CHECK_ATTEMPTS = 60
@@ -768,3 +769,49 @@ def check_projection_result(projection_id, attempt=0):
         projection.result = {'error': str(e), 'traceback': traceback.format_exc()}
         projection.status = 'error'
         projection.save()
+
+
+def _format_author(author):
+    """Format a Crossref author as family name and first initial, e.g. "Smith J"."""
+    return f"{author.get('family', '')} {author.get('given', '')[:1]}".strip()
+
+
+@job('default')
+def fetch_crossref_publications(dois):
+    """
+    RQ task: fetch Crossref details for each DOI and store them as Publication
+    rows. A failed fetch keeps any details from an earlier success and records
+    the error, which the admin shows; saving a reference that cites the DOI
+    tries again.
+    """
+    import requests
+
+    for i, doi in enumerate(dois):
+        if i:
+            time.sleep(1)  # Crossref asks clients to keep the request rate down
+        try:
+            r = requests.get(
+                f'https://api.crossref.org/works/{doi}',
+                headers={'User-Agent': 'UCSC Brain Explorer (mailto:ucsc-brain-explorer-group@ucsc.edu)'},
+                timeout=15,
+            )
+            r.raise_for_status()
+            msg = r.json().get('message', {})
+            date_parts = (
+                (msg.get('published') or msg.get('issued') or {})
+                .get('date-parts') or [[]]
+            )
+            Publication.objects.update_or_create(doi=doi, defaults={
+                'title': (msg.get('title') or [''])[0],
+                'authors': ', '.join(filter(None, map(_format_author, msg.get('author') or []))),
+                'journal': (msg.get('container-title') or [''])[0],
+                'year': str(date_parts[0][0]) if date_parts[0] else '',
+                'fetch_error': '',
+                'fetched_at': timezone.now(),
+            })
+        except Exception as e:
+            logger.warning('fetch_crossref_publications: failed DOI %s: %s', doi, e)
+            Publication.objects.update_or_create(doi=doi, defaults={
+                'fetch_error': str(e)[:500] or type(e).__name__,
+                'fetched_at': timezone.now(),
+            })

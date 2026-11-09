@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_POST, require_http_methods
 from pgvector.django import CosineDistance
 
-from .models import ConversationMessage, DocumentChunk, Job, Projection
+from .models import ConversationMessage, DocumentChunk, Job, Projection, Reference
 from .projection_summary import compare_columns_stat, compute_projection_summary
 
 logger = logging.getLogger(__name__)
@@ -93,23 +93,8 @@ def _load_marker_genes(reference_uuid):
     return index
 
 
-_metadata_cache = None
-
-
 def _load_metadata():
-    global _metadata_cache
-    if _metadata_cache is None:
-        path = getattr(settings, 'BRAIN_EXPLORER_METADATA_PATH', '')
-        if path:
-            try:
-                with open(path) as f:
-                    entries = json.load(f)
-                _metadata_cache = {e['reference_uuid']: e for e in entries}
-            except Exception:
-                _metadata_cache = {}
-        else:
-            _metadata_cache = {}
-    return _metadata_cache
+    return dict(Reference.objects.exclude(metadata=None).values_list('pk', 'metadata'))
 
 
 _FILTER_ITEM_SCHEMA = {

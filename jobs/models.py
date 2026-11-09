@@ -38,6 +38,8 @@ class ReferenceGroup(models.Model):
     default_version = models.ForeignKey(
         'Reference', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='+')
+    display_order = models.PositiveIntegerField(
+        default=0, help_text='Position on the public references page; lower values come first.')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -47,8 +49,35 @@ class ReferenceGroup(models.Model):
         return self.title
 
 
+class Publication(models.Model):
+    """
+    Crossref details for a DOI cited in Reference.metadata['publication'].
+
+    Kept apart from the metadata so that the metadata stays exactly what the
+    wranglers wrote; pages join the two by DOI. Rows are shared by every
+    reference that cites the DOI, and are fetched when a reference citing a DOI
+    without a row (or with a failed fetch) is saved.
+    """
+    doi = models.CharField(max_length=255, primary_key=True)
+    title = models.TextField(blank=True)
+    authors = models.TextField(blank=True)
+    journal = models.TextField(blank=True)
+    year = models.CharField(max_length=10, blank=True)
+    fetch_error = models.TextField(blank=True)  # set when the last Crossref fetch failed
+    fetched_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['doi']
+
+    def __str__(self):
+        return self.doi
+
+
 class Reference(models.Model):
     """A specific build of a reference dataset. Admin-managed."""
+    # Large columns; defer these in queries that list references.
+    CONTENT_FIELDS = ('metadata', 'wrangling_notes', 'image')
+
     id = models.CharField(max_length=100, primary_key=True)  # URL-safe, e.g. 'Siletti_MSN'
     group = models.ForeignKey(ReferenceGroup, on_delete=models.PROTECT, related_name='versions')
     uce_model = models.ForeignKey(UCEModel, on_delete=models.PROTECT, related_name='references')
@@ -56,6 +85,10 @@ class Reference(models.Model):
     version_label = models.CharField(max_length=50, blank=True)  # e.g. 'v2', '2025-09'
     notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(null=True, blank=True)
+    wrangling_notes = models.TextField(blank=True)
+    image = models.BinaryField(null=True, blank=True)
+    image_content_type = models.CharField(max_length=50, blank=True, default='image/webp')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -67,6 +100,11 @@ class Reference(models.Model):
 
     def __str__(self):
         return f'{self.group.title}' + (f' ({self.version_label})' if self.version_label else '')
+
+    def cited_dois(self):
+        """DOIs of the publications in this reference's metadata, in order, without repeats."""
+        dois = (p.get('doi') for p in (self.metadata or {}).get('publication') or [])
+        return list(dict.fromkeys(d for d in dois if d))
 
 
 class Job(models.Model):

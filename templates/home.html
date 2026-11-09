@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block base_content %}
+<div class="static-page">
+  <img src="{% static 'img/brain-explorer-banner.png' %}" alt="UCSC Brain Explorer" width="800" height="200">
+  <h1>Welcome to the UCSC Brain Explorer.</h1>
+  <p>Researchers can visualize and interactively navigate brain single-cell foundational models built using millions of cells from landmark publications.</p>
+  <p>Use the Brain Explorer to accurately map and annotate their own single-cell transcriptomic data onto single-cell references of millions of cells.</p>
+  <div class="static-page-actions">
+    <a href="/references/">Explore References</a>
+    <a href="/jobs/">Map Cells</a>
+  </div>
+</div>
+{% endblock %}

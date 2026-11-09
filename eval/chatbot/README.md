@@ -26,15 +26,14 @@ results back from S3.
 
 **Chatbot settings** — set the `CHATBOT` environment variable when running
 any eval command. This causes `server/site_settings.py` to import
-`server/site_settings_test.py`, which supplies:
+`../referenceViz-private/site_settings_test.py`, which supplies:
 
 - `ANTHROPIC_API_KEY` — Claude API key for the chatbot and judge
 - `AWS_S3_BUCKET` — S3 bucket for test data uploads
-- `BRAIN_EXPLORER_METADATA_PATH` — path to the reference metadata JSON
 - `GENE_EXPRESSION_LOCAL` — path to `gene_expression_service/` for in-process
   gene expression analysis (no HTTP service needed)
 
-`site_settings_test.py` is gitignored — create it locally if it doesn't exist.
+That directory sits beside this repo, outside git — create the file there if it doesn't exist.
 
 ## Step 1 — Generate test data (once, or after changing the data schema)
 

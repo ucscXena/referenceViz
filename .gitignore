@@ -12,3 +12,6 @@ db.sqlite3
 /server/site_settings_private.py
 /server/site_settings_test.py
 /papers/
+/env/
+/gene_expression_service/env/
+/eval/chatbot/results/

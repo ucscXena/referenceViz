@@ -1,4 +1,5 @@
 import os
+import sys
 
 ALLOWED_HOSTS = []
 
@@ -73,13 +74,17 @@ GENE_EXPRESSION_CACHE_DIR = '/tmp/ge_cache'
 # Production: deploy script downloads here as ubuntu, then chmod a+rX so www-data can read.
 # Locally: override in site_settings_private.py if your st-models dir is elsewhere.
 SENTENCE_TRANSFORMERS_HOME = os.path.join(os.path.dirname(BASE_DIR), 'st-models')
-# Absolute path to UCSC_Brain_Explorer_metadata.json
-# Deployed alongside the Django project by the deploy script; override locally in site_settings_private.py
-BRAIN_EXPLORER_METADATA_PATH = os.path.join(BASE_DIR, 'UCSC_Brain_Explorer_metadata.json')
 # Directory where fetched paper text files are stored; override in site_settings_private.py
 PAPERS_DIR = os.path.join(BASE_DIR, 'papers')
 
 GA_ID = ''
+
+# The static viewer isn't served by runserver, so embed the production one locally.
+PYRAMID_URL = 'https://brainexplorer.ucsc.edu/pyramid/'
+
+# Set True locally to run RQ jobs synchronously, with no worker. Crossref lookups
+# then need no Redis either; other jobs still enqueue through Redis.
+RQSYNC = True
 
 # Email — override in production settings
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
@@ -87,9 +92,14 @@ DEFAULT_FROM_EMAIL = 'UCSC Brain Explorer <noreply@xenabrowser.net>'
 AWS_SES_REGION_NAME = 'us-east-1'
 
 EXTRA_MIDDLEWARE = ["server.local_auth.ForceUserMiddleware"]
+# Local secrets live outside the repo, in ../referenceViz-private.
+PRIVATE_SETTINGS_DIR = os.path.join(os.path.dirname(BASE_DIR), 'referenceViz-private')
+
 # set to test allauth
 if os.environ.get("DBFORWARD"):
-    from .site_settings_private import *
+    sys.path.insert(0, PRIVATE_SETTINGS_DIR)
+    from site_settings_private import *
 
 if os.environ.get("CHATBOT"):
-    from .site_settings_test import *
+    sys.path.insert(0, PRIVATE_SETTINGS_DIR)
+    from site_settings_test import *

@@ -2,10 +2,11 @@
 Sync reference-catalog tables between the 'default' (dev) and 'production'
 databases.
 
-Copies UCEModel, ReferenceGroup, Reference, and DocumentChunk.  Records
-present in the destination but absent from the source are soft-deleted
+Copies UCEModel, ReferenceGroup, Reference, Publication, and DocumentChunk.
+Records present in the destination but absent from the source are soft-deleted
 (Reference is_active=False) when they have dependent Projections, or
-hard-deleted when they do not.
+hard-deleted when they do not.  Publication rows are matched to references only
+by the DOIs in their metadata, so the whole table is mirrored.
 
 Default direction is dev → prod.  Use --reverse to go prod → dev (e.g. for
 the initial seed of a newly created dev database).
@@ -20,7 +21,7 @@ Run on the dev host (where both DB aliases are configured):
 from django.core.management.base import BaseCommand
 from django.db import connections, transaction
 
-from jobs.models import DocumentChunk, Reference, ReferenceGroup, UCEModel
+from jobs.models import DocumentChunk, Publication, Reference, ReferenceGroup, UCEModel
 
 
 class Command(BaseCommand):
@@ -61,6 +62,7 @@ class Command(BaseCommand):
         self._sync_uce_models(src, dst, dry)
         self._sync_reference_groups(src, dst, dry)
         self._sync_references(src, dst, dry)
+        self._sync_publications(src, dst, dry, delete=not options['reverse'])
         self._fix_default_versions(src, dst, dry)
         if not options['reverse']:
             self._delete_orphans(src, dst, dry)
@@ -100,15 +102,19 @@ class Command(BaseCommand):
             pk = row['id']
             try:
                 obj = ReferenceGroup.objects.using(dst).get(pk=pk)
-                if obj.title != row['title']:
-                    self.stdout.write(f'  ReferenceGroup {pk}: update title')
+                changed = [k for k in ('title', 'display_order') if getattr(obj, k) != row[k]]
+                if changed:
+                    self.stdout.write(f'  ReferenceGroup {pk}: update {changed}')
                     if not dry:
-                        obj.title = row['title']
-                        obj.save(using=dst, update_fields=['title'])
+                        for k in changed:
+                            setattr(obj, k, row[k])
+                        obj.save(using=dst, update_fields=changed)
             except ReferenceGroup.DoesNotExist:
                 self.stdout.write(f'  ReferenceGroup {row["title"]!r}: create')
                 if not dry:
-                    ReferenceGroup(id=pk, title=row['title']).save(using=dst)
+                    ReferenceGroup(
+                        id=pk, title=row['title'], display_order=row['display_order'],
+                    ).save(using=dst)
 
     # ── Reference ──────────────────────────────────────────────────────────────
 
@@ -133,6 +139,28 @@ class Command(BaseCommand):
                 if not dry:
                     ref = Reference(id=pk, **defaults)
                     ref.save(using=dst)
+
+    # ── Publication ────────────────────────────────────────────────────────────
+
+    def _sync_publications(self, src, dst, dry, delete):
+        src_rows = {row['doi']: row for row in Publication.objects.using(src).values()}
+        dst_rows = {row['doi']: row for row in Publication.objects.using(dst).values()}
+        self.stdout.write(f'Publication: {len(src_rows)} in source')
+        create = [doi for doi in src_rows if doi not in dst_rows]
+        update = [doi for doi in src_rows if doi in dst_rows and src_rows[doi] != dst_rows[doi]]
+        remove = [doi for doi in dst_rows if doi not in src_rows] if delete else []
+        for label, dois in (('create', create), ('update', update), ('delete', remove)):
+            if dois:
+                self.stdout.write(f'  Publication: {label} {len(dois)}: {", ".join(sorted(dois)[:5])}'
+                                  + (' …' if len(dois) > 5 else ''))
+        if dry:
+            return
+        with transaction.atomic(using=dst):
+            Publication.objects.using(dst).filter(doi__in=remove).delete()
+            for doi in update:
+                Publication.objects.using(dst).filter(doi=doi).update(**src_rows[doi])
+            Publication.objects.using(dst).bulk_create(
+                [Publication(**src_rows[doi]) for doi in create], batch_size=500)
 
     # ── Fix default_version pointers ───────────────────────────────────────────
 

@@ -15,9 +15,17 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.views.generic import TemplateView
+
+from jobs import views as job_views
 
 urlpatterns = [
+    path('', TemplateView.as_view(template_name='home.html'), name='home'),
+    path('contact/', TemplateView.as_view(template_name='contact.html'), name='contact'),
     path('jobs/', include('jobs.urls')),
+    path('references/', include('jobs.explore_urls')),
+    path('visualization/<uuid:reference_id>/', job_views.reference_visualization,
+         name='reference_visualization'),
     path('admin/', admin.site.urls),
     path('django-rq/', include('django_rq.urls')),
     path('accounts/', include('allauth.urls')),

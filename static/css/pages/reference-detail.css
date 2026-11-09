@@ -1,0 +1,257 @@
+.base-content {
+  padding: 0;
+  align-items: stretch;
+}
+.ref-page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1232px;
+  margin: 0 auto;
+  padding: 24px 0;
+}
+
+/* ── Hero ─────────────────────────────────────────────── */
+.ref-hero {
+  display: flex;
+  gap: 88px;
+}
+.ref-hero-text {
+  flex: 1;
+  min-width: 0;
+}
+.ref-versions {
+  display: inline-flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+}
+.ref-versions select {
+  padding: 4px 8px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-400);
+}
+.ref-version-warning {
+  padding: 3px 8px;
+  border: 1px solid #ffc107;
+  border-radius: var(--radius-sm);
+  background: #fff3cd;
+  color: #856404;
+  font-size: var(--font-size-200);
+  white-space: nowrap;
+}
+.ref-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-250);
+  line-height: 16px;
+  color: var(--color-text-muted);
+}
+.ref-breadcrumbs a { color: inherit; text-decoration: none; }
+.ref-breadcrumbs a:hover { text-decoration: underline; }
+.ref-breadcrumbs svg { display: block; width: 16px; height: 16px; fill: currentColor; }
+.ref-page h1 {
+  margin: 0;
+  font-size: var(--font-size-900);
+  line-height: 40px;
+  font-weight: 500;
+  letter-spacing: -0.8px;
+  color: var(--color-text);
+}
+
+/* ── Tabs ─────────────────────────────────────────────── */
+
+/* ── Columns and panels ───────────────────────────────── */
+.ref-columns {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.ref-columns--overview { margin-top: 32px; }
+.ref-column {
+  grid-column: span 4;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.ref-column--main { grid-column: span 8; }
+.ref-paper {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  background: var(--color-border);
+}
+.ref-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px;
+  background: var(--color-white);
+}
+.ref-section--tight { gap: 8px; }
+.ref-section-title {
+  font-size: var(--font-size-500);
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+/* ── Markdown ─────────────────────────────────────────── */
+.ref-markdown {
+  font-size: var(--font-size-400);
+  line-height: 24px;
+  color: var(--color-text);
+}
+.ref-markdown > :first-child { margin-top: 0; }
+.ref-markdown > :last-child { margin-bottom: 0; }
+.ref-markdown p { margin: 0 0 8px; }
+.ref-markdown p:last-child { margin-bottom: 0; }
+.ref-markdown a,
+.ref-publication a {
+  color: var(--color-primary);
+  text-decoration-skip-ink: none;
+  text-underline-position: from-font;
+}
+.ref-markdown strong { font-weight: 500; }
+.ref-markdown h1 { margin: .67em 0; font-size: var(--font-size-800); line-height: 32px; font-weight: 500; letter-spacing: normal; }
+.ref-markdown h2 { margin: .83em 0; font-size: var(--font-size-700); line-height: 28px; font-weight: 500; }
+.ref-markdown h3 { margin: 1em 0; font-size: var(--font-size-600); line-height: 26px; font-weight: 500; }
+.ref-markdown h4,
+.ref-markdown h5,
+.ref-markdown h6 { margin: 1.33em 0; font-size: var(--font-size-500); line-height: 24px; font-weight: 500; }
+.ref-markdown code {
+  font: 400 12px/24px "Roboto Mono", monospace;
+}
+.ref-markdown h1 code,
+.ref-markdown h2 code,
+.ref-markdown h3 code,
+.ref-markdown h4 code,
+.ref-markdown h5 code,
+.ref-markdown h6 code { font-size: inherit; }
+.ref-markdown pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ref-markdown table {
+  width: 100%;
+  margin: 16px 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.ref-markdown th,
+.ref-markdown td { padding: 2px 4px; }
+.ref-markdown th {
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-400);
+  line-height: 20px;
+  font-weight: 500;
+}
+.ref-markdown td { overflow-wrap: break-word; }
+
+/* ── Side panels ──────────────────────────────────────── */
+.ref-visualize {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  padding-top: 26px;
+  padding-bottom: 26px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.ref-button {
+  padding: 8px 16px;
+  text-transform: capitalize;
+  text-decoration: none;
+}
+.ref-details-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-size-400);
+  line-height: 20px;
+  color: var(--color-text);
+}
+.ref-details-key { color: var(--color-text-muted); }
+
+/* ── Charts ───────────────────────────────────────────── */
+.ref-chart {
+  font-size: var(--font-size-250);
+  line-height: 16px;
+}
+.ref-chart svg g.x-axis text:nth-of-type(1) { text-anchor: start; }
+.ref-chart svg g.x-axis text:nth-last-of-type(1) { text-anchor: end; }
+.ref-chart-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-400);
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--color-primary);
+}
+.ref-chart-toggle:hover { text-decoration: underline; }
+
+/* ── Publications ─────────────────────────────────────── */
+.ref-publications {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ref-publication {
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.ref-publication h4 {
+  margin: 0;
+  font-size: var(--font-size-500);
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+.ref-citation {
+  font-size: var(--font-size-250);
+  line-height: 20px;
+  color: var(--color-text-muted);
+}
+.ref-raw-data {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ref-raw-data-title {
+  font-size: var(--font-size-250);
+  line-height: 20px;
+}
+.ref-raw-data a {
+  font-size: var(--font-size-250);
+  line-height: 20px;
+}
+
+@media (max-width: 1263px) {
+  .ref-page { padding-left: 16px; padding-right: 16px; }
+}
+@media (max-width: 767px) {
+  .ref-hero { flex-direction: column; gap: 16px; }
+  .ref-column,
+  .ref-column--main { grid-column: 1 / -1; }
+  .ref-section { padding: 20px 16px; }
+  .ref-publication { padding: 20px 16px; }
+  .ref-chart svg g.x-axis text { display: none; }
+  .ref-chart svg g.x-axis text:nth-of-type(1),
+  .ref-chart svg g.x-axis text:nth-last-of-type(1) { display: block; }
+}

@@ -3,7 +3,6 @@ set -o errexit
 set -o nounset
 set -o xtrace
 
-EXPLORER_DIR="${EXPLORER_DIR:-../data-explorer}"
 USER=ubuntu
 
 die() { echo "Error: $*" >&2; exit 1; }
@@ -15,11 +14,9 @@ fi
 
 case "$1" in
   bedev)
-    # Require clean working trees in both repos before tagging
+    # Require a clean working tree before tagging
     git diff --exit-code --quiet          || die "referenceViz has unstaged changes"
     git diff --cached --exit-code --quiet || die "referenceViz has staged changes"
-    git -C "$EXPLORER_DIR" diff --exit-code --quiet          || die "data-explorer has unstaged changes"
-    git -C "$EXPLORER_DIR" diff --cached --exit-code --quiet || die "data-explorer has staged changes"
 
     # Bump major in package.json/package-lock.json without a git commit or tag
     # (patch reserved for fixes cut from a release tag)
@@ -27,22 +24,10 @@ case "$1" in
     NEXT="v$(node -e "console.log(require('./package.json').version)")"
     { set +x; echo "Releasing $NEXT"; set -x; }
 
-    # Refresh reference groups from dev so the build snapshot is current
-    (cd "$EXPLORER_DIR" && npm run fetch:reference-groups)
-
-    # Bump data-explorer to the same version, commit, and tag
-    npm --prefix "$EXPLORER_DIR" version "$NEXT" --no-git-tag-version
-    git -C "$EXPLORER_DIR" add package.json package-lock.json public/reference-groups.json
-    git -C "$EXPLORER_DIR" commit -m "Release $NEXT"
-    git -C "$EXPLORER_DIR" tag "$NEXT"
-
     # Commit the referenceViz version bump and tag
     git add package.json package-lock.json
     git commit -m "Release $NEXT"
     git tag "$NEXT"
-
-    # Build data-explorer (output goes to ../data-explorer/out, read by ./deploy)
-    (cd "$EXPLORER_DIR" && npm run build:prod)
 
     # Build referenceViz and deploy to dev
     ./deploy bedev

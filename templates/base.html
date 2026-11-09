@@ -9,9 +9,11 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{% static 'favicons/Brain-Explorer_Favicon_16x16.png' %}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Roboto+Mono&display=swap">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons&display=swap">
+    <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/components.css' %}">
     {% block extra_head %}{% endblock %}
     {% if GA_ID %}
     <script async src="https://www.googletagmanager.com/gtag/js?id={{ GA_ID }}"></script>
@@ -28,10 +30,15 @@
       <a href="/jobs/" class="header-logo-link">
         <img src="{% static 'img/Brain-Explorer_Logo_RGB-color_web-res.png' %}" alt="UCSC Brain Explorer" class="header-logo">
       </a>
+      <button type="button" class="header-menu-button" aria-label="Menu" aria-expanded="false" aria-controls="header-menu"
+              onclick="this.setAttribute('aria-expanded', document.getElementById('header-menu').classList.toggle('header-menu--open'))">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4 18h16c.55 0 1-.45 1-1s-.45-1-1-1H4c-.55 0-1 .45-1 1s.45 1 1 1m0-5h16c.55 0 1-.45 1-1s-.45-1-1-1H4c-.55 0-1 .45-1 1s.45 1 1 1M3 7c0 .55.45 1 1 1h16c.55 0 1-.45 1-1s-.45-1-1-1H4c-.55 0-1 .45-1 1"/></svg>
+      </button>
+      <div class="header-menu" id="header-menu">
       <nav class="header-nav">
-        <a href="/references/" class="header-nav-link">References</a>
-        <a href="/jobs/" class="header-nav-link header-nav-link--active">My Dashboard</a>
-        <a href="/contact/" class="header-nav-link">Contact us</a>
+        <a href="/references/" class="header-nav-link{% if '/references/' in request.path %} header-nav-link--active{% endif %}">References</a>
+        <a href="/jobs/" class="header-nav-link{% if '/jobs/' in request.path %} header-nav-link--active{% endif %}">My Dashboard</a>
+        <a href="/contact/" class="header-nav-link{% if '/contact/' in request.path %} header-nav-link--active{% endif %}">Contact us</a>
       </nav>
       {% if user.email %}
       <div class="header-user">
@@ -39,11 +46,13 @@
         <a class="btn-logout" href="{% url 'account_logout' %}">Logout</a>
       </div>
       {% endif %}
+      </div>
     </header>
 
     <div class="base-content">
     {% block base_content %}{% endblock %}
     </div>
+    {% include "site_footer.html" %}
     <button class="feedback-fab" onclick="document.getElementById('feedback-dialog').showModal()">Give feedback</button>
     <dialog id="feedback-dialog" class="feedback-dialog">
       <h2 class="feedback-dialog-title">Give feedback</h2>

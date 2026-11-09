@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ name }} — UCSC Brain Explorer{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/pages/reference-detail.css' %}">
+{% endblock %}
+
+{% block base_content %}
+<div class="ref-page">
+  <div class="ref-hero">
+    <div class="ref-hero-text">
+      <ol class="ref-breadcrumbs">
+        <li><a href="{% url 'reference_explore' %}">References</a></li>
+        <li aria-hidden="true"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9.29 6.71c-.39.39-.39 1.02 0 1.41L13.17 12l-3.88 3.88c-.39.39-.39 1.02 0 1.41s1.02.39 1.41 0l4.59-4.59c.39-.39.39-1.02 0-1.41L10.7 6.7c-.38-.38-1.02-.38-1.41.01"/></svg></li>
+        <li>{{ name }}</li>
+      </ol>
+      <h1>{{ name }}</h1>
+    </div>
+    {% if show_versions %}
+    <span class="ref-versions">
+      <select id="ref-version" aria-label="Reference version" autocomplete="off">
+        <optgroup label="Latest">
+          {% for version in latest_versions %}
+          <option value="{{ version.pk }}"{% if version.pk == reference.pk %} selected{% endif %}>{{ version.version_label|default:version.pk }}</option>
+          {% endfor %}
+        </optgroup>
+        {% if older_versions %}
+        <optgroup label="Older versions">
+          {% for version in older_versions %}
+          <option value="{{ version.pk }}"{% if version.pk == reference.pk %} selected{% endif %}>{{ version.version_label|default:version.pk }}</option>
+          {% endfor %}
+        </optgroup>
+        {% endif %}
+      </select>
+      {% if reference.pk != group.default_version_id %}
+      <span class="ref-version-warning">A newer version is available.</span>
+      {% endif %}
+    </span>
+    {% endif %}
+  </div>
+
+  <nav class="tabs" aria-label="Reference sections">
+    {% for key, label, url_name in tabs %}
+    <a class="tab{% if key == tab %} tab--active{% endif %}" href="{% url url_name reference.pk %}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+
+  {% if tab == 'publications' %}
+  <div class="ref-columns">
+    <div class="ref-publications">
+      {% for publication in publications %}
+      <section class="ref-publication">
+        <h4>{{ publication.title }}</h4>
+        {% if publication.doi_url %}
+        <span class="ref-citation">{{ publication.citation }} <a href="{{ publication.doi_url }}" target="_blank" rel="noopener noreferrer">{{ publication.doi_url }}</a></span>
+        {% endif %}
+        {% if publication.raw_data %}
+        <div class="ref-raw-data">
+          <span class="ref-raw-data-title">Raw Data</span>
+          <span>{% for item in publication.raw_data %}{% if not forloop.first %}<span>, </span>{% endif %}<a href="{{ item.uri }}" title="{{ item.uri }}" target="_blank" rel="noopener noreferrer">{{ item.filename }}</a>{% endfor %}</span>
+        </div>
+        {% endif %}
+      </section>
+      {% empty %}
+      <section class="ref-publication"><span class="ref-markdown">No publications found.</span></section>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div class="ref-columns{% if tab == 'overview' %} ref-columns--overview{% endif %}">
+    <div class="ref-column ref-column--main">
+      {% if tab == 'overview' %}
+      <div class="paper ref-paper">
+        <div class="ref-section ref-section--tight">
+          <span class="ref-section-title">Description</span>
+          <div class="ref-markdown">{{ abstract_html }}</div>
+        </div>
+      </div>
+      {% endif %}
+      {% if tab == 'wrangling_notes' %}
+      <div class="paper ref-paper">
+        <div class="ref-section ref-section--tight">
+          <span class="ref-section-title">Wrangling Notes</span>
+          <div class="ref-markdown">{{ notes_html }}</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="paper ref-paper" id="reference-charts"></div>
+      {% endif %}
+    </div>
+    <div class="ref-column">
+      {% if tab == 'overview' %}
+      <div class="paper ref-paper">
+        <div class="ref-section ref-visualize"{% if reference.image %} style="background-image: url('{% url 'reference_image' reference.pk %}')"{% endif %}>
+          <a class="button-outline ref-button" href="{% url 'reference_visualization' reference.pk %}">Visualize</a>
+          <a class="button-outline ref-button" href="/jobs/references/?ref={{ reference.pk }}">Map data</a>
+        </div>
+      </div>
+      {% endif %}
+      <div class="paper ref-paper">
+        <div class="ref-section">
+          <span class="ref-section-title">Details</span>
+          <div class="ref-details-item"><span class="ref-details-key">Reference Name</span><span>{{ name }}</span></div>
+          <div class="ref-details-item"><span class="ref-details-key">Foundation Model</span><span>{{ foundation_model }}</span></div>
+          <div class="ref-details-item"><span class="ref-details-key">Cell Count</span><span>{{ cell_count }}</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% if charts %}
+{{ charts|json_script:"reference-charts-data" }}
+<script src="{% static 'js/vendor/d3-7.9.0.min.js' %}"></script>
+<script src="{% static 'js/vendor/plot-0.6.17.umd.min.js' %}"></script>
+<script src="{% static 'js/reference-charts.js' %}"></script>
+{% endif %}
+{% if show_versions %}
+<script>
+document.getElementById('ref-version').addEventListener('change', e => {
+  window.location.href = `/references/${e.target.value}/`;
+});
+</script>
+{% endif %}
+{% endblock %}

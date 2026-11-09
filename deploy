@@ -11,13 +11,6 @@ if [ "$#" -lt 1 ]; then
 	exit 1;
 fi
 
-EXPLORER=${EXPLORER:-"../data-explorer/out"}
-
-if [ ! -e "${EXPLORER}/references/index.html" ]; then
-	echo "Error: ${EXPLORER}/references/index.html not found"
-	exit 1;
-fi
-
 HOST_ALIAS="$1"
 
 case "$HOST_ALIAS" in
@@ -37,7 +30,6 @@ BUILD_DJANGO=build-django
 RSYNC_OPTS=(-a --delete --exclude='.*.sw[opx]' -e "ssh -o StrictHostKeyChecking=no")
 
 npm run build:prod -- --bail
-rsync -a "${EXPLORER}/" build
 
 # deploy
 rsync "${RSYNC_OPTS[@]}" --rsync-path='sudo rsync' build/ ${USER}@${HOST}:/var/www/html
@@ -46,8 +38,6 @@ rm -rf ${BUILD_DJANGO}
 mkdir ${BUILD_DJANGO}
 # copy only the python files that are in git, to avoid temporary files.
 git ls-files -z requirements.txt manage.py server jobs templates static | rsync -a --files-from=- --from0 ./ "$BUILD_DJANGO"/
-# include the Brain Explorer metadata JSON from the data-explorer repo
-cp "${EXPLORER}/../UCSC_Brain_Explorer_metadata.json" "$BUILD_DJANGO"/
 rsync "${RSYNC_OPTS[@]}" ${BUILD_DJANGO}/ ${USER}@${HOST}:/var/www/backend/django
 
 ssh -l${USER} ${HOST} <<-ENDSSH

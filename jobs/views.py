@@ -5,6 +5,7 @@ import re
 import secrets
 import uuid
 from datetime import timedelta
+from urllib.parse import quote, urlencode
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -19,11 +20,184 @@ import django_rq
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 
+from .markdown import format_wrangling_notes, render_markdown
 from .aws import boto_client, delete_s3_key, delete_s3_uri, delete_s3_prefix
-from .models import Job, Projection, Reference, ReferenceGroup, ShareToken, UCEEmbedding, UCEModel, UserProfile
+from .models import Job, Projection, Publication, Reference, ReferenceGroup, ShareToken, UCEEmbedding, UCEModel, UserProfile
 from .tasks import run_analysis, _submit_projection
 
 logger = logging.getLogger(__name__)
+
+# Charts on a reference's overview tab: metadata key, heading, and fixed value
+# order. An empty order means most cells first.
+REFERENCE_CHARTS = [
+    ('publication', 'Publication', []),
+    ('tissue', 'Tissue', []),
+    ('tissue_type', 'Tissue Type', []),
+    ('disease', 'Disease', []),
+    ('normalized_age_bucket', 'Age', ['prenatal_embryonic', 'prenatal_fetal', 'newborn', 'infant', 'child', 'adolescent', 'young_adult', '25-44_year_old', 'middle_aged', 'older_adult', 'elderly', 'adult_unspecified', 'postnatal_unspecified', 'unknown']),
+    ('organism', 'Species', []),
+    ('sex', 'Sex', []),
+    ('self_reported_ethnicity', 'Ethnicity', []),
+    ('assay', 'Assay', []),
+    ('suspension_type', 'Suspension Type', []),
+]
+
+REFERENCE_TABS = [
+    ('overview', 'Overview', 'reference_detail'),
+    ('cells', 'Cells', 'reference_cells'),
+    ('publications', 'Publications', 'reference_publications'),
+    ('wrangling_notes', 'Wrangling Notes', 'reference_wrangling_notes'),
+]
+
+
+@require_GET
+def reference_image(request, reference_id):
+    reference = get_object_or_404(Reference, pk=reference_id)
+    if not reference.image:
+        raise Http404
+    data = bytes(reference.image)  # bytes on SQLite, memoryview on PostgreSQL
+    return HttpResponse(data, content_type=reference.image_content_type or 'image/webp')
+
+
+def _chart_points(values):
+    return [{'label': v['label'], 'count': v['cell_count']} for v in values or []]
+
+
+def _publication_details(dois):
+    """Crossref details for these DOIs, as {doi: Publication}, leaving out DOIs not yet fetched."""
+    return {p.doi: p for p in Publication.objects.filter(doi__in=dois).exclude(title='')}
+
+
+def _publications_with_raw_data(reference):
+    """
+    Publications for display, sorted by title. Entries without a DOI are shown as
+    unpublished; entries with one need Crossref details, and are skipped until
+    those have been fetched.
+    """
+    details = _publication_details(reference.cited_dois())
+    publications = []
+    for pub in reference.metadata.get('publication') or []:
+        raw_data = [
+            {'filename': item['uri'].rsplit('/', 1)[-1], 'uri': item['uri']}
+            for item in pub.get('raw_data') or [] if item.get('uri')
+        ]
+        if pub.get('doi') is None:
+            publications.append({'title': f"{pub.get('label')} - Unpublished", 'raw_data': raw_data})
+        elif pub['doi'] in details:
+            found = details[pub['doi']]
+            citation = [f"{found.authors}." if found.authors else '',
+                        f"({found.year})." if found.year else '',
+                        f"{found.journal}." if found.journal else '']
+            publications.append({
+                'title': found.title,
+                'citation': ' '.join(part for part in citation if part),
+                'doi_url': f"https://doi.org/{pub['doi']}",
+                'raw_data': raw_data,
+            })
+    return sorted(publications, key=lambda p: p['title'].casefold())
+
+
+@require_GET
+def reference_detail(request, reference_id, tab='overview'):
+    reference = get_object_or_404(Reference.objects.select_related('group'), pk=reference_id)
+    group = reference.group
+    metadata = reference.metadata
+    if not metadata:
+        raise Http404
+    foundation_model = metadata.get('foundation_model')
+    versions = list(
+        group.versions.filter(is_active=True)
+        .defer(*Reference.CONTENT_FIELDS)
+        .order_by('-created_at')
+    )
+    context = {
+        'reference': reference,
+        'group': group,
+        'name': metadata.get('reference_name') or group.title,
+        'tab': tab,
+        'tabs': REFERENCE_TABS,
+        'foundation_model': foundation_model['label'] if foundation_model else 'None',
+        'cell_count': f"{metadata.get('cell_number') or 0:,}",
+        'latest_versions': [v for v in versions if v.pk == group.default_version_id],
+        'older_versions': [v for v in versions if v.pk != group.default_version_id],
+        'show_versions': len(versions) > 1,
+    }
+    if tab == 'overview':
+        context['abstract_html'] = render_markdown(metadata.get('abstract'))
+        context['charts'] = [
+            {'label': label, 'order': order, 'points': _chart_points(metadata.get(key))}
+            for key, label, order in REFERENCE_CHARTS
+        ]
+    elif tab == 'cells':
+        context['charts'] = [{
+            'label': 'Cell Types', 'order': [], 'expandable': False,
+            'points': _chart_points(metadata.get('cell_type')),
+        }]
+    elif tab == 'publications':
+        context['publications'] = _publications_with_raw_data(reference)
+    elif tab == 'wrangling_notes':
+        context['notes_html'] = render_markdown(format_wrangling_notes(reference.wrangling_notes))
+    return render(request, 'jobs/reference_detail.html', context)
+
+
+@require_GET
+def reference_visualization(request, reference_id):
+    reference = get_object_or_404(
+        Reference.objects.select_related('group').defer('image', 'wrangling_notes'), pk=reference_id)
+    pyramid = (reference.metadata or {}).get('reference_pyramid')
+    if not pyramid:
+        raise Http404
+    query = {'image': pyramid}
+    if 'overlay' in request.GET:
+        query['overlay'] = request.GET['overlay']
+    return render(request, 'jobs/reference_visualization.html', {
+        'name': reference.metadata.get('reference_name') or reference.group.title,
+        'src': f'{settings.PYRAMID_URL}?{urlencode(query, quote_via=quote)}',
+    })
+
+
+def _publication_fields(publication):
+    fields = ('title', 'authors', 'journal', 'year')
+    return {f: getattr(publication, f) if publication else '' for f in fields}
+
+
+@require_GET
+def reference_explore(request):
+    groups = (
+        ReferenceGroup.objects
+        .exclude(default_version=None)
+        .exclude(default_version__metadata=None)
+        .select_related('default_version')
+        .order_by('display_order', 'title')
+    )
+    groups = list(groups)
+    details = _publication_details(
+        {doi for group in groups for doi in group.default_version.cited_dois()})
+    refs_data = []
+    for group in groups:
+        reference = group.default_version
+        m = reference.metadata
+        refs_data.append({
+            'id': str(group.id),
+            'reference_id': reference.pk,
+            'title': m.get('reference_name') or group.title,
+            'organism': [item['label'] for item in (m.get('organism') or [])],
+            'tissue': [item['label'] for item in (m.get('tissue') or [])],
+            'cell_type': [item['label'] for item in (m.get('cell_type') or [])],
+            'publication': [
+                {
+                    'label': p.get('label', ''),
+                    'doi': p.get('doi'),
+                    **_publication_fields(details.get(p.get('doi'))),
+                }
+                for p in (m.get('publication') or [])
+            ],
+            'has_image': bool(reference.image),
+        })
+
+    return render(request, 'jobs/explore.html', {
+        'refs_data_json': json.dumps(refs_data),
+    })
 
 
 @require_GET
@@ -40,14 +214,20 @@ def user_status(request):
 @require_GET
 def reference_groups_api(request):
     """Public JSON API: reference groups with their active versions, for data-explorer."""
+    active_references = (
+        Reference.objects.filter(is_active=True)
+        .defer(*Reference.CONTENT_FIELDS)
+        .order_by('-created_at')
+    )
     groups = (
         ReferenceGroup.objects
         .exclude(default_version=None)
         .select_related('default_version')
+        .defer(*(f'default_version__{field}' for field in Reference.CONTENT_FIELDS))
         .prefetch_related(
             models.Prefetch(
                 'versions',
-                queryset=Reference.objects.filter(is_active=True).order_by('-created_at'),
+                queryset=active_references,
                 to_attr='active_versions',
             )
         )
@@ -76,13 +256,18 @@ def reference_groups_api(request):
 @require_GET
 def reference_list(request):
     """Merged reference picker + file upload page."""
+    active_references = (
+        Reference.objects.filter(is_active=True)
+        .defer(*Reference.CONTENT_FIELDS)
+        .order_by('-created_at')
+    )
     groups = (
         ReferenceGroup.objects
         .filter(default_version__is_active=True)
         .prefetch_related(
             models.Prefetch(
                 'versions',
-                queryset=Reference.objects.filter(is_active=True).order_by('-created_at'),
+                queryset=active_references,
                 to_attr='active_versions',
             )
         )
@@ -107,22 +292,6 @@ def reference_list(request):
         'groups': groups,
         'recent_jobs': recent_jobs,
         'example_file_url': example_file_url,
-    })
-
-
-@login_required
-@require_GET
-def upload_page(request):
-    ref_id = request.GET.get('ref')
-    reference = get_object_or_404(Reference, pk=ref_id) if ref_id else None
-    recent_jobs = (
-        Job.objects.filter(user=request.user, status='complete')
-        .order_by('-created_at')[:50]
-    )
-    return render(request, 'jobs/create.html', {
-        'reference': reference,
-        'recent_jobs': recent_jobs,
-        'example_available': bool(getattr(settings, 'EXAMPLE_FILE_S3_KEY', '')),
     })
 
 
