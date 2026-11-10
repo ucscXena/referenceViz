@@ -17,12 +17,16 @@ import legendStyles from './legend.module.css';
 import {tableFromIPC} from 'apache-arrow';
 var {ajax} = Rx.Observable;
 
-// XXX currently ignoring radiusBase param
+// power law: ~1.5 for small refs (≤3.7M), ~1.2 at 5.6M, ~0.76 at 13M, ~0.59 at 21M
+var defaultRadius = n =>
+	Math.min(1.5, Math.max(0.5, 3 * Math.pow(n / 1e6, -0.53)));
+
 // power law anchored at n=1000->3, n=100000->0.5, clamped to [0.5, 3]
 var defaultOverlayRadius = n =>
 	Math.min(3, Math.max(0.5, 3 * Math.pow(n / 1000, -0.389)));
 
-var dotRange = () => Let((min = 0.5, max = 4) =>
+// min scales down for large references so fine structure remains accessible
+var dotRange = n => Let((min = n ? Math.max(0.1, defaultRadius(n) / 3) : 0.5, max = 3) =>
 	({min, max, step: (max - min) / 200}));
 
 var iconButton = el(IconButton);
@@ -84,9 +88,9 @@ var dotSlider = (labelTxt, range, value, onChange) =>
 
 var dotSizes = ({state, onRadius, onOverlayRadius, hasOverlay}) =>
 	!state.radiusBase ? null :
-	div(dotSlider('Reference', dotRange(state.radiusBase), state.radius, onRadius),
+	div(dotSlider('Reference', dotRange(state.referenceCount), state.radius, onRadius),
 		...(hasOverlay ?
-			[dotSlider('Mapped data', dotRange(state.radiusBase), state.overlayRadius,
+			[dotSlider('Mapped data', dotRange(), state.overlayRadius,
 				onOverlayRadius)] :
 			[]));
 
@@ -145,6 +149,9 @@ export default el(class SinglecellView extends PureComponent {
 		getImageMeta(this.props.image).subscribe(
 			imageState => {
 				this.props.onState(state => merge(state, {imageState}));
+				if (imageState.count) {
+					this.setState({radius: defaultRadius(imageState.count)});
+				}
 			},
 			() => this.setState({error: true})
 		);
@@ -311,7 +318,7 @@ export default el(class SinglecellView extends PureComponent {
 					''),
 			span({className: styles.fps, ref: this.onFPSRef}),
 			div({className: styles.graphWrapper, ref: this.onRef},
-				controlsView({state: {radiusBase: 10, radius, overlayRadius},
+				controlsView({state: {radiusBase: 10, radius, overlayRadius, referenceCount: count},
 					showControls, onControls, onRadius, onOverlayRadius,
 					hasOverlay: !!overlay, onShadow}),
 				get(state, 'showColorPicker') ? colorPicker({state, onState, layer}) :
