@@ -47,8 +47,8 @@ def reference_groups_api(request):
         .prefetch_related(
             models.Prefetch(
                 'versions',
-                queryset=Reference.objects.filter(is_active=True).order_by('-created_at'),
-                to_attr='active_versions',
+                queryset=Reference.objects.order_by('-created_at'),
+                to_attr='all_versions',
             )
         )
         .order_by('title')
@@ -64,7 +64,13 @@ def reference_groups_api(request):
                     'version_label': ref.version_label,
                     'is_default': ref.id == group.default_version_id,
                 }
-                for ref in group.active_versions
+                for ref in group.all_versions
+                if ref.is_active
+            ],
+            'inactive_version_ids': [
+                ref.id
+                for ref in group.all_versions
+                if not ref.is_active
             ],
         }
         for group in groups
