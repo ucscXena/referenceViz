@@ -760,6 +760,10 @@ def _build_system_prompt(job, chunks=None):
     elif cell_count:
         lines.append(f"Their dataset contains {int(cell_count):,} cells.")
 
+    species = (emb.result or {}).get('species') if emb else None
+    if species:
+        lines.append(f"The pipeline species auto-detect thinks this is {species}.")
+
     for proj in projections:
         ref_id = str(proj.reference_id)
         meta = metadata.get(ref_id, {})
