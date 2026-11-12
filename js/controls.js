@@ -28,12 +28,16 @@ var tabStyle = {overflowY: 'auto', overflowX: 'hidden', flex: 1,
 var tabPanel = ({value, index}, ...children) =>
 	div({hidden: value !== index, style: tabStyle}, ...children);
 
+var sortedLayerIndices = layers =>
+	layers.map((_, i) => i)
+		.sort((a, b) => layers[a].name.toLowerCase().localeCompare(layers[b].name.toLowerCase()));
+
 var layerSelect = (layers, layer, onChange) =>
 	select({
 		id: 'layer-select',
 		label: 'Color by',
 		value: layer,
-		onChange}, ...layers.map((l, i) => menuItem({value: i}, l.name)));
+		onChange}, ...sortedLayerIndices(layers).map(i => menuItem({value: i}, layers[i].name)));
 
 var isFiltered = state =>
 	getIn(state, ['referenceFilters'], []).some(f => f.filtered.length > 0);
@@ -68,7 +72,9 @@ var overlayButton = (onClick, checked) =>
 		typography({component: 'label', className: legendStyles.label},
 			'Mapped data'));
 
-var overlayVariables = overlay => keys(omit(overlay, 'x', 'y', '_dicts', '_ordered'));
+var overlayVariables = overlay =>
+	keys(omit(overlay, 'x', 'y', '_dicts', '_ordered'))
+		.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 
 
 export default el(class extends PureComponent {
@@ -206,8 +212,7 @@ export default el(class extends PureComponent {
 		var refFilterRow = i => {
 			var f = referenceFilters[i],
 				usedLayers = new Set(referenceFilters.map((g, j) => j !== i ? g.layer : null)),
-				availableLayers = layers
-					.map((l, idx) => idx)
+				availableLayers = sortedLayerIndices(layers)
 					.filter(idx => !usedLayers.has(idx) || idx === f.layer),
 				label = i === 0 ? 'Filter by' : 'Refine by';
 			return [
@@ -279,7 +284,7 @@ export default el(class extends PureComponent {
 								}
 							}},
 							menuItem({value: -1}, 'None'),
-							...layers.map((l, i) => menuItem({value: i}, l.name))) :
+							...sortedLayerIndices(layers).map(i => menuItem({value: i}, layers[i].name))) :
 						div(
 							...referenceFilters.flatMap((_, i) => refFilterRow(i)),
 							referenceFilters.length < 3 &&
