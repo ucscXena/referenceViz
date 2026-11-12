@@ -123,7 +123,7 @@ var getOverlay = path =>
 	path.startsWith('s3://') ?
 		presignOverlay(path).flatMap(({url, original_filename: originalFilename,
 				cell_count: overlayCount}) =>
-			fetchOverlay(url).map(ipc => ({ipc, originalFilename, overlayCount}))) :
+			fetchOverlay(url).retry(2).map(ipc => ({ipc, originalFilename, overlayCount}))) :
 		fetchOverlay(path).map(ipc => ({ipc, originalFilename: 'Mapped cells', overlayCount: undefined}));
 
 function forceRedraw(deck) {
@@ -158,23 +158,31 @@ export default el(class SinglecellView extends PureComponent {
 		this.props.overlay &&
 			getOverlay(this.props.overlay).subscribe(
 				({ipc, originalFilename, overlayCount}) => {
-					var table = tableFromIPC(ipc);
-					var names = pluck(table.schema.fields, 'name');
-					var dicts = table.batches[0].data.children.map(f =>
-						f.dictionary && f.dictionary.toArray());
-					var ordered = table.schema.fields.map(f => !!f.type?.isOrdered);
-					var data = pluck(table.batches[0].data.children, 'values');
-					var overlay = assoc(assoc(object(names, data), '_dicts',
-						object(names, dicts)), '_ordered', object(names, ordered));
-					var overlayVars = without(names, 'x', 'y');
-					var overlayFilters = overlayVars.length ?
-						[{var: overlayVars[0], filtered: []}] : [];
-					this.setState({overlayRadius: defaultOverlayRadius(overlay.x.length)});
-					this.props.onState(state => merge(state, {overlay, overlayFilters,
-						...(originalFilename ? {overlayTitle: originalFilename} : {}),
-						...(overlayCount != null ? {overlayCount} : {})}));
+					try {
+						var table = tableFromIPC(ipc);
+						var names = pluck(table.schema.fields, 'name');
+						var dicts = table.batches[0].data.children.map(f =>
+							f.dictionary && f.dictionary.toArray());
+						var ordered = table.schema.fields.map(f => !!f.type?.isOrdered);
+						var data = pluck(table.batches[0].data.children, 'values');
+						var overlay = assoc(assoc(object(names, data), '_dicts',
+							object(names, dicts)), '_ordered', object(names, ordered));
+						var overlayVars = without(names, 'x', 'y');
+						var overlayFilters = overlayVars.length ?
+							[{var: overlayVars[0], filtered: []}] : [];
+						this.setState({overlayRadius: defaultOverlayRadius(overlay.x.length)});
+						this.props.onState(state => merge(state, {overlay, overlayFilters,
+							...(originalFilename ? {overlayTitle: originalFilename} : {}),
+							...(overlayCount != null ? {overlayCount} : {})}));
+					} catch(e) {
+						console.error('overlay parse error', e);
+						this.setState({error: true});
+					}
 				},
-				() => this.setState({error: true}));
+				err => {
+					console.error('overlay load error', err);
+					this.setState({error: true});
+				});
 		this.intervalId =  Let((lastPixelRatio = window.devicePixelRatio) =>
 			setInterval(() => {
 			  if (window.devicePixelRatio !== lastPixelRatio) {
