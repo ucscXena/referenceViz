@@ -180,7 +180,7 @@ def reference_explore(request):
         refs_data.append({
             'id': str(group.id),
             'reference_id': reference.pk,
-            'title': m.get('reference_name') or group.title,
+            'title': group.title,
             'organism': [item['label'] for item in (m.get('organism') or [])],
             'tissue': [item['label'] for item in (m.get('tissue') or [])],
             'cell_type': [item['label'] for item in (m.get('cell_type') or [])],
@@ -209,48 +209,6 @@ def user_status(request):
             'logout_url': '/accounts/logout/',
         })
     return JsonResponse({'email': None})
-
-
-@require_GET
-def reference_groups_api(request):
-    """Public JSON API: reference groups with their active versions, for data-explorer."""
-    groups = (
-        ReferenceGroup.objects
-        .exclude(default_version=None)
-        .select_related('default_version')
-        .defer(*(f'default_version__{field}' for field in Reference.CONTENT_FIELDS))
-        .prefetch_related(
-            models.Prefetch(
-                'versions',
-                queryset=Reference.objects.defer(*Reference.CONTENT_FIELDS).order_by('-created_at'),
-                to_attr='all_versions',
-            )
-        )
-        .order_by('title')
-    )
-    data = [
-        {
-            'id': str(group.id),
-            'title': group.title,
-            'default_version_id': group.default_version_id,
-            'versions': [
-                {
-                    'id': ref.id,
-                    'version_label': ref.version_label,
-                    'is_default': ref.id == group.default_version_id,
-                }
-                for ref in group.all_versions
-                if ref.is_active
-            ],
-            'inactive_version_ids': [
-                ref.id
-                for ref in group.all_versions
-                if not ref.is_active
-            ],
-        }
-        for group in groups
-    ]
-    return JsonResponse(data, safe=False)
 
 
 @login_required
