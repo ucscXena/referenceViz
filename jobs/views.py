@@ -214,11 +214,6 @@ def user_status(request):
 @require_GET
 def reference_groups_api(request):
     """Public JSON API: reference groups with their active versions, for data-explorer."""
-    active_references = (
-        Reference.objects.filter(is_active=True)
-        .defer(*Reference.CONTENT_FIELDS)
-        .order_by('-created_at')
-    )
     groups = (
         ReferenceGroup.objects
         .exclude(default_version=None)
@@ -227,8 +222,8 @@ def reference_groups_api(request):
         .prefetch_related(
             models.Prefetch(
                 'versions',
-                queryset=active_references,
-                to_attr='active_versions',
+                queryset=Reference.objects.defer(*Reference.CONTENT_FIELDS).order_by('-created_at'),
+                to_attr='all_versions',
             )
         )
         .order_by('title')
@@ -244,7 +239,13 @@ def reference_groups_api(request):
                     'version_label': ref.version_label,
                     'is_default': ref.id == group.default_version_id,
                 }
-                for ref in group.active_versions
+                for ref in group.all_versions
+                if ref.is_active
+            ],
+            'inactive_version_ids': [
+                ref.id
+                for ref in group.all_versions
+                if not ref.is_active
             ],
         }
         for group in groups
@@ -894,7 +895,7 @@ def uce_callback(request):
         return JsonResponse({'status': 'not_found'}, status=404)
 
     if status == 'running':
-        updates = {k: data[k] for k in ('cell_count', 'raw_cell_count', 'num_gpus', 'cells_per_second', 'git_commit', 'filtered_expression_s3_uri', 'uce_progress') if k in data}
+        updates = {k: data[k] for k in ('cell_count', 'raw_cell_count', 'num_gpus', 'cells_per_second', 'git_commit', 'filtered_expression_s3_uri', 'uce_progress', 'species') if k in data}
         if 'git_commit' in updates:
             updates['uce_git_commit'] = updates.pop('git_commit')
         with transaction.atomic():
