@@ -61,7 +61,7 @@ class Command(BaseCommand):
 
         self._sync_uce_models(src, dst, dry)
         self._sync_reference_groups(src, dst, dry)
-        self._sync_references(src, dst, dry)
+        self._sync_references(src, dst, dry, preserve_is_active=not options['reverse'])
         self._sync_publications(src, dst, dry, delete=not options['reverse'])
         self._fix_default_versions(src, dst, dry)
         if not options['reverse']:
@@ -118,26 +118,28 @@ class Command(BaseCommand):
 
     # ── Reference ──────────────────────────────────────────────────────────────
 
-    def _sync_references(self, src, dst, dry):
+    def _sync_references(self, src, dst, dry, preserve_is_active=False):
         src_rows = list(Reference.objects.using(src).values())
         self.stdout.write(f'Reference: {len(src_rows)} in source')
-        skip = {'created_at'}
+        skip_create = {'created_at'}
+        skip_update = skip_create | ({'is_active'} if preserve_is_active else set())
         for row in src_rows:
             pk = row['id']
-            defaults = {k: v for k, v in row.items() if k not in skip and k != 'id'}
+            create_fields = {k: v for k, v in row.items() if k not in skip_create and k != 'id'}
+            update_fields = {k: v for k, v in row.items() if k not in skip_update and k != 'id'}
             try:
                 obj = Reference.objects.using(dst).get(pk=pk)
-                changed = [k for k, v in defaults.items() if getattr(obj, k) != v]
+                changed = [k for k, v in update_fields.items() if getattr(obj, k) != v]
                 if changed:
                     self.stdout.write(f'  Reference {pk!r}: update {changed}')
                     if not dry:
-                        for k, v in defaults.items():
+                        for k, v in update_fields.items():
                             setattr(obj, k, v)
-                        obj.save(using=dst, update_fields=list(defaults.keys()))
+                        obj.save(using=dst, update_fields=list(update_fields.keys()))
             except Reference.DoesNotExist:
                 self.stdout.write(f'  Reference {pk!r}: create')
                 if not dry:
-                    ref = Reference(id=pk, **defaults)
+                    ref = Reference(id=pk, **create_fields)
                     ref.save(using=dst)
 
     # ── Publication ────────────────────────────────────────────────────────────
