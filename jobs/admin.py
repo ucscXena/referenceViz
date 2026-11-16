@@ -79,12 +79,13 @@ def _batch_link(batch_job_id):
 class UCEEmbeddingInline(admin.TabularInline):
     model = UCEEmbedding
     extra = 0
-    fields = ('uce_model', 'status', 'batch_job_link', 'uce_download_link', 'created_at', 'updated_at')
-    readonly_fields = ('uce_model', 'status', 'batch_job_link', 'uce_download_link', 'created_at', 'updated_at')
+    fields = ('link', 'uce_model', 'status', 'uce_download_link', 'created_at', 'updated_at')
+    readonly_fields = ('link', 'uce_model', 'status', 'uce_download_link', 'created_at', 'updated_at')
 
-    def batch_job_link(self, obj):
-        return _batch_link(obj.batch_job_id)
-    batch_job_link.short_description = 'Batch Job'
+    def link(self, obj):
+        url = reverse('admin:jobs_uceembedding_change', args=[obj.pk])
+        return format_html('<a href="{}">{}</a>', url, str(obj.id)[:8])
+    link.short_description = 'ID'
 
     def uce_download_link(self, obj):
         return _presigned_link(obj.uce_s3_uri(), 'Download')
@@ -324,51 +325,6 @@ class JobAdmin(admin.ModelAdmin):
     uce_download_link.short_description = 'UCE Embedding'
 
 
-@admin.register(UCEEmbedding)
-class UCEEmbeddingAdmin(admin.ModelAdmin):
-    list_display = ('short_id', 'job_link', 'uce_model', 'status', 'batch_job_link',
-                    'cell_count_display', 'created_at', 'uce_download_link')
-    list_filter = ('status', 'uce_model')
-    search_fields = ('job__original_filename', 'job__user__username')
-    ordering = ('-created_at',)
-    readonly_fields = ('id', 'job', 'uce_model', 'status', 'batch_job_id',
-                       'batch_job_link', 'result', 'uce_download_link', 'created_at', 'updated_at')
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related('job__user', 'uce_model')
-
-    def short_id(self, obj):
-        return str(obj.id)[:8]
-    short_id.short_description = 'ID'
-    short_id.admin_order_field = 'id'
-
-    def job_link(self, obj):
-        label = f'{str(obj.job_id)[:8]} · {obj.job.original_filename or obj.job.user.username}'
-        url = reverse('admin:jobs_job_change', args=[obj.job_id])
-        return format_html('<a href="{}">{}</a>', url, label)
-    job_link.short_description = 'Job'
-    job_link.admin_order_field = 'job'
-
-    def batch_job_link(self, obj):
-        result = obj.result or {}
-        if result.get('sharded'):
-            job_id = result.get('merge_batch_job_id') or result.get('preprocess_batch_job_id')
-            prefix = 'merge' if result.get('merge_batch_job_id') else 'pre'
-            link = _batch_link(job_id)
-            return mark_safe(f'{prefix}: {link}') if job_id else '—'
-        return _batch_link(obj.batch_job_id)
-    batch_job_link.short_description = 'Batch Job'
-
-    def cell_count_display(self, obj):
-        n = obj.cell_count()
-        return f'{n:,}' if n else '—'
-    cell_count_display.short_description = 'Cells'
-
-    def uce_download_link(self, obj):
-        return _presigned_link(obj.uce_s3_uri(), 'Download')
-    uce_download_link.short_description = 'UCE Embedding'
-
-
 @admin.register(UCEModel)
 class UCEModelAdmin(admin.ModelAdmin):
     list_display = ('name', 'model_url', 'is_default', 'created_at')
@@ -409,6 +365,72 @@ class _PrettyJsonWidget(_FileLoadTextarea):
         except (TypeError, ValueError):  # empty, or invalid input being redisplayed
             return value or ''
         return '' if parsed is None else json.dumps(parsed, indent=2)
+
+
+class UCEEmbeddingForm(forms.ModelForm):
+    result = forms.JSONField(
+        widget=_PrettyJsonWidget(attrs={
+            'rows': 20,
+            'style': 'font-family: monospace; font-size: 12px; width: 100%;',
+        }),
+        required=False,
+    )
+
+    class Meta:
+        model = UCEEmbedding
+        fields = '__all__'
+
+
+@admin.register(UCEEmbedding)
+class UCEEmbeddingAdmin(admin.ModelAdmin):
+    form = UCEEmbeddingForm
+    list_display = ('short_id', 'job_link', 'uce_model', 'status', 'batch_job_link',
+                    'cell_count_display', 'created_at', 'uce_download_link')
+    list_filter = ('status', 'uce_model')
+    search_fields = ('job__original_filename', 'job__user__username')
+    ordering = ('-created_at',)
+    readonly_fields = ('id', 'job', 'uce_model', 'batch_job_id',
+                       'batch_job_link', 'uce_download_link', 'created_at', 'updated_at')
+    fieldsets = (
+        (None, {'fields': ('id', 'job', 'uce_model', 'status')}),
+        ('Batch', {'fields': ('batch_job_id', 'batch_job_link')}),
+        ('Result', {'fields': ('result', 'uce_download_link')}),
+        ('Timestamps', {'fields': ('created_at', 'updated_at')}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('job__user', 'uce_model')
+
+    def short_id(self, obj):
+        return str(obj.id)[:8]
+    short_id.short_description = 'ID'
+    short_id.admin_order_field = 'id'
+
+    def job_link(self, obj):
+        label = f'{str(obj.job_id)[:8]} · {obj.job.original_filename or obj.job.user.username}'
+        url = reverse('admin:jobs_job_change', args=[obj.job_id])
+        return format_html('<a href="{}">{}</a>', url, label)
+    job_link.short_description = 'Job'
+    job_link.admin_order_field = 'job'
+
+    def batch_job_link(self, obj):
+        result = obj.result or {}
+        if result.get('sharded'):
+            job_id = result.get('merge_batch_job_id') or result.get('preprocess_batch_job_id')
+            prefix = 'merge' if result.get('merge_batch_job_id') else 'pre'
+            link = _batch_link(job_id)
+            return mark_safe(f'{prefix}: {link}') if job_id else '—'
+        return _batch_link(obj.batch_job_id)
+    batch_job_link.short_description = 'Batch Job'
+
+    def cell_count_display(self, obj):
+        n = obj.cell_count()
+        return f'{n:,}' if n else '—'
+    cell_count_display.short_description = 'Cells'
+
+    def uce_download_link(self, obj):
+        return _presigned_link(obj.uce_s3_uri(), 'Download')
+    uce_download_link.short_description = 'UCE Embedding'
 
 
 class ReferenceForm(forms.ModelForm):
