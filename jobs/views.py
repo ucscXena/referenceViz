@@ -550,9 +550,15 @@ def project_existing(request, job_id):
             uce_s3_uri = embedding.uce_s3_uri()
             if uce_s3_uri:
                 _submit_projection(projection, uce_s3_uri)
-        elif embedding.status in ('error',) or emb_created:
+        elif emb_created or embedding.status == 'error':
             embeddings_to_run[target_uce_model.id] = embedding
-        # else: embedding is pending/running — projection will be submitted when it completes
+        elif embedding.status in ('pending', 'running'):
+            # If the embedding hasn't been updated in 2 hours it's likely stuck
+            # (pipeline died without sending an error callback). Treat as error
+            # so it gets reset and resubmitted rather than waiting forever.
+            stale = (timezone.now() - embedding.updated_at) > timedelta(hours=2)
+            if stale:
+                embeddings_to_run[target_uce_model.id] = embedding
 
     for embedding in embeddings_to_run.values():
         embedding.status = 'pending'
