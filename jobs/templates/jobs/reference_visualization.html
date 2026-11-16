@@ -9,6 +9,7 @@
 
 {% block base_content %}
 <iframe
+  id="ref-visualization"
   class="ref-visualization"
   allow="fullscreen"
   loading="lazy"
@@ -16,4 +17,12 @@
   sandbox="allow-scripts allow-same-origin"
   src="{{ src }}"
   title="Brain Explorer Visualization"></iframe>
+<script>
+document.addEventListener('mousedown', function() {
+  var iframe = document.getElementById('ref-visualization');
+  if (iframe && iframe.contentWindow) {
+    iframe.contentWindow.postMessage('parent-mousedown', '*');
+  }
+});
+</script>
 {% endblock %}

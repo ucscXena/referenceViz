@@ -145,7 +145,18 @@ export default el(class SinglecellView extends PureComponent {
 		overlayRadius: 3
 	};
 	//	For displaying FPS
+	onParentMousedown = e => {
+		if (e.data === 'parent-mousedown') {
+			var popover = document.querySelector('.MuiPopover-root');
+			if (popover) {
+				popover.dispatchEvent(new KeyboardEvent('keydown', {
+					key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true
+				}));
+			}
+		}
+	};
 	componentDidMount() {
+		window.addEventListener('message', this.onParentMousedown);
 		getImageMeta(this.props.image).subscribe(
 			imageState => {
 				this.props.onState(state => merge(state, {imageState}));
@@ -199,6 +210,7 @@ export default el(class SinglecellView extends PureComponent {
 	componentWillUnmount() {
 //		clearTimeout(this.timer);
 		clearInterval(this.intervalId);
+		window.removeEventListener('message', this.onParentMousedown);
 	}
 	onFPSRef = FPSRef => {
 		this.FPSRef = FPSRef;
