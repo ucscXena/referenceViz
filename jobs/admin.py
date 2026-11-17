@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from django import forms
 from django.conf import settings
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.admin.utils import quote
 from django.db.models import Count, Q
 from django.http import HttpResponse
@@ -492,6 +492,62 @@ class ReferenceAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'uce_model')
     search_fields = ('id', 'group__title')
     readonly_fields = ('crossref_status', 'current_image', 'created_at')
+    change_list_template = 'admin/jobs/reference/change_list.html'
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path('sync-prod/', self.admin_site.admin_view(self.sync_prod_view),
+                 name='jobs_reference_sync_prod'),
+        ]
+        return custom + urls
+
+    def sync_prod_view(self, request):
+        from io import StringIO
+        from django.core.management import call_command
+        from django.db import connections
+
+        has_prod = 'production' in connections
+
+        src_only, dst_only = [], []
+        if has_prod:
+            with connections['default'].cursor() as c:
+                c.execute('SELECT app, name FROM django_migrations ORDER BY app, name')
+                src_migrations = set(tuple(r) for r in c.fetchall())
+            with connections['production'].cursor() as c:
+                c.execute('SELECT app, name FROM django_migrations ORDER BY app, name')
+                dst_migrations = set(tuple(r) for r in c.fetchall())
+            src_only = sorted(src_migrations - dst_migrations)
+            dst_only = sorted(dst_migrations - src_migrations)
+
+        output = None
+        error = None
+
+        if request.method == 'POST':
+            if not has_prod:
+                error = 'No production database configured — add a "production" entry to DATABASES in site_settings_private.py.'
+            elif (src_only or dst_only) and not request.POST.get('override'):
+                error = 'Schema mismatch between dev and prod — check the override box to proceed anyway.'
+            else:
+                out = StringIO()
+                try:
+                    call_command('sync_reference_data', stdout=out, stderr=out)
+                    output = out.getvalue().strip()
+                except Exception as e:
+                    import traceback
+                    error = f'{e}\n\n{traceback.format_exc()}'
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Sync reference catalog dev → prod',
+            'has_prod': has_prod,
+            'schema_mismatch': bool(src_only or dst_only),
+            'src_only': src_only,
+            'dst_only': dst_only,
+            'output': output,
+            'error': error,
+        }
+        return render(request, 'admin/jobs/reference/sync_prod.html', context)
     fieldsets = (
         (None, {'fields': ('id', 'group', 'uce_model', 's3_uri', 'version_label', 'notes',
                            'is_active', 'created_at')}),

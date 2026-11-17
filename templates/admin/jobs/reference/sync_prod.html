@@ -1,0 +1,74 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<style>
+  .sync-section { margin-bottom: 24px; }
+  .sync-pre { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px;
+              padding: 12px 16px; font-size: 0.8rem; white-space: pre-wrap;
+              word-break: break-word; max-height: 500px; overflow-y: auto; }
+  .sync-mismatch { border-left: 4px solid #f9a825; border-radius: 4px;
+                   padding: 12px 16px; margin-bottom: 16px; }
+  .sync-error   { border-left: 4px solid #c62828; border-radius: 4px;
+                  padding: 12px 16px; margin-bottom: 16px; }
+  .sync-success { border-left: 4px solid #2e7d32; border-radius: 4px;
+                  padding: 12px 16px; margin-bottom: 16px; }
+</style>
+
+<h2>Sync reference catalog dev → prod</h2>
+<p>Copies UCEModel, ReferenceGroup, Reference (preserving prod <code>is_active</code>),
+   Publication, and DocumentChunk from the dev database to production.
+   Does not affect jobs, projections, or user data.</p>
+
+{% if not has_prod %}
+  <div class="sync-error">
+    No <code>production</code> database configured. Add a <code>"production"</code>
+    entry to <code>DATABASES</code> in <code>site_settings_private.py</code>.
+  </div>
+{% else %}
+
+  {% if schema_mismatch %}
+    <div class="sync-mismatch">
+      <strong>Schema mismatch between dev and prod.</strong>
+      {% if src_only %}
+        <p>Migrations in dev but not prod:
+          {% for app, name in src_only %}<code>{{ app }}.{{ name }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}
+        </p>
+      {% endif %}
+      {% if dst_only %}
+        <p>Migrations in prod but not dev:
+          {% for app, name in dst_only %}<code>{{ app }}.{{ name }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}
+        </p>
+      {% endif %}
+    </div>
+  {% else %}
+    <p class="sync-section" style="color:#2e7d32">&#10003; Dev and prod schemas match.</p>
+  {% endif %}
+
+  {% if error %}
+    <div class="sync-error"><strong>Error:</strong><pre style="margin:8px 0 0;white-space:pre-wrap">{{ error }}</pre></div>
+  {% endif %}
+
+  {% if output %}
+    <div class="sync-success"><strong>Sync complete.</strong></div>
+    <div class="sync-section">
+      <pre class="sync-pre">{{ output }}</pre>
+    </div>
+  {% else %}
+    <form method="post">
+      {% csrf_token %}
+      {% if schema_mismatch %}
+        <p>
+          <label>
+            <input type="checkbox" name="override" value="1">
+            I understand the schema mismatch — proceed anyway
+            (safe if the differing migrations don't affect Reference-related tables)
+          </label>
+        </p>
+      {% endif %}
+      <input type="submit" value="Confirm: copy reference data dev → prod" class="button default">
+      &nbsp;
+      <a href="{% url 'admin:jobs_reference_changelist' %}">Cancel</a>
+    </form>
+  {% endif %}
+
+{% endif %}
+{% endblock %}
