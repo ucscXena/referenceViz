@@ -1,8 +1,5 @@
 """
-Build the RAG index from fetched paper text files.
-
-Reads all papers/<slug>/fulltext.txt files from PAPERS_DIR, chunks them,
-embeds each chunk with all-MiniLM-L6-v2, and stores in the DocumentChunk table.
+Build the RAG index from paper full texts stored in the Publication table.
 
 Always does a full rebuild of 'paper' source chunks — fast at this scale and
 avoids any stale-index issues when papers are updated or chunking changes.
@@ -12,15 +9,12 @@ Run:
   python manage.py build_rag --dry-run   # show what would be indexed, no DB writes
 """
 
-import json
 import re
-from pathlib import Path
 
-from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from jobs.models import DocumentChunk
+from jobs.models import DocumentChunk, Publication
 
 CHUNK_MAX_CHARS = 2000
 CHUNK_OVERLAP_CHARS = 200
@@ -73,36 +67,25 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
-        papers_dir = Path(getattr(settings, 'PAPERS_DIR', ''))
 
-        if not papers_dir.exists():
-            self.stderr.write(f'PAPERS_DIR {papers_dir} does not exist.')
+        pubs = Publication.objects.filter(
+            fulltext_status=Publication.FULLTEXT_STATUS_COMPLETE,
+        ).exclude(fulltext_source='abstract').exclude(fulltext='')
+
+        if not pubs.exists():
+            self.stderr.write('No papers with full text found. Run fetch_papers or use the admin upload.')
             return
 
-        # Collect all paper directories that have both fulltext.txt and meta.json
-        paper_dirs = sorted([
-            d for d in papers_dir.iterdir()
-            if d.is_dir()
-            and (d / 'fulltext.txt').exists()
-            and (d / 'meta.json').exists()
-        ])
-
-        if not paper_dirs:
-            self.stderr.write('No papers found. Run fetch_papers first.')
-            return
-
-        self.stdout.write(f'Found {len(paper_dirs)} paper(s).\n')
+        self.stdout.write(f'Found {pubs.count()} paper(s) with full text.\n')
 
         # Chunk all papers and collect texts + metadata
         all_texts = []
         all_meta = []
 
-        for paper_dir in paper_dirs:
-            meta = json.loads((paper_dir / 'meta.json').read_text())
-            text = clean_text((paper_dir / 'fulltext.txt').read_text(encoding='utf-8'))
+        for pub in pubs.order_by('doi'):
+            text = clean_text(pub.fulltext)
             chunks = chunk_text(text)
-            label = meta['label']
-            doi = meta['doi']
+            label = pub.title or pub.doi
 
             self.stdout.write(
                 f'  {label}: {len(text):,} chars → {len(chunks)} chunk(s)\n'
@@ -110,7 +93,7 @@ class Command(BaseCommand):
 
             for i, chunk in enumerate(chunks):
                 all_texts.append(chunk)
-                all_meta.append({'doi': doi, 'label': label, 'chunk_index': i})
+                all_meta.append({'doi': pub.doi, 'label': label, 'chunk_index': i})
 
         self.stdout.write(f'\nTotal chunks: {len(all_texts)}\n')
 
@@ -150,5 +133,5 @@ class Command(BaseCommand):
             ], batch_size=200)
 
         self.stdout.write(
-            f'Done. Indexed {len(all_texts)} chunk(s) from {len(paper_dirs)} paper(s).\n'
+            f'Done. Indexed {len(all_texts)} chunk(s) from {pubs.count()} paper(s).\n'
         )

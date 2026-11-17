@@ -5,6 +5,11 @@ from django.db import models
 from pgvector.django import VectorField
 
 
+def normalize_doi(doi):
+    """Normalize a DOI to lowercase. DOIs are case-insensitive; lowercase is the canonical form."""
+    return doi.strip().lower() if doi else doi
+
+
 
 class UCEModel(models.Model):
     """A UCE embedding model version. Admin-managed; one row should have is_default=True."""
@@ -58,6 +63,17 @@ class Publication(models.Model):
     reference that cites the DOI, and are fetched when a reference citing a DOI
     without a row (or with a failed fetch) is saved.
     """
+    FULLTEXT_STATUS_NONE     = 'none'
+    FULLTEXT_STATUS_FETCHING = 'fetching'
+    FULLTEXT_STATUS_COMPLETE = 'complete'
+    FULLTEXT_STATUS_ERROR    = 'error'
+    FULLTEXT_STATUS_CHOICES  = [
+        ('none',     'Not fetched'),
+        ('fetching', 'Fetching'),
+        ('complete', 'Complete'),
+        ('error',    'Error'),
+    ]
+
     doi = models.CharField(max_length=255, primary_key=True)
     title = models.TextField(blank=True)
     authors = models.TextField(blank=True)
@@ -65,6 +81,10 @@ class Publication(models.Model):
     year = models.CharField(max_length=10, blank=True)
     fetch_error = models.TextField(blank=True)  # set when the last Crossref fetch failed
     fetched_at = models.DateTimeField(null=True, blank=True)
+    fulltext = models.TextField(blank=True)
+    fulltext_source = models.CharField(max_length=20, blank=True)  # pmc_oa / biorxiv_s3 / unpaywall_pdf / manual / abstract
+    fulltext_status = models.CharField(max_length=10, choices=FULLTEXT_STATUS_CHOICES, default='none')
+    fulltext_error = models.TextField(blank=True)
 
     class Meta:
         ordering = ['doi']
@@ -104,7 +124,7 @@ class Reference(models.Model):
     def cited_dois(self):
         """DOIs of the publications in this reference's metadata, in order, without repeats."""
         dois = (p.get('doi') for p in (self.metadata or {}).get('publication') or [])
-        return list(dict.fromkeys(d for d in dois if d))
+        return list(dict.fromkeys(normalize_doi(d) for d in dois if d))
 
 
 class Job(models.Model):

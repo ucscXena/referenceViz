@@ -4,6 +4,7 @@ django-ses
 boto3
 pgvector
 sentence-transformers
+pymupdf
 Django==4.2.26
 django-allauth[socialaccount]==65.13.0
 django-rq==3.1

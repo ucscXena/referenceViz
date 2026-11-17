@@ -27,7 +27,7 @@ import os
 
 from django.core.management.base import BaseCommand, CommandError
 
-from jobs.models import Publication, Reference
+from jobs.models import Publication, Reference, normalize_doi
 
 
 CONTENT_TYPES = {
@@ -60,7 +60,7 @@ def read_notes(notes_dir, reference_id):
 def import_publications(publications):
     """Store data-explorer's publications.json entries as Publication rows."""
     for source in publications:
-        Publication.objects.update_or_create(doi=source['doi'], defaults={
+        Publication.objects.update_or_create(doi=normalize_doi(source['doi']), defaults={
             'title': source['title'],
             'authors': source['authors'],
             'journal': source['journalOrBook'],

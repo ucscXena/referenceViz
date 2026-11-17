@@ -605,15 +605,46 @@ class ReferenceAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+class PublicationForm(forms.ModelForm):
+    fulltext_upload = forms.FileField(
+        required=False,
+        label='Upload full text',
+        help_text='Upload a .txt or .pdf file to set the full text manually. '
+                  'PDF text is extracted server-side; only the text is stored.',
+    )
+
+    class Meta:
+        model = Publication
+        fields = '__all__'
+        widgets = {
+            'fulltext': forms.Textarea(attrs={
+                'rows': 20,
+                'style': 'font-family: monospace; font-size: 12px; width: 100%;',
+            }),
+        }
+
+
 @admin.register(Publication)
 class PublicationAdmin(admin.ModelAdmin):
     """Crossref details by DOI. Filled in automatically when a reference citing the
     DOI is saved; editable for a DOI Crossref can't resolve."""
-    list_display = ('doi', 'title', 'year', 'fetch_error', 'fetched_at')
-    list_filter = (('fetch_error', admin.EmptyFieldListFilter),)
+    form = PublicationForm
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        # Ensure enctype="multipart/form-data" is set even though fulltext_upload
+        # is a custom form field (not a model FileField that Django auto-detects).
+        extra_context = dict(extra_context or {}, has_file_field=True)
+        return super().changeform_view(request, object_id, form_url, extra_context)
+    list_display = ('doi', 'title', 'year', 'fulltext_status', 'fetch_error', 'fetched_at')
+    list_filter = ('fulltext_status', ('fetch_error', admin.EmptyFieldListFilter))
     search_fields = ('doi', 'title', 'authors')
-    readonly_fields = ('fetched_at',)
-    actions = ('fetch_again',)
+    readonly_fields = ('fetched_at', 'fulltext_source', 'fulltext_error')
+    fieldsets = (
+        (None, {'fields': ('doi', 'title', 'authors', 'journal', 'year', 'fetch_error', 'fetched_at')}),
+        ('Full text', {'fields': ('fulltext_status', 'fulltext_source', 'fulltext_error',
+                                  'fulltext_upload', 'fulltext')}),
+    )
+    actions = ('fetch_again', 'fetch_fulltext_again')
 
     @admin.action(description='Fetch selected publications again from Crossref')
     def fetch_again(self, request, queryset):
@@ -622,6 +653,49 @@ class PublicationAdmin(admin.ModelAdmin):
         run = fetch_crossref_publications if getattr(settings, 'RQSYNC', False) else fetch_crossref_publications.delay
         run(dois)
         self.message_user(request, f'Fetching {len(dois)} publication(s) from Crossref.')
+
+    @admin.action(description='Re-fetch full text for selected publications')
+    def fetch_fulltext_again(self, request, queryset):
+        from .tasks import fetch_fulltext_for_doi
+        count = 0
+        for doi in queryset.values_list('doi', flat=True):
+            Publication.objects.filter(doi=doi).update(
+                fulltext_status=Publication.FULLTEXT_STATUS_NONE,
+                fulltext_error='',
+            )
+            fetch_fulltext_for_doi.delay(doi)
+            count += 1
+        self.message_user(request, f'Queued full-text fetch for {count} publication(s).')
+
+    def save_model(self, request, obj, form, change):
+        upload = form.cleaned_data.get('fulltext_upload')
+        if upload:
+            name = upload.name.lower()
+            if name.endswith('.pdf'):
+                try:
+                    import fitz
+                    doc = fitz.open(stream=upload.read(), filetype='pdf')
+                    obj.fulltext = '\n\n'.join(page.get_text() for page in doc)
+                    obj.fulltext_source = 'manual'
+                    obj.fulltext_status = Publication.FULLTEXT_STATUS_COMPLETE
+                    obj.fulltext_error = ''
+                except ImportError:
+                    self.message_user(request,
+                        'pymupdf is not installed — upload a .txt file instead.',
+                        level=messages.ERROR)
+                    return
+                except Exception as e:
+                    self.message_user(request, f'PDF extraction failed: {e}', level=messages.ERROR)
+                    return
+            else:
+                obj.fulltext = upload.read().decode('utf-8', errors='replace')
+                obj.fulltext_source = 'manual'
+                obj.fulltext_status = Publication.FULLTEXT_STATUS_COMPLETE
+                obj.fulltext_error = ''
+        super().save_model(request, obj, form, change)
+        if upload and obj.fulltext:
+            from .tasks import rebuild_rag_for_doi
+            rebuild_rag_for_doi.delay(obj.doi)
 
 
 @admin.register(Projection)

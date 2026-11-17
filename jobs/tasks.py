@@ -15,7 +15,7 @@ from .batch import (check_batch_job, check_batch_jobs, submit_batch_job,
                     submit_uce_batch_job, submit_preprocess_batch_job,
                     submit_shard_batch_job, submit_uce_brain_shard_batch_job,
                     submit_merge_batch_job, _ecr_image_digest)
-from .models import Job, Projection, Publication, UCEEmbedding
+from .models import Job, Projection, Publication, UCEEmbedding, normalize_doi
 
 # 60 checks × 5 min = 300 min max wait for UCE
 MAX_CHECK_ATTEMPTS = 60
@@ -786,6 +786,7 @@ def fetch_crossref_publications(dois):
     """
     import requests
 
+    dois = [normalize_doi(d) for d in dois]
     for i, doi in enumerate(dois):
         if i:
             time.sleep(1)  # Crossref asks clients to keep the request rate down
@@ -815,3 +816,116 @@ def fetch_crossref_publications(dois):
                 'fetch_error': str(e)[:500] or type(e).__name__,
                 'fetched_at': timezone.now(),
             })
+
+    # Chain fulltext fetch for DOIs that haven't been fetched yet.
+    pending = list(
+        Publication.objects.filter(doi__in=dois, fulltext_status=Publication.FULLTEXT_STATUS_NONE)
+        .values_list('doi', flat=True)
+    )
+    for doi in pending:
+        fetch_fulltext_for_doi.delay(doi)
+
+
+@job('default')
+def fetch_fulltext_for_doi(doi):
+    """
+    RQ task: fetch full text for one DOI and store it on the Publication row.
+    On completion, rebuilds that paper's DocumentChunk rows incrementally.
+    """
+    from .management.commands.fetch_papers import (
+        doi_slug, fetch_europepmc, fetch_biorxiv_s3, fetch_unpaywall,
+    )
+
+    doi = normalize_doi(doi)
+    try:
+        pub = Publication.objects.get(doi=doi)
+    except Publication.DoesNotExist:
+        return
+
+    if pub.fulltext_status == Publication.FULLTEXT_STATUS_COMPLETE:
+        return
+
+    pub.fulltext_status = Publication.FULLTEXT_STATUS_FETCHING
+    pub.save(update_fields=['fulltext_status'])
+
+    class _Stdout:
+        def write(self, s):
+            logger.debug('fetch_fulltext[%s]: %s', doi, s.rstrip())
+
+    stdout = _Stdout()
+    unpaywall_email = getattr(settings, 'UNPAYWALL_EMAIL', '')
+
+    try:
+        fetched = (
+            fetch_biorxiv_s3(doi, stdout) or
+            fetch_europepmc(doi, stdout) or
+            fetch_unpaywall(doi, unpaywall_email, stdout)
+        )
+
+        if fetched:
+            text, source = fetched
+        else:
+            abstract = pub.title  # fallback: title only if no abstract available
+            text = f'# {pub.title}\n\n## Abstract\n{abstract}' if pub.title else ''
+            source = 'abstract'
+
+        pub.fulltext = text
+        pub.fulltext_source = source
+        pub.fulltext_status = Publication.FULLTEXT_STATUS_COMPLETE
+        pub.fulltext_error = ''
+        pub.save(update_fields=['fulltext', 'fulltext_source', 'fulltext_status', 'fulltext_error'])
+
+        if text and source != 'abstract':
+            rebuild_rag_for_doi.delay(doi)
+
+    except Exception as e:
+        pub.fulltext_status = Publication.FULLTEXT_STATUS_ERROR
+        pub.fulltext_error = f'{e}\n\n{traceback.format_exc()}'
+        pub.save(update_fields=['fulltext_status', 'fulltext_error'])
+        logger.exception('fetch_fulltext_for_doi failed for %s', doi)
+
+
+@job('default')
+def rebuild_rag_for_doi(doi):
+    """
+    RQ task: re-chunk and re-embed a single paper's fulltext, replacing its
+    DocumentChunk rows. No-ops if the Publication has no usable fulltext.
+    """
+    from .management.commands.build_rag import chunk_text, clean_text, EMBEDDING_MODEL, BATCH_SIZE
+    from .models import DocumentChunk
+    from django.db import transaction
+
+    doi = normalize_doi(doi)
+    try:
+        pub = Publication.objects.get(doi=doi)
+    except Publication.DoesNotExist:
+        return
+
+    if not pub.fulltext or pub.fulltext_source == 'abstract':
+        return
+
+    text = clean_text(pub.fulltext)
+    chunks = chunk_text(text)
+    if not chunks:
+        return
+
+    from sentence_transformers import SentenceTransformer
+    import numpy as np
+    model = SentenceTransformer(EMBEDDING_MODEL)
+    embeddings = model.encode(chunks, batch_size=BATCH_SIZE, convert_to_numpy=True)
+
+    with transaction.atomic():
+        DocumentChunk.objects.filter(source_type='paper', source_id=doi).delete()
+        DocumentChunk.objects.bulk_create([
+            DocumentChunk(
+                source_type='paper',
+                source_id=doi,
+                source_label=pub.title or doi,
+                chunk_index=i,
+                text=chunk,
+                embedding=emb.tolist(),
+            )
+            for i, (chunk, emb) in enumerate(zip(chunks, embeddings))
+        ], batch_size=200)
+
+    logger.info('rebuild_rag_for_doi: indexed %d chunks for %s', len(chunks), doi)
