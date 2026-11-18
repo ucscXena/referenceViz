@@ -5,7 +5,8 @@ Data changes:
   is the job's own (a failed clone, with result['error'] and no failed embedding).
   pending with no embeddings (never confirmed) -> uploading.
 - Example jobs, which predate UCEEmbedding and kept uce_s3_uri and cell_count in
-  Job.result, get a complete UCEEmbedding and their projections point at it.
+  Job.result, get a complete UCEEmbedding and their projections point at it. They
+  are also marked result['example'] = True, which is how they are found now.
 - Projections left pending behind a failed embedding are marked failed, as
   UCEEmbedding.fail_projections() now does when an embedding fails.
 """
@@ -51,6 +52,8 @@ def _forward(apps, schema_editor):
             emb = UCEEmbedding.objects.create(
                 job=job, uce_model_id=uce_model_id, status='complete', result=emb_result)
             Projection.objects.filter(job=job, embedding__isnull=True).update(embedding=emb)
+            job.result = {**result, 'example': True}
+            job.save(update_fields=['result'])
 
     for proj in Projection.objects.filter(status='pending', embedding__status='error').select_related('embedding'):
         error = (proj.embedding.result or {}).get('error') or 'Unknown error'

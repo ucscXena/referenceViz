@@ -26,7 +26,7 @@ class Command(BaseCommand):
         parser.add_argument('--user', metavar='EMAIL',
                             help='Provision for a single user (by email)')
         parser.add_argument('--force', action='store_true',
-                            help='Delete any existing example projection and re-create it')
+                            help='Delete any existing example job and re-create it')
 
     def handle(self, *args, **options):
         if not _example_settings():
@@ -44,17 +44,10 @@ class Command(BaseCommand):
         else:
             users = list(User.objects.filter(is_active=True))
 
-        from django.conf import settings
-        ref_id = getattr(settings, 'EXAMPLE_REFERENCE_ID', '')
-
         done = skipped = 0
         for user in users:
             if options['force']:
-                deleted = Job.objects.filter(
-                    user=user,
-                    projections__reference_id=ref_id,
-                    status='ready',
-                ).distinct()
+                deleted = Job.objects.filter(user=user, result__example=True)
                 if deleted.exists():
                     self.stdout.write(f'  {user.email}: deleting existing example job(s)')
                     for job in deleted:
@@ -62,11 +55,7 @@ class Command(BaseCommand):
                         _delete_job_s3_files(job)
                     deleted.delete()
 
-            before = Job.objects.filter(
-                user=user,
-                projections__reference_id=ref_id,
-                status='ready',
-            ).exists()
+            before = Job.objects.filter(user=user, result__example=True).exists()
 
             if before and not options['force']:
                 self.stdout.write(f'  {user.email}: already has example, skipping')
@@ -75,11 +64,7 @@ class Command(BaseCommand):
 
             provision_example_for_user(user)
 
-            after = Job.objects.filter(
-                user=user,
-                projections__reference_id=ref_id,
-                status='ready',
-            ).exists()
+            after = Job.objects.filter(user=user, result__example=True).exists()
 
             if after:
                 self.stdout.write(self.style.SUCCESS(f'  {user.email}: provisioned'))

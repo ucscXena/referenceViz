@@ -56,11 +56,7 @@ def provision_example_for_user(user):
     h5ad_key, uce_key, arrow_key, tsv_key, results_json_key, reference_id = cfg
 
     # Don't provision twice
-    if Job.objects.filter(
-        user=user,
-        projections__reference_id=reference_id,
-        status='ready',
-    ).exists():
+    if Job.objects.filter(user=user, result__example=True).exists():
         return
 
     # Load results metadata from S3
@@ -93,6 +89,7 @@ def provision_example_for_user(user):
         user=user,
         original_filename='example.h5ad',
         status='ready',
+        result={'example': True},  # marks it as provisioned, not uploaded
     )
     embedding = UCEEmbedding.objects.create(
         job=job,
