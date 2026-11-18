@@ -532,6 +532,7 @@ def _job_state(job):
         'filename': job.original_filename or 'unknown',
         'status': job.status,
         'error': (job.result or {}).get('error', '') if job.status == 'error' else '',
+        'cloned': bool((job.result or {}).get('clone_of')),
         'cell_count': complete[0].cell_count() if complete else None,
         'has_upload': bool(job.s3_input_key),
         'created_at': job.created_at.isoformat(),
@@ -885,7 +886,7 @@ def clone_job(request, token):
     new_job_id = uuid.uuid4()
 
     # Seed result with metadata that's safe to copy immediately (no S3 involved)
-    new_result = {}
+    new_result = {'clone_of': str(original_job.id)}
     if original_job.result and original_job.result.get('cell_count'):
         new_result['cell_count'] = original_job.result['cell_count']
 

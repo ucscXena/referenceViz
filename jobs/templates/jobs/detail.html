@@ -21,7 +21,7 @@
 
   {% if job.status == 'error' %}
   <div class="result-box error-box">
-    <h3>Upload Error</h3>
+    <h3>{% if job.result.clone_of %}Copy Error{% else %}Upload Error{% endif %}</h3>
     <pre>{{ job.result.error|default:"(No error message)" }}</pre>
   </div>
   {% endif %}

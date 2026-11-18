@@ -54,7 +54,7 @@ function retryUceButton(job, dispatch) {
 // Status of the upload itself, shown across the job's rows until it is ready.
 function jobStatusContent(job, dispatch) {
   if (job.status === 'error') {
-    return [errorContent('Upload failed', job)]
+    return [errorContent(job.cloned ? 'Copy failed' : 'Upload failed', job)]
   }
   if (job.status === 'copying') {
     return [h('span', { class: 'status-running' }, 'Copying')]
