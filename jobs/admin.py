@@ -144,6 +144,7 @@ def retry_uce_action(modeladmin, request, queryset):
 class JobAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'user', 'filename_display', 'status', 'batch_job_link', 'created_at', 'uce_download_link')
     list_filter = ('status',)
+    search_fields = ('=user__username',)
     ordering = ('-created_at',)
     readonly_fields = ('id', 'batch_job_links', 'created_at', 'updated_at', 'uce_download_link', 'system_prompt_link')
     inlines = [UCEEmbeddingInline, ProjectionInline]
@@ -387,7 +388,7 @@ class UCEEmbeddingAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'job_link', 'uce_model', 'status', 'batch_job_link',
                     'cell_count_display', 'created_at', 'uce_download_link')
     list_filter = ('status', 'uce_model')
-    search_fields = ('job__original_filename', 'job__user__username')
+    search_fields = ('job__original_filename', '=job__user__username')
     ordering = ('-created_at',)
     readonly_fields = ('id', 'job', 'uce_model', 'batch_job_id',
                        'batch_job_link', 'uce_download_link', 'created_at', 'updated_at')
@@ -702,6 +703,7 @@ class PublicationAdmin(admin.ModelAdmin):
 class ProjectionAdmin(admin.ModelAdmin):
     list_display = ('short_id', 'short_job', 'reference_link', 'status', 'batch_job_link', 'download_link', 'created_at')
     list_filter = ('status', 'reference')
+    search_fields = ('=job__user__username',)
     ordering = ('-created_at',)
     readonly_fields = ('id', 'job_file', 'job', 'reference', 'status', 'batch_job_link', 'result', 'download_link', 'predictions_download_link', 'viz_link', 'created_at', 'updated_at')
     def get_queryset(self, request):
