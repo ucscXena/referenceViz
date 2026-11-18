@@ -688,9 +688,10 @@ def clone_job_files(new_job_id, original_job_id, projection_ids):
             new_proj.save()
 
     except Exception as e:
-        new_job.result = {**new_job.result, 'error': str(e)}
+        new_job.result = {**(new_job.result or {}), 'error': str(e)}
         new_job.status = 'error'
         new_job.save(update_fields=['result', 'status'])
+        _fail_uncopied(new_job, f'Copy failed: {e}')
         notify_staff(
             subject=f'Clone failed: {str(new_job_id)[:8]}',
             message=f'Clone of job {original_job_id} failed.\nUser: {new_job.user}\nError: {e}',
@@ -699,6 +700,22 @@ def clone_job_files(new_job_id, original_job_id, projection_ids):
 
     new_job.status = 'ready'
     new_job.save(update_fields=['status'])
+    _fail_uncopied(new_job, 'The original had no result file to copy.')
+
+
+def _fail_uncopied(job, error):
+    """Mark a clone's embeddings and projections that were not copied as failed.
+
+    Nothing will run them: they were created pending only to be filled by the copy.
+    """
+    for emb in job.embeddings.filter(status='pending'):
+        emb.status = 'error'
+        emb.result = {**(emb.result or {}), 'error': error}
+        emb.save()
+    for proj in job.projections.filter(status='pending'):
+        proj.status = 'error'
+        proj.result = {'error': error}
+        proj.save()
 
 
 @job('default')
