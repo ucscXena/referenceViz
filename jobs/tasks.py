@@ -733,9 +733,11 @@ def check_projection_result(projection_id, attempt=0):
         status, detail, batch_status = check_batch_job(projection.batch_job_id)
 
         if status == 'complete':
+            # Same result as projection_callback, which also adds mapping_git_commit.
             projection.result = {
                 's3_uri': projection.result.get('output_s3_uri'),
                 'predictions_s3_uri': projection.result.get('predictions_s3_uri'),
+                'mapping_image_digest': projection.result.get('mapping_image_digest', ''),
             }
             projection.status = 'complete'
             projection.save()
