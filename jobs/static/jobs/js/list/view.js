@@ -1,7 +1,6 @@
 // Pure state → vdom. No side effects here.
 import { h } from './superfine.js'
 
-const TERMINAL = new Set(['complete', 'error'])
 const QUEUED_BATCH = new Set(['SUBMITTED', 'PENDING', 'RUNNABLE'])
 
 const MI = (name) => h('span', { class: 'material-icons' }, name)
@@ -21,62 +20,73 @@ function wordBreak(name) {
   )
 }
 
-function ucePhaseLabel(job) {
-  if (job.sharded) {
-    if (job.n_shards == null) return 'Preprocessing'
-    const done = job.shards_complete || 0
-    const total = job.n_shards
+function ucePhaseLabel(emb) {
+  if (emb.sharded) {
+    if (emb.n_shards == null) return 'Preprocessing'
+    const done = emb.shards_complete || 0
+    const total = emb.n_shards
     if (done >= total) return 'Merging'
-    return `Processing · ${done} / ${total} shards`
+    return `Processing · ${done} / ${total} shards`
   }
-  const waiting = !job.batch_status || QUEUED_BATCH.has(job.batch_status)
+  const waiting = !emb.batch_status || QUEUED_BATCH.has(emb.batch_status)
   if (waiting) return 'Waiting for GPU'
-  if (job.uce_progress != null) return `Processing · ${job.uce_progress}%`
-  if (job.cell_count) return 'Processing'
+  if (emb.uce_progress != null) return `Processing · ${emb.uce_progress}%`
+  if (emb.cell_count) return 'Processing'
   return 'Starting'
 }
 
-function uceStatusContent(job, dispatch) {
+function errorContent(label, job) {
+  return h('span', { class: 'status-error' },
+    `${label} `,
+    h('a', { href: `/jobs/${job.id}/`, class: 'status-error-info', title: 'View error details' },
+      MI('help_outline')))
+}
+
+function retryUceButton(job, dispatch) {
+  if (!job.has_upload) return null
+  return h('button', {
+    class: 'btn-retry-uce',
+    title: 'Retry UCE pipeline',
+    onClick: (e) => { e.stopPropagation(); dispatch('RETRY_UCE', { jobId: job.id }) },
+  }, 'Retry')
+}
+
+// Status of the upload itself, shown across the job's rows until it is ready.
+function jobStatusContent(job, dispatch) {
   if (job.status === 'error') {
-    return [
-      h('span', { class: 'status-error' },
-        'Error ',
-        h('a', { href: `/jobs/${job.id}/`, class: 'status-error-info', title: 'View error details' },
-          MI('help_outline'))),
-      job.s3_input_key
-        ? h('button', {
-            class: 'btn-retry-uce',
-            title: 'Retry UCE pipeline',
-            onClick: (e) => { e.stopPropagation(); dispatch('RETRY_UCE', { jobId: job.id }) },
-          }, 'Retry')
-        : null,
-    ]
+    return [errorContent('Upload failed', job)]
   }
-  if (job.status === 'uploading') {
-    const pct = job.upload_pct != null ? ` ${job.upload_pct}%` : ''
-    return [
-      h('span', { class: 'status-uploading' }, `Uploading${pct}`),
-      h('button', {
-        class: 'btn-cancel-upload',
-        title: 'Cancel upload',
-        onClick: (e) => { e.stopPropagation(); dispatch('CANCEL_UPLOAD', { jobId: job.id }) },
-      }, 'Cancel'),
-    ]
+  if (job.status === 'copying') {
+    return [h('span', { class: 'status-running' }, 'Copying')]
   }
-  if (job.status === 'running') {
-    return [h('span', { class: 'status-running' }, ucePhaseLabel(job))]
+  const pct = job.upload_pct != null ? ` ${job.upload_pct}%` : ''
+  return [
+    h('span', { class: 'status-uploading' }, `Uploading${pct}`),
+    h('button', {
+      class: 'btn-cancel-upload',
+      title: 'Cancel upload',
+      onClick: (e) => { e.stopPropagation(); dispatch('CANCEL_UPLOAD', { jobId: job.id }) },
+    }, 'Cancel'),
+  ]
+}
+
+function embeddingStatusContent(emb, job, dispatch) {
+  if (emb.status === 'error') {
+    return [errorContent('UCE error', job), retryUceButton(job, dispatch)]
+  }
+  if (emb.status === 'complete') {
+    return [h('span', { class: 'status-complete' }, 'Complete')]
+  }
+  if (emb.status === 'running') {
+    return [h('span', { class: 'status-running' }, ucePhaseLabel(emb))]
   }
   return [h('span', { class: 'status-pending' }, 'Pending')]
 }
 
 function projStatusContent(proj, job, dispatch) {
   if (proj.status === 'error') {
-    return [
-      h('span', { class: 'status-error' },
-        'Error ',
-        h('a', { href: `/jobs/${job.id}/`, class: 'status-error-info', title: 'View error details' },
-          MI('help_outline'))),
-    ]
+    if (proj.uce_failed) return [errorContent('UCE error', job), retryUceButton(job, dispatch)]
+    return [errorContent('Error', job)]
   }
   if (proj.status === 'complete') {
     return [h('span', { class: 'status-complete' }, 'Complete')]
@@ -85,6 +95,9 @@ function projStatusContent(proj, job, dispatch) {
     const label = proj.batch_status && QUEUED_BATCH.has(proj.batch_status) ? 'Waiting' : 'Mapping'
     return [h('span', { class: 'status-running' }, label)]
   }
+  // Pending: waiting on its UCE embedding, if that hasn't finished.
+  const emb = proj.embedding_id && job.embeddings.get(proj.embedding_id)
+  if (emb && emb.status !== 'complete') return embeddingStatusContent(emb, job, dispatch)
   return [h('span', { class: 'status-pending' }, 'Pending')]
 }
 
@@ -143,83 +156,62 @@ function downloadCellContent(proj, job, dispatch) {
   return ['—']
 }
 
+function referenceCell(proj) {
+  return h('td', null,
+    proj.reference_name,
+    proj.reference_version ? [h('br', null), h('span', { class: 'ref-version-label' }, proj.reference_version)] : null)
+}
+
 function renderJobRows(job, isAlt, selected, dispatch) {
   const rows = []
   const projs = [...job.projections.values()]
-  const pcount = projs.length
+  const rowClass = isAlt ? 'job-row-alt' : null
+  const ready = job.status === 'ready'
 
-  if (pcount === 0) {
-    rows.push(h('tr', { key: `j-${job.id}`, 'data-job-id': job.id, 'data-job-status': job.status, class: isAlt ? 'job-row-alt' : null },
-      h('td', { class: 'col-check' },
-        h('input', { type: 'checkbox', name: 'job_ids', value: job.id, class: 'job-checkbox', checked: selected.has(job.id) })),
-      h('td', { class: 'job-file-cell' },
-        h('span', { class: 'job-filename' }, ...wordBreak(job.filename)),
-        job.cell_count ? [h('br', null), h('span', { class: 'cell-count' }, `${job.cell_count} cells`)] : null),
-      h('td', { class: 'col-date' },
-        h('time', { datetime: job.created_at }, formatDate(job.created_at))),
+  // Cells spanning all of the job's rows.
+  const jobCells = (rowspan) => [
+    h('td', { rowspan, class: 'col-check' },
+      h('input', { type: 'checkbox', name: 'job_ids', value: job.id, class: 'job-checkbox', checked: selected.has(job.id) })),
+    h('td', { rowspan, class: 'job-file-cell' },
+      h('span', { class: 'job-filename' }, ...wordBreak(job.filename)),
+      job.cell_count ? [h('br', null), h('span', { class: 'cell-count' }, `${job.cell_count} cells`)] : null),
+    h('td', { rowspan, class: 'col-date' },
+      h('time', { datetime: job.created_at }, formatDate(job.created_at))),
+  ]
+
+  if (projs.length === 0) {
+    // No mappings requested: show the UCE run(s) themselves.
+    const status = ready
+      ? [...job.embeddings.values()].flatMap(emb => embeddingStatusContent(emb, job, dispatch))
+      : jobStatusContent(job, dispatch)
+    rows.push(h('tr', { key: `j-${job.id}`, 'data-job-id': job.id, 'data-job-status': job.status, class: rowClass },
+      ...jobCells(1),
       h('td', { class: 'no-projections' }, '—'),
-      h('td', { class: 'uce-status-cell' }, ...uceStatusContent(job, dispatch)),
+      h('td', { class: 'uce-status-cell' }, ...status),
       h('td', { class: 'no-projections' }, '—'),
     ))
     return rows
   }
 
-  const isComplete = job.status === 'complete'
-
+  const pcount = projs.length
   projs.forEach((proj, i) => {
-    const isFirst = i === 0
-    const rowKey = isFirst ? `j-${job.id}` : `p-${proj.id}`
-    const rowClass = isAlt ? 'job-row-alt' : null
-
-    if (isFirst) {
-      if (isComplete) {
-        rows.push(h('tr', { key: rowKey, 'data-job-id': job.id, 'data-job-status': job.status, class: rowClass },
-          h('td', { rowspan: pcount, class: 'col-check' },
-            h('input', { type: 'checkbox', name: 'job_ids', value: job.id, class: 'job-checkbox', checked: selected.has(job.id) })),
-          h('td', { rowspan: pcount, class: 'job-file-cell' },
-            h('span', { class: 'job-filename' }, ...wordBreak(job.filename)),
-            job.cell_count ? [h('br', null), h('span', { class: 'cell-count' }, `${job.cell_count} cells`)] : null),
-          h('td', { rowspan: pcount, class: 'col-date' },
-            h('time', { datetime: job.created_at }, formatDate(job.created_at))),
-          h('td', null,
-            proj.reference_name,
-            proj.reference_version ? [h('br', null), h('span', { class: 'ref-version-label' }, proj.reference_version)] : null),
-          h('td', { class: 'proj-status-cell', 'data-proj-id': proj.id }, ...projStatusContent(proj, job, dispatch)),
-          h('td', { class: 'proj-download-cell', 'data-proj-id': proj.id }, ...downloadCellContent(proj, job, dispatch)),
-        ))
-      } else {
-        rows.push(h('tr', { key: rowKey, 'data-job-id': job.id, 'data-job-status': job.status, class: rowClass },
-          h('td', { rowspan: pcount, class: 'col-check' },
-            h('input', { type: 'checkbox', name: 'job_ids', value: job.id, class: 'job-checkbox', checked: selected.has(job.id) })),
-          h('td', { rowspan: pcount, class: 'job-file-cell' },
-            h('span', { class: 'job-filename' }, ...wordBreak(job.filename)),
-            job.cell_count ? [h('br', null), h('span', { class: 'cell-count' }, `${job.cell_count} cells`)] : null),
-          h('td', { rowspan: pcount, class: 'col-date' },
-            h('time', { datetime: job.created_at }, formatDate(job.created_at))),
-          h('td', null,
-            proj.reference_name,
-            proj.reference_version ? [h('br', null), h('span', { class: 'ref-version-label' }, proj.reference_version)] : null),
-          h('td', { rowspan: pcount, class: 'uce-status-cell' }, ...uceStatusContent(job, dispatch)),
-          h('td', { rowspan: pcount }, '—'),
-        ))
-      }
-    } else {
-      if (isComplete) {
-        rows.push(h('tr', { key: rowKey, 'data-proj-row': proj.id, class: isAlt ? 'job-row-alt' : null },
-          h('td', null,
-            proj.reference_name,
-            proj.reference_version ? [h('br', null), h('span', { class: 'ref-version-label' }, proj.reference_version)] : null),
-          h('td', { class: 'proj-status-cell', 'data-proj-id': proj.id }, ...projStatusContent(proj, job, dispatch)),
-          h('td', { class: 'proj-download-cell', 'data-proj-id': proj.id }, ...downloadCellContent(proj, job, dispatch)),
-        ))
-      } else {
-        rows.push(h('tr', { key: rowKey, 'data-proj-row': proj.id, class: isAlt ? 'job-row-alt' : null },
-          h('td', null,
-            proj.reference_name,
-            proj.reference_version ? [h('br', null), h('span', { class: 'ref-version-label' }, proj.reference_version)] : null),
-        ))
-      }
+    const first = i === 0
+    const cells = [referenceCell(proj)]
+    if (ready) {
+      cells.push(
+        h('td', { class: 'proj-status-cell', 'data-proj-id': proj.id }, ...projStatusContent(proj, job, dispatch)),
+        h('td', { class: 'proj-download-cell', 'data-proj-id': proj.id }, ...downloadCellContent(proj, job, dispatch)),
+      )
+    } else if (first) {
+      cells.push(
+        h('td', { rowspan: pcount, class: 'uce-status-cell' }, ...jobStatusContent(job, dispatch)),
+        h('td', { rowspan: pcount }, '—'),
+      )
     }
+    rows.push(first
+      ? h('tr', { key: `j-${job.id}`, 'data-job-id': job.id, 'data-job-status': job.status, class: rowClass },
+          ...jobCells(pcount), ...cells)
+      : h('tr', { key: `p-${proj.id}`, 'data-proj-row': proj.id, class: rowClass }, ...cells))
   })
 
   return rows

@@ -47,7 +47,6 @@ def run_analysis(embedding_id, mixed_precision='bf16'):
 
     embedding.status = 'running'
     embedding.save()
-    embedding.job.sync_status()
 
     try:
         input_s3_uri = f"s3://{settings.AWS_S3_BUCKET}/{embedding.job.s3_input_key}"
@@ -75,7 +74,7 @@ def run_analysis(embedding_id, mixed_precision='bf16'):
         embedding.result = {'error': str(e), 'traceback': traceback.format_exc()}
         embedding.status = 'error'
         embedding.save()
-        embedding.job.sync_status()
+        embedding.fail_projections()
         notify_staff(
             subject=f'UCE job failed to submit: {str(embedding_id)[:8]}',
             message=f'UCE embedding {embedding_id} failed to submit to Batch.\nUser: {embedding.job.user}\nError: {e}',
@@ -95,7 +94,6 @@ def run_sharded_analysis(embedding_id, mixed_precision='bf16'):
 
     embedding.status = 'running'
     embedding.save()
-    embedding.job.sync_status()
 
     try:
         bucket = settings.AWS_S3_BUCKET
@@ -136,7 +134,7 @@ def run_sharded_analysis(embedding_id, mixed_precision='bf16'):
         embedding.result = {'error': str(e), 'traceback': traceback.format_exc()}
         embedding.status = 'error'
         embedding.save()
-        embedding.job.sync_status()
+        embedding.fail_projections()
         notify_staff(
             subject=f'UCE sharding preprocess failed to submit: {str(embedding_id)[:8]}',
             message=f'Embedding {embedding_id} failed to submit preprocess to Batch.\nUser: {embedding.job.user}\nError: {e}',
@@ -161,7 +159,7 @@ def check_preprocess_result(embedding_id, attempt=0):
             embedding.result = result
             embedding.status = 'error'
             embedding.save()
-            embedding.job.sync_status()
+            embedding.fail_projections()
             notify_staff(
                 subject=f'UCE preprocess failed: {str(embedding_id)[:8]}',
                 message=f'Preprocess Batch job {preprocess_job_id} failed.\nUser: {embedding.job.user}\nReason: {detail}',
@@ -180,7 +178,7 @@ def check_preprocess_result(embedding_id, attempt=0):
                             'error': f'Preprocess not finished after {MAX_CHECK_ATTEMPTS * 2} minutes'}
         embedding.status = 'error'
         embedding.save()
-        embedding.job.sync_status()
+        embedding.fail_projections()
     else:
         django_rq.get_queue('default').enqueue_in(
             timedelta(minutes=2), check_preprocess_result, str(embedding_id), attempt + 1
@@ -271,7 +269,7 @@ def check_shard_results(embedding_id, attempt=0):
             embedding.result = result
             embedding.status = 'error'
             embedding.save()
-            embedding.job.sync_status()
+            embedding.fail_projections()
             notify_staff(
                 subject=f'UCE shard(s) failed: {str(embedding_id)[:8]}',
                 message=f'{n_failed}/{n_shards} shard jobs failed for embedding {embedding_id}.\nUser: {embedding.job.user}\nReason: {failed_reasons[0]}',
@@ -289,7 +287,7 @@ def check_shard_results(embedding_id, attempt=0):
                             'error': f'Shards not finished after {MAX_CHECK_ATTEMPTS * 5} minutes'}
         embedding.status = 'error'
         embedding.save()
-        embedding.job.sync_status()
+        embedding.fail_projections()
         notify_staff(
             subject=f'UCE shard jobs timed out: {str(embedding_id)[:8]}',
             message=f'Shard jobs for embedding {embedding_id} did not finish within {MAX_CHECK_ATTEMPTS * 5} minutes.\nUser: {embedding.job.user}',
@@ -329,7 +327,7 @@ def _submit_merge(embedding_id):
         embedding.result = result
         embedding.status = 'error'
         embedding.save()
-        embedding.job.sync_status()
+        embedding.fail_projections()
         notify_staff(
             subject=f'UCE merge failed to submit: {str(embedding_id)[:8]}',
             message=f'Merge job for embedding {embedding_id} failed to submit.\nUser: {embedding.job.user}\nError: {e}',
@@ -355,7 +353,7 @@ def check_merge_result(embedding_id, attempt=0):
             embedding.result = result
             embedding.status = 'error'
             embedding.save()
-            embedding.job.sync_status()
+            embedding.fail_projections()
             notify_staff(
                 subject=f'UCE merge failed: {str(embedding_id)[:8]}',
                 message=f'Merge Batch job {merge_batch_job_id} failed.\nUser: {embedding.job.user}\nReason: {detail}',
@@ -365,8 +363,7 @@ def check_merge_result(embedding_id, attempt=0):
         if status == 'complete':
             embedding.status = 'complete'
             embedding.save()
-            embedding.job.sync_status()
-            pending_projections = list(embedding.projections.filter(status='pending'))
+            pending_projections = embedding.projections_to_submit()
             output_s3_prefix = result.get('output_s3_prefix')
         else:
             result['batch_status'] = f'merge: {batch_status}'
@@ -383,7 +380,7 @@ def check_merge_result(embedding_id, attempt=0):
                             'error': f'Merge not finished after {MAX_CHECK_ATTEMPTS * 2} minutes'}
         embedding.status = 'error'
         embedding.save()
-        embedding.job.sync_status()
+        embedding.fail_projections()
     else:
         django_rq.get_queue('default').enqueue_in(
             timedelta(minutes=2), check_merge_result, str(embedding_id), attempt + 1
@@ -412,13 +409,12 @@ def check_job_result(embedding_id, attempt=0):
             if status == 'complete':
                 embedding.status = 'complete'
                 embedding.save()
-                embedding.job.sync_status()
-                pending_projections = list(embedding.projections.filter(status='pending'))
+                pending_projections = embedding.projections_to_submit()
             elif status == 'error':
                 embedding.result = {'error': detail}
                 embedding.status = 'error'
                 embedding.save()
-                embedding.job.sync_status()
+                embedding.fail_projections()
                 notify_staff(
                     subject=f'UCE job failed: {str(embedding_id)[:8]}',
                     message=f'UCE Batch job for embedding {embedding_id} failed.\nUser: {embedding.job.user}\nReason: {detail}',
@@ -449,7 +445,7 @@ def check_job_result(embedding_id, attempt=0):
             embedding.result = {'error': str(e), 'traceback': traceback.format_exc()}
             embedding.status = 'error'
             embedding.save()
-            embedding.job.sync_status()
+            embedding.fail_projections()
             return
 
     # Outside the transaction: AWS API calls
@@ -471,7 +467,7 @@ def check_job_result(embedding_id, attempt=0):
             embedding.result = result  # preserves uce_s3_uri so late callbacks can find this embedding
             embedding.status = 'error'
             embedding.save()
-            embedding.job.sync_status()
+            embedding.fail_projections()
             notify_staff(
                 subject=f'UCE job timed out: {str(embedding_id)[:8]}',
                 message=f'UCE Batch job for embedding {embedding_id} did not finish within {MAX_CHECK_ATTEMPTS * 5} minutes.\nUser: {embedding.job.user}',
@@ -627,12 +623,12 @@ def _s3_copy(s3, bucket, src_key, dest_key):
 @job('default')
 def clone_job_files(new_job_id, original_job_id, projection_ids):
     """
-    RQ task: copy S3 files for a cloned job and mark it complete.
+    RQ task: copy S3 files for a cloned job and mark it ready.
 
-    Called after the new Job and Projection DB rows have already been created
-    with status='pending'.  On success sets job.status='complete' and each
-    projection.status='complete'.  On any S3 error the job is set to 'error'
-    so the user sees a clear failure rather than a stuck pending job.
+    Called after the new Job (status='copying') and its UCEEmbedding and Projection
+    rows (status='pending') have been created.  On success sets job.status='ready'
+    and each copied embedding and projection to 'complete'.  On any S3 error the
+    job is set to 'error' so the user sees a clear failure rather than a stuck job.
     """
     try:
         new_job = Job.objects.get(id=new_job_id)
@@ -657,7 +653,6 @@ def clone_job_files(new_job_id, original_job_id, projection_ids):
                 new_emb.result = {**(orig_emb.result or {}), 'uce_s3_uri': f's3://{bucket}/{new_uce_key}'}
                 new_emb.status = 'complete'
                 new_emb.save()
-        new_job.sync_status()
 
         # Copy input h5ad
         if original_job.s3_input_key:
@@ -702,7 +697,7 @@ def clone_job_files(new_job_id, original_job_id, projection_ids):
         )
         return
 
-    new_job.status = 'complete'
+    new_job.status = 'ready'
     new_job.save(update_fields=['status'])
 
 

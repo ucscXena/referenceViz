@@ -53,7 +53,7 @@ class Command(BaseCommand):
                 deleted = Job.objects.filter(
                     user=user,
                     projections__reference_id=ref_id,
-                    status='complete',
+                    status='ready',
                 ).distinct()
                 if deleted.exists():
                     self.stdout.write(f'  {user.email}: deleting existing example job(s)')
@@ -65,7 +65,7 @@ class Command(BaseCommand):
             before = Job.objects.filter(
                 user=user,
                 projections__reference_id=ref_id,
-                status='complete',
+                status='ready',
             ).exists()
 
             if before and not options['force']:
@@ -78,7 +78,7 @@ class Command(BaseCommand):
             after = Job.objects.filter(
                 user=user,
                 projections__reference_id=ref_id,
-                status='complete',
+                status='ready',
             ).exists()
 
             if after:

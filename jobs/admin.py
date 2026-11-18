@@ -130,12 +130,8 @@ def retry_uce_action(modeladmin, request, queryset):
             skipped += 1
             continue
         for embedding in errored:
-            embedding.status = 'pending'
-            embedding.batch_job_id = ''
-            embedding.result = {}
-            embedding.save()
+            embedding.reset_for_retry()
             run_analysis.delay(str(embedding.id))
-        job.sync_status()
         retried += 1
     modeladmin.message_user(request, f'Retried {retried} job(s); skipped {skipped} (no failed embedding or no upload).')
 
@@ -166,8 +162,8 @@ class JobAdmin(admin.ModelAdmin):
         week_ago = now - timedelta(days=7)
         month_ago = now - timedelta(days=30)
 
-        # Live counts for currently active jobs
-        job_live = Job.objects.aggregate(
+        # Live counts for UCE runs in progress
+        job_live = UCEEmbedding.objects.aggregate(
             running=Count('id', filter=Q(status='running')),
             pending=Count('id', filter=Q(status='pending')),
         )

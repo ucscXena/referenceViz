@@ -233,7 +233,8 @@ def reference_list(request):
         .order_by('title')
     )
     recent_jobs = (
-        Job.objects.filter(user=request.user, status='complete')
+        Job.objects.filter(user=request.user, status='ready', embeddings__status='complete')
+        .distinct()
         .order_by('-created_at')[:50]
     )
     example_file_url = None
@@ -263,7 +264,7 @@ def get_upload_url(request):
     job = Job.objects.create(
         user=request.user,
         original_filename=filename,
-        status='pending',
+        status='uploading',
     )
 
     s3_key = f"uploads/{job.id}/{filename}"
@@ -283,7 +284,7 @@ def get_upload_url(request):
 @login_required
 @require_POST
 def use_example(request):
-    """Copy the example file within S3 and create a pending job, ready for /confirm/."""
+    """Copy the example file within S3 and create an uploading job, ready for /confirm/."""
     example_key = getattr(settings, 'EXAMPLE_FILE_S3_KEY', '')
     if not example_key:
         return JsonResponse({'error': 'No example file configured'}, status=404)
@@ -292,7 +293,7 @@ def use_example(request):
     job = Job.objects.create(
         user=request.user,
         original_filename=filename,
-        status='pending',
+        status='uploading',
     )
     dest_key = f'uploads/{job.id}/{filename}'
     boto_client('s3').copy_object(
@@ -308,10 +309,10 @@ def use_example(request):
 @login_required
 @require_POST
 def abort_upload(request, job_id):
-    """Delete a pending job whose S3 upload failed before confirmation."""
+    """Delete a job whose S3 upload failed before confirmation."""
     job = get_object_or_404(Job, pk=str(job_id), user=request.user)
-    if job.status not in ('pending', 'uploading'):
-        return JsonResponse({'error': 'job is not pending'}, status=400)
+    if job.status != 'uploading':
+        return JsonResponse({'error': 'job is not uploading'}, status=400)
     _delete_job_s3_files(job)
     job.delete()
     return JsonResponse({'status': 'ok'})
@@ -420,6 +421,10 @@ def multipart_complete(request):
                 'multipart_complete: size mismatch for job %s — expected %d bytes, got %d',
                 job_id, expected_size, actual_size,
             )
+            job.status = 'error'
+            job.result = {**(job.result or {}),
+                          'error': f'Upload incomplete: only {actual_size:,} of {expected_size:,} bytes arrived.'}
+            job.save(update_fields=['status', 'result'])
             return JsonResponse(
                 {'error': 'upload_truncated', 'expected': expected_size, 'actual': actual_size},
                 status=400,
@@ -448,7 +453,7 @@ def multipart_complete(request):
         )
         embeddings_to_run[uce_model.id] = emb
 
-    job.status = 'pending'
+    job.status = 'ready'
     job.save(update_fields=['status'])
 
     for emb in embeddings_to_run.values():
@@ -509,7 +514,7 @@ def confirm_upload(request, job_id):
             defaults={'status': 'pending'},
         )
 
-    job.status = 'pending'
+    job.status = 'ready'
     job.save(update_fields=['status'])
     run_analysis.delay(str(embedding.id), mixed_precision)
     return JsonResponse({'status': 'queued'})
@@ -520,6 +525,8 @@ def confirm_upload(request, job_id):
 def project_existing(request, job_id):
     """Start projections for an existing Job (UCE embedding already computed or to be started)."""
     job = get_object_or_404(Job, pk=str(job_id), user=request.user)
+    if job.status != 'ready':
+        return JsonResponse({'error': 'upload is not ready'}, status=400)
     data = json.loads(request.body)
     ref_ids = data.get('ref_ids') or ([data['ref_id']] if data.get('ref_id') else [])
 
@@ -561,55 +568,86 @@ def project_existing(request, job_id):
                 embeddings_to_run[target_uce_model.id] = embedding
 
     for embedding in embeddings_to_run.values():
-        embedding.status = 'pending'
-        embedding.batch_job_id = ''
-        embedding.result = {}
-        embedding.save()
-        job.sync_status()
+        embedding.reset_for_retry()
         run_analysis.delay(str(embedding.id))
 
     return JsonResponse({'status': 'queued', 'redirect': '/jobs/'})
+
+
+def _embedding_state(emb):
+    result = emb.result or {}
+    data = {
+        'id': str(emb.id),
+        'status': emb.status,
+        'model': emb.uce_model.name,
+        'cell_count': emb.cell_count(),
+        'error': result.get('error', '') if emb.status == 'error' else '',
+    }
+    for key in ('batch_status', 'sharded', 'n_shards', 'shards_complete', 'uce_progress'):
+        if key in result:
+            data[key] = result[key]
+    return data
+
+
+def _projection_state(proj, job):
+    result = proj.result or {}
+    emb = proj.embedding
+    if emb:
+        can_rerun = emb.status == 'complete' and bool(emb.uce_s3_uri())
+    else:
+        can_rerun = bool(job.uce_s3_uri())  # projections from before UCEEmbedding
+    s3_uri = result.get('s3_uri') if proj.status == 'complete' else None
+    return {
+        'id': str(proj.id),
+        'reference_id': proj.reference_id,
+        'reference_name': proj.reference.name,
+        'reference_version': proj.reference.version_label or '',
+        'embedding_id': str(proj.embedding_id) if proj.embedding_id else None,
+        'status': proj.status,
+        's3_uri': s3_uri,
+        'has_download': bool(s3_uri),
+        'public': proj.public,
+        'can_rerun': can_rerun,
+        'uce_failed': bool(result.get('uce_failed')),
+        'error': result.get('error', '') if proj.status == 'error' else '',
+        'batch_status': result.get('batch_status'),
+    }
+
+
+_JOB_STATE_PREFETCH = ('embeddings__uce_model', 'projections__reference__group', 'projections__embedding')
+
+
+def _job_state(job):
+    """JSON for a Job with its embeddings and projections (prefetch _JOB_STATE_PREFETCH).
+
+    The job list's initial state and the status poll both use it, so a poll replaces
+    a job wholesale.
+    """
+    embeddings = sorted(job.embeddings.all(), key=lambda e: e.created_at)
+    complete = [e for e in embeddings if e.status == 'complete']
+    return {
+        'id': str(job.id),
+        'filename': job.original_filename or 'unknown',
+        'status': job.status,
+        'error': (job.result or {}).get('error', '') if job.status == 'error' else '',
+        'cell_count': complete[0].cell_count() if complete else None,
+        'has_upload': bool(job.s3_input_key),
+        'created_at': job.created_at.isoformat(),
+        'embeddings': [_embedding_state(e) for e in embeddings],
+        'projections': [_projection_state(p, job) for p in job.projections.all()],
+    }
 
 
 @login_required
 def job_list(request):
     jobs = (
         Job.objects.filter(user=request.user)
-        .prefetch_related('projections__reference__group', 'projections__embedding', 'embeddings')
+        .prefetch_related(*_JOB_STATE_PREFETCH)
         .order_by('-created_at')
     )
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
 
-    jobs_data = []
-    for job in jobs:
-        projs_data = []
-        for proj in job.projections.all():
-            can_rerun = False
-            if proj.embedding:
-                can_rerun = proj.embedding.status == 'complete' and bool(proj.embedding.uce_s3_uri())
-            elif job.uce_s3_uri():
-                can_rerun = True
-            projs_data.append({
-                'id': str(proj.id),
-                'reference_id': proj.reference_id,
-                'reference_name': proj.reference.name,
-                'reference_version': proj.reference.version_label or '',
-                'status': proj.status,
-                's3_uri': proj.result.get('s3_uri') if proj.result else None,
-                'public': proj.public,
-                'can_rerun': can_rerun,
-                'embedding_status': proj.embedding.status if proj.embedding else None,
-                'batch_status': proj.result.get('batch_status') if proj.result else None,
-            })
-        jobs_data.append({
-            'id': str(job.id),
-            'filename': job.original_filename or 'unknown',
-            'status': job.status,
-            'cell_count': job.cell_count(),
-            's3_input_key': job.s3_input_key,
-            'created_at': job.created_at.isoformat(),
-            'projections': projs_data,
-        })
+    jobs_data = [_job_state(job) for job in jobs]
 
     initial_state_data = {
         'jobs': jobs_data,
@@ -632,69 +670,22 @@ def job_detail(request, pk):
     complete_proj_ids = [
         str(p.id) for p in projections if p.status == 'complete'
     ]
+    failed_embeddings = job.embeddings.filter(status='error').select_related('uce_model')
     return render(request, 'jobs/detail.html', {
         'job': job,
         'projections': projections,
         'complete_proj_ids': complete_proj_ids,
+        'failed_embeddings': failed_embeddings,
     })
 
 
 
 @login_required
 def job_status(request, pk):
-    """JSON endpoint for client-side polling. Returns UCE status and all projections."""
-    job = get_object_or_404(Job, pk=str(pk), user=request.user)
-    data = {'status': job.status}
-
-    active_embedding = (
-        job.embeddings.filter(status__in=('pending', 'running')).order_by('-created_at').first()
-        or (job.embeddings.filter(status='error').order_by('-updated_at').first()
-            if job.status == 'error' else None)
-    )
-
-    if job.status == 'error':
-        if active_embedding and active_embedding.result:
-            data['error'] = active_embedding.result.get('error', '')
-        data['has_upload'] = bool(job.s3_input_key)
-    if job.status in ('pending', 'running') and active_embedding:
-        result = active_embedding.result or {}
-        data['cell_count'] = active_embedding.cell_count()
-        batch_status = result.get('batch_status')
-        if batch_status:
-            data['batch_status'] = batch_status
-        if result.get('sharded'):
-            data['sharded'] = True
-            for key in ('n_shards', 'shards_complete'):
-                if key in result:
-                    data[key] = result[key]
-        elif 'uce_progress' in result:
-            data['uce_progress'] = result['uce_progress']
-
-    projections = []
-    for proj in Projection.objects.select_related('reference__group', 'embedding').filter(job_id=str(job.pk)):
-        p = {
-            'id': str(proj.id),
-            'reference_name': proj.reference.name,
-            'status': proj.status,
-        }
-        if proj.status == 'complete' and proj.result and proj.result.get('s3_uri'):
-            p['has_download'] = True
-            p['reference_id'] = proj.reference_id
-            p['s3_uri'] = proj.result['s3_uri']
-        if proj.status == 'error':
-            p['error'] = (proj.result or {}).get('error', '')
-            if proj.embedding:
-                p['can_rerun'] = proj.embedding.status == 'complete' and bool(proj.embedding.uce_s3_uri())
-            else:
-                p['can_rerun'] = bool(job.uce_s3_uri())
-        if proj.status in ('pending', 'running'):
-            batch_status = (proj.result or {}).get('batch_status')
-            if batch_status:
-                p['batch_status'] = batch_status
-        projections.append(p)
-
-    data['projections'] = projections
-    return JsonResponse(data)
+    """JSON endpoint for client-side polling: the job, its embeddings and its projections."""
+    job = get_object_or_404(
+        Job.objects.prefetch_related(*_JOB_STATE_PREFETCH), pk=str(pk), user=request.user)
+    return JsonResponse(_job_state(job))
 
 
 @require_GET
@@ -879,8 +870,7 @@ def uce_callback(request):
             if 'git_commit' in data:
                 embedding.result = {**(embedding.result or {}), 'uce_git_commit': data['git_commit']}
             embedding.save()
-            embedding.job.sync_status()
-            pending_projections = list(embedding.projections.filter(status='pending'))
+            pending_projections = embedding.projections_to_submit()
 
         for projection in pending_projections:
             _submit_projection(projection, uce_s3_uri)
@@ -895,7 +885,7 @@ def uce_callback(request):
             embedding.status = 'error'
             embedding.result = {**(embedding.result or {}), 'error': error_msg}
             embedding.save()
-            embedding.job.sync_status()
+            embedding.fail_projections()
         _notify_user_uce_error(embedding.job)
         return JsonResponse({'status': 'ok'})
 
@@ -1044,8 +1034,8 @@ def projection_callback(request):
 @login_required
 @require_POST
 def create_share_token(request, job_id):
-    """Create a time-limited clone link for a complete job owned by the current user."""
-    job = get_object_or_404(Job, pk=str(job_id), user=request.user, status='complete')
+    """Create a time-limited clone link for a ready job owned by the current user."""
+    job = get_object_or_404(Job, pk=str(job_id), user=request.user, status='ready')
     now = timezone.now()
     job.share_tokens.filter(expires_at__lte=now).delete()
     token_str = secrets.token_urlsafe(32)
@@ -1093,7 +1083,7 @@ def clone_job(request, token):
         id=new_job_id,
         user=request.user,
         original_filename=original_job.original_filename,
-        status='pending',
+        status='copying',
         result=new_result,
     )
 
@@ -1158,7 +1148,7 @@ def cancel_upload(request, pk):
 @login_required
 @require_POST
 def retry_uce(request, pk):
-    """Re-queue failed UCE embeddings for a job in error state."""
+    """Re-queue a job's failed UCE embeddings, and the projections waiting on them."""
     job = get_object_or_404(Job, pk=pk, user=request.user)
     if not job.s3_input_key:
         return JsonResponse({'error': 'no uploaded file to retry'}, status=400)
@@ -1166,12 +1156,8 @@ def retry_uce(request, pk):
     if not errored:
         return JsonResponse({'error': 'no failed embedding to retry'}, status=400)
     for embedding in errored:
-        embedding.status = 'pending'
-        embedding.batch_job_id = ''
-        embedding.result = {}
-        embedding.save()
+        embedding.reset_for_retry()
         run_analysis.delay(str(embedding.id))
-    job.sync_status()
     return JsonResponse({'status': 'queued'})
 
 

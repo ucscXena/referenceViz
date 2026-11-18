@@ -20,7 +20,7 @@ import logging
 from django.conf import settings
 
 from .aws import boto_client
-from .models import Job, Projection, Reference
+from .models import Job, Projection, Reference, UCEEmbedding
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def provision_example_for_user(user):
     if Job.objects.filter(
         user=user,
         projections__reference_id=reference_id,
-        status='complete',
+        status='ready',
     ).exists():
         return
 
@@ -92,18 +92,24 @@ def provision_example_for_user(user):
     job = Job.objects.create(
         user=user,
         original_filename='example.h5ad',
+        status='ready',
+    )
+    embedding = UCEEmbedding.objects.create(
+        job=job,
+        uce_model=reference.uce_model,
         status='complete',
-        result={'cell_count': cell_count},
+        result={'cell_count': cell_count},  # uce_s3_uri filled in after S3 copy below
     )
     projection = Projection.objects.create(
         job=job,
         reference=reference,
+        embedding=embedding,
         status='complete',
         result={},  # filled in after S3 copy below
     )
 
     dest_h5ad  = f'uploads/{job.id}/example.h5ad'
-    dest_uce   = f'uce-results/{job.id}/output.h5ad'
+    dest_uce   = f'uce-results/{embedding.id}/output.h5ad'
     dest_arrow = f'mapping-results/{job.id}/{projection.id}/output.arrow'
     dest_tsv   = f'mapping-results/{job.id}/{projection.id}/predictions.tsv'
 
@@ -127,8 +133,10 @@ def provision_example_for_user(user):
         return
 
     job.s3_input_key = dest_h5ad
-    job.result = {**job.result, 'uce_s3_uri': f's3://{bucket}/{dest_uce}'}
-    job.save(update_fields=['s3_input_key', 'result'])
+    job.save(update_fields=['s3_input_key'])
+
+    embedding.result = {**embedding.result, 'uce_s3_uri': f's3://{bucket}/{dest_uce}'}
+    embedding.save(update_fields=['result'])
 
     projection.result = {
         's3_uri':              f's3://{bucket}/{dest_arrow}',

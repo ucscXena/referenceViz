@@ -150,7 +150,10 @@
       for (const p of s3Parts) etags[p.PartNumber] = p.ETag;
     } catch (e) {
       if (e.code === 'NoSuchUpload') {
+        // Expired, or already completed (e.g. a truncated upload the server marked failed).
+        // The abort deletes the job only if it is still uploading.
         console.warn('[upload-manager] multipart upload expired/missing:', uploadId);
+        await abortUpload(jobId, uploadId, key);
         await dbDelete(db, uploadId);
         bc.postMessage({type: 'expired', jobId});
         return;

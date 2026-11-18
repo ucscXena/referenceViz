@@ -73,70 +73,23 @@ if (listForm) {
 document.addEventListener('click', () => dispatch('CLOSE_POPOVERS'))
 
 // ── Polling ───────────────────────────────────────────────────────────────────
+// Every 30 s, refresh each job with work in flight. The timer keeps running when
+// nothing is active, so a retry or re-run started later is picked up.
 
 const TERMINAL = new Set(['complete', 'error'])
-const projLastStatus = new Map()
+const IN_FLIGHT = new Set(['uploading', 'copying'])
 
-function activeJobIds() {
-  const ids = []
+function isActive(job) {
+  return IN_FLIGHT.has(job.status)
+    || [...job.embeddings.values()].some(e => !TERMINAL.has(e.status))
+    || [...job.projections.values()].some(p => !TERMINAL.has(p.status))
+}
+
+setInterval(() => {
   for (const job of state.jobs.values()) {
-    if (!TERMINAL.has(job.status)) { ids.push(job.id); continue }
-    // Also poll jobs with non-terminal projections
-    for (const proj of job.projections.values()) {
-      if (!TERMINAL.has(proj.status)) { ids.push(job.id); break }
-    }
+    if (isActive(job)) dispatch('REFRESH_JOB', { jobId: job.id })
   }
-  return ids
-}
-
-function pollJob(jobId) {
-  fetch(`/jobs/${jobId}/status/`)
-    .then(r => {
-      if (r.status === 404) { dispatch('REMOVE_JOB', { jobId }); return null }
-      return r.json()
-    })
-    .then(data => {
-      if (!data) return
-      const job = state.jobs.get(jobId)
-      if (!job) return
-      const prevStatus = job.status
-
-      // Reload when UCE completes with projections (structure change)
-      if (data.status === 'complete' && prevStatus !== 'complete' &&
-          (data.projections || []).length > 0) {
-        window.location.reload(); return
-      }
-      // Reload when upload finishes (projection rows appear)
-      if (prevStatus === 'uploading' && data.status !== 'uploading') {
-        window.location.reload(); return
-      }
-
-      dispatch('POLL_UPDATE', { jobId, data })
-
-      // Notifications
-      if (data.status === 'error' && prevStatus !== 'error') {
-        window.notifyJobError?.(job.filename)
-      }
-      for (const pd of (data.projections || [])) {
-        const prev = projLastStatus.get(pd.id)
-        if (prev !== undefined && prev !== pd.status) {
-          if (pd.status === 'complete') window.notifyJobComplete?.(job.filename)
-          if (pd.status === 'error') window.notifyJobError?.(job.filename)
-        }
-        projLastStatus.set(pd.id, pd.status)
-      }
-    })
-    .catch(() => {})
-}
-
-function pollAll() {
-  const ids = activeJobIds()
-  if (!ids.length) return
-  ids.forEach(pollJob)
-  setTimeout(pollAll, 30000)
-}
-
-if (activeJobIds().length) pollAll()
+}, 30000)
 
 // ── BroadcastChannel for upload progress ─────────────────────────────────────
 
@@ -148,14 +101,12 @@ if (window.BroadcastChannel) {
       dispatch('UPLOAD_PROGRESS', { jobId: data.jobId, pct })
     } else if (data.type === 'complete') {
       dispatch('UPLOAD_COMPLETE', { jobId: data.jobId })
-      fetch(`/jobs/${data.jobId}/status/`)
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d) dispatch('POLL_UPDATE', { jobId: data.jobId, data: d }) })
-        .catch(() => {})
+      dispatch('REFRESH_JOB', { jobId: data.jobId })
     } else if (data.type === 'error') {
-      dispatch('UPLOAD_ERROR', { jobId: data.jobId })
-    } else if (data.type === 'lost') {
-      dispatch('UPLOAD_ERROR', { jobId: data.jobId })
+      dispatch('UPLOAD_ERROR', { jobId: data.jobId, message: data.message })
+    } else if (data.type === 'lost' || data.type === 'expired') {
+      // The upload manager has given up and asked the server to delete the job.
+      dispatch('REFRESH_JOB', { jobId: data.jobId })
     }
   }
 }

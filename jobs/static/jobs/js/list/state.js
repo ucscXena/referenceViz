@@ -2,23 +2,22 @@
 
 import { assoc, dissoc, conj, disj, merge, pick, updateIn } from './util.js'
 
+// jobFromData(data) → job
+// data is one job as the server sends it (views._job_state), in the initial state
+// and in each status poll. job.status describes only the upload (uploading, copying,
+// ready, error); UCE progress is on job.embeddings, mapping progress on job.projections.
+function jobFromData(j) {
+  return {
+    ...j,
+    embeddings: new Map(j.embeddings.map(e => [e.id, e])),
+    projections: new Map(j.projections.map(p => [p.id, p])),
+  }
+}
+
 // buildInitialState(data) → state
 // data comes from the #initial-state JSON block injected by Django.
 export function buildInitialState(data) {
-  const jobs = new Map()
-  for (const j of data.jobs) {
-    jobs.set(j.id, {
-      id: j.id,
-      filename: j.filename,
-      status: j.status,
-      cell_count: j.cell_count,
-      s3_input_key: j.s3_input_key,
-      created_at: j.created_at,
-      projections: new Map(
-        j.projections.map(p => [p.id, { ...p }])
-      ),
-    })
-  }
+  const jobs = new Map(data.jobs.map(j => [j.id, jobFromData(j)]))
   return {
     jobs,
     ui: {
@@ -33,9 +32,6 @@ export function buildInitialState(data) {
   }
 }
 
-const JOB_EXTRA = ['batch_status', 'sharded', 'n_shards', 'shards_complete', 'uce_progress', 'has_upload']
-const PROJ_KEYS = ['batch_status', 's3_uri', 'has_download', 'reference_id', 'can_rerun']
-
 // ── Pure handlers ────────────────────────────────────────────────────────────
 // Each handler: (state, params) → newState
 
@@ -43,14 +39,11 @@ export const handlers = {
 
   POLL_UPDATE(state, { jobId, data }) {
     if (!state.jobs.has(jobId)) return state
-    return updateIn(state, ['jobs', jobId], job => merge(job, {
-      status: data.status,
-      cell_count: data.cell_count ?? job.cell_count,
-      ...pick(data, JOB_EXTRA),
-      projections: (data.projections || []).reduce(
-        (map, pd) => assoc(map, pd.id, merge(map.get(pd.id) || {}, { id: pd.id, status: pd.status, ...pick(pd, PROJ_KEYS) })),
-        job.projections
-      ),
+    // The poll returns the whole job, so replace it, keeping only the upload
+    // progress that the browser tracks.
+    return updateIn(state, ['jobs', jobId], job => ({
+      ...jobFromData(data),
+      ...(data.status === 'uploading' ? pick(job, ['upload_pct']) : {}),
     }))
   },
 
@@ -117,7 +110,12 @@ export const handlers = {
 
   RETRY_UCE(state, { jobId }) {
     if (!state.jobs.has(jobId)) return state
-    return updateIn(state, ['jobs', jobId, 'status'], () => 'pending')
+    return updateIn(state, ['jobs', jobId], job => merge(job, {
+      embeddings: new Map([...job.embeddings].map(([id, e]) =>
+        [id, e.status === 'error' ? { ...e, status: 'pending', error: '' } : e])),
+      projections: new Map([...job.projections].map(([id, p]) =>
+        [id, p.uce_failed ? { ...p, status: 'pending', uce_failed: false, error: '' } : p])),
+    }))
   },
 
   UPLOAD_PROGRESS(state, { jobId, pct }) {
@@ -127,12 +125,14 @@ export const handlers = {
 
   UPLOAD_COMPLETE(state, { jobId }) {
     if (!state.jobs.has(jobId)) return state
-    return updateIn(state, ['jobs', jobId], job => ({ ...job, status: 'pending', upload_pct: null }))
+    return updateIn(state, ['jobs', jobId], job => ({ ...job, status: 'ready', upload_pct: null }))
   },
 
-  UPLOAD_ERROR(state, { jobId }) {
+  // The upload stopped in this browser. Unless the server recorded the failure, the
+  // upload manager resumes it on the next page load, so this is shown only until then.
+  UPLOAD_ERROR(state, { jobId, message }) {
     if (!state.jobs.has(jobId)) return state
-    return updateIn(state, ['jobs', jobId, 'status'], () => 'error')
+    return updateIn(state, ['jobs', jobId], job => ({ ...job, status: 'error', error: message || 'Upload failed' }))
   },
 }
 
@@ -141,20 +141,39 @@ export const handlers = {
 
 export const effects = {
 
+  REFRESH_JOB(prev, next, { jobId }, dispatch) {
+    fetch(`/jobs/${jobId}/status/`)
+      .then(r => {
+        if (r.status === 404) { dispatch('REMOVE_JOB', { jobId }); return null }
+        return r.ok ? r.json() : null
+      })
+      .then(data => { if (data) dispatch('POLL_UPDATE', { jobId, data }) })
+      .catch(() => {})
+  },
+
+  // Notify once per poll, however many projections changed: a failed UCE run fails
+  // every projection waiting on it.
+  POLL_UPDATE(prev, next, { jobId }) {
+    const before = prev.jobs.get(jobId)
+    const after = next.jobs.get(jobId)
+    if (!before || !after) return
+    if (after.status === 'error' && before.status !== 'error') {
+      window.notifyJobError?.(after.filename)
+      return
+    }
+    const changedTo = (status) => [...after.projections.values()].some(p =>
+      p.status === status && before.projections.has(p.id) && before.projections.get(p.id).status !== status)
+    if (changedTo('error')) window.notifyJobError?.(after.filename)
+    if (changedTo('complete')) window.notifyJobComplete?.(after.filename)
+  },
+
   RETRY_UCE(prev, next, { jobId }, dispatch) {
     fetch(`/jobs/${jobId}/retry/`, {
       method: 'POST',
       headers: { 'X-CSRFToken': next.csrf },
     })
-      .then(r => r.json())
-      .then(d => {
-        if (d.status !== 'queued') {
-          // Roll back to error on failure (re-fetch from server on next poll)
-          const job = prev.jobs.get(jobId)
-          if (job) dispatch('POLL_UPDATE', { jobId, data: { status: 'error', projections: [] } })
-        }
-      })
       .catch(() => {})
+      .then(() => dispatch('REFRESH_JOB', { jobId }))
   },
 
   CANCEL_UPLOAD(prev, next, { jobId }, dispatch) {

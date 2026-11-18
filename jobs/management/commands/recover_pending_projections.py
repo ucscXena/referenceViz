@@ -20,9 +20,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options['dry_run']
 
-        # Find projections whose specific embedding is complete but the projection
-        # was never submitted (no batch_job_id).  Filter on the embedding directly
-        # rather than job.status, which may reflect other embeddings' states.
+        # Find projections whose embedding is complete but the projection was
+        # never submitted (no batch_job_id).
         stuck = Projection.objects.select_related(
             'job', 'reference', 'embedding',
         ).filter(
@@ -31,13 +30,13 @@ class Command(BaseCommand):
             batch_job_id='',
         )
 
-        # Backward compat: old projections without an embedding FK, on a complete job.
+        # Backward compat: old projections without an embedding FK, on a ready job.
         stuck_legacy = Projection.objects.select_related(
             'job', 'reference',
         ).filter(
             status='pending',
             embedding__isnull=True,
-            job__status='complete',
+            job__status='ready',
             batch_job_id='',
         )
 

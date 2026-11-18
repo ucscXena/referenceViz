@@ -128,11 +128,16 @@ class Reference(models.Model):
 
 
 class Job(models.Model):
+    """One uploaded file. UCE results live on its UCEEmbeddings, mappings on its Projections.
+
+    status describes only the input file: 'uploading' until the upload is confirmed,
+    'copying' while a clone's files are copied, then 'ready'. 'error' means the input
+    never arrived (truncated upload, failed clone), with the message in result['error'].
+    """
     STATUS_CHOICES = [
         ('uploading', 'Uploading'),
-        ('pending', 'Pending'),
-        ('running', 'Running'),
-        ('complete', 'Complete'),
+        ('copying', 'Copying'),
+        ('ready', 'Ready'),
         ('error', 'Error'),
     ]
 
@@ -141,7 +146,7 @@ class Job(models.Model):
     original_filename = models.CharField(max_length=255, blank=True)
     s3_input_key = models.CharField(max_length=500, blank=True)
     s3_output_key = models.CharField(max_length=500, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='uploading')
     result = models.JSONField(null=True, blank=True)
     current_conversation = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -158,32 +163,15 @@ class Job(models.Model):
     def short_uploaded_file(self):
         return self.original_filename or 'unknown'
 
-    def sync_status(self):
-        statuses = set(self.embeddings.values_list('status', flat=True))
-        if not statuses:
-            return
-        # Active work takes priority; only call it 'complete' when nothing is still in flight.
-        if 'running' in statuses:
-            new = 'running'
-        elif 'pending' in statuses:
-            new = 'pending'
-        elif 'complete' in statuses:
-            new = 'complete'
-        else:
-            new = 'error'
-        if self.status != new:
-            self.status = new
-            self.save(update_fields=['status'])
-
     def uce_s3_uri(self):
         """UCE embedding URI from the most relevant embedding."""
-        emb = self.embeddings.filter(status='complete').first()
+        emb = self.embeddings.filter(status='complete').order_by('created_at').first()
         if emb is None:
-            emb = self.embeddings.first()
+            emb = self.embeddings.order_by('created_at').first()
         return emb.uce_s3_uri() if emb else None
 
     def cell_count(self):
-        emb = self.embeddings.filter(status='complete').first()
+        emb = self.embeddings.filter(status='complete').order_by('created_at').first()
         return emb.cell_count() if emb else None
 
 
@@ -217,6 +205,36 @@ class UCEEmbedding(models.Model):
 
     def cell_count(self):
         return self.result.get('cell_count') if self.result else None
+
+    # Projections wait in 'pending' until their embedding completes. These keep them in
+    # step with the embedding, so a failed embedding never leaves them pending forever.
+
+    def fail_projections(self):
+        """Mark projections waiting on this embedding as failed. Call after it fails."""
+        error = (self.result or {}).get('error') or 'Unknown error'
+        for proj in self.projections.filter(status='pending'):
+            proj.status = 'error'
+            proj.result = {'error': f'UCE embedding failed: {error}', 'uce_failed': True}
+            proj.save()
+
+    def projections_to_submit(self):
+        """Projections to submit now that this embedding is complete, including any it had failed."""
+        self._reopen_projections()
+        return list(self.projections.filter(status='pending'))
+
+    def reset_for_retry(self):
+        """Return this embedding, and the projections it failed, to pending. The caller enqueues run_analysis."""
+        self.status = 'pending'
+        self.batch_job_id = ''
+        self.result = {}
+        self.save()
+        self._reopen_projections()
+
+    def _reopen_projections(self):
+        for proj in self.projections.filter(status='error', result__uce_failed=True):
+            proj.status = 'pending'
+            proj.result = {}
+            proj.save()
 
 
 class JobEvent(models.Model):

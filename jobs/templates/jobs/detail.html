@@ -21,16 +21,23 @@
 
   {% if job.status == 'error' %}
   <div class="result-box error-box">
-    <h3>UCE Embedding Error</h3>
+    <h3>Upload Error</h3>
     <pre>{{ job.result.error|default:"(No error message)" }}</pre>
-    {% if job.result.traceback %}
+  </div>
+  {% endif %}
+
+  {% for emb in failed_embeddings %}
+  <div class="result-box error-box">
+    <h3>UCE Embedding Error ({{ emb.uce_model.name }})</h3>
+    <pre>{{ emb.result.error|default:"(No error message)" }}</pre>
+    {% if emb.result.traceback %}
       <details>
         <summary>Traceback</summary>
-        <pre class="traceback">{{ job.result.traceback }}</pre>
+        <pre class="traceback">{{ emb.result.traceback }}</pre>
       </details>
     {% endif %}
   </div>
-  {% endif %}
+  {% endfor %}
 
   {% if projections %}
   <h2 class="section-heading">Projections</h2>
@@ -47,7 +54,7 @@
     <tr data-proj-id="{{ proj.id }}">
       <td>{{ proj.reference.name }}{% if proj.reference.version_label %}<br><span class="ref-version-label">{{ proj.reference.version_label }}</span>{% endif %}</td>
       <td class="proj-status-cell">
-        <span class="status-{{ proj.status }}">{{ proj.get_status_display }}</span>
+        <span class="status-{{ proj.status }}">{% if proj.result.uce_failed %}UCE error{% else %}{{ proj.get_status_display }}{% endif %}</span>
       </td>
       <td>
         {% if proj.status == 'complete' and proj.result.s3_uri %}
@@ -60,7 +67,7 @@
         {% endif %}
       </td>
     </tr>
-    {% if proj.status == 'error' and proj.result.error %}
+    {% if proj.status == 'error' and proj.result.error and not proj.result.uce_failed %}
     <tr class="error-detail-row">
       <td colspan="3">
         <div class="result-box error-box" style="margin:0;">
@@ -103,7 +110,7 @@ document.querySelectorAll('time[datetime]').forEach(el => {
 });
 </script>
 
-{% if job.status == 'pending' or job.status == 'running' or projections %}
+{% if projections %}
 <script>
 const VIZ_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" class="viz-icon" aria-hidden="true"><circle cx="3" cy="4" r="2" fill="#8b5e3c"/><circle cx="7" cy="13" r="2.5" fill="#d4955a"/><circle cx="5" cy="8" r="1.5" fill="#60c0d8"/><circle cx="11" cy="5" r="2" fill="#3db0a0"/><circle cx="15.5" cy="3" r="2.5" fill="#4878c0"/><circle cx="17" cy="10.5" r="2" fill="#5aaa30"/><circle cx="14" cy="16.5" r="1.5" fill="#c8b818"/><circle cx="9" cy="16" r="2" fill="#8a4820"/></svg>`;
 (function() {
@@ -120,6 +127,13 @@ const VIZ_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20
     fetch('{% url "job_status" job.pk %}')
       .then(r => r.json())
       .then(data => {
+        // Error details are rendered server side, so reload when a projection fails.
+        const failed = (data.projections || []).some(proj => {
+          const span = document.querySelector(`tr[data-proj-id="${proj.id}"] .proj-status-cell span`);
+          return proj.status === 'error' && span && span.className !== 'status-error';
+        });
+        if (failed) { window.location.reload(); return; }
+
         (data.projections || []).forEach(proj => {
           const row = document.querySelector(`tr[data-proj-id="${proj.id}"]`);
           if (!row) return;
@@ -157,7 +171,7 @@ const VIZ_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20
   const RESET_URL = '{% url "job_chat_reset" job.pk %}';
   const CSRF = '{{ csrf_token }}';
   const ORIENT_KEY = 'orient_{{ job.pk }}';
-  const JOB_COMPLETE = {% if job.status == 'complete' %}true{% else %}false{% endif %};
+  const JOB_COMPLETE = {% if complete_proj_ids %}true{% else %}false{% endif %};
   const messages = [];
 
   const form = document.getElementById('chat-form');
