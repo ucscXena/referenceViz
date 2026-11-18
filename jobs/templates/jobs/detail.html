@@ -63,7 +63,7 @@
             <a href="{% url 'download_projection' proj.pk %}" class="action-btn" title="Download results"><span class="material-icons">download</span>Download</a>
           </div>
         {% else %}
-          —
+          <span class="no-results">—</span>
         {% endif %}
       </td>
     </tr>
