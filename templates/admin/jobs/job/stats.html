@@ -4,15 +4,15 @@
   .stats-grid { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 24px; }
   .stats-card { flex: 1; min-width: 200px; }
   .stats-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; margin-bottom: 24px; }
-  .stats-table th, .stats-table td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; text-align: left; }
-  .stats-table th { color: #666; font-weight: 400; width: 60%; }
-  .stats-table thead th { color: #333; font-weight: 600; width: auto; }
+  .stats-table th, .stats-table td { padding: 6px 10px; border-bottom: 1px solid var(--hairline-color); text-align: left; }
+  .stats-table th { color: var(--body-quiet-color); font-weight: 400; width: 60%; }
+  .stats-table thead th { color: var(--body-fg); font-weight: 600; width: auto; }
   .stats-bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 140px; margin-bottom: 40px; }
   .stats-bar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; flex: 1; height: 100%; }
-  .stats-bar { width: 100%; background-color: #417690; border-radius: 3px 3px 0 0; min-height: 2px; }
-  .stats-bar-count { font-size: 0.7rem; color: #666; margin-top: 3px; }
-  .stats-note { color: #666; font-size: 0.8rem; margin: 0 0 16px; }
-  .stats-bar-label { font-size: 0.65rem; color: #999; margin-top: 2px; white-space: nowrap; }
+  .stats-bar { width: 100%; background-color: var(--primary); border-radius: 3px 3px 0 0; min-height: 2px; }
+  .stats-bar-count { font-size: 0.7rem; color: var(--body-quiet-color); margin-top: 3px; }
+  .stats-note { color: var(--body-quiet-color); font-size: 0.8rem; margin: 0 0 16px; }
+  .stats-bar-label { font-size: 0.65rem; color: var(--body-quiet-color); margin-top: 2px; white-space: nowrap; }
 </style>
 
 <p class="stats-note">Counted from event logs, which survive job deletion. Upload and UCE run
