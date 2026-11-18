@@ -253,6 +253,11 @@ class JobAdmin(admin.ModelAdmin):
             .filter(total__gt=0)
             .order_by('-total')
         )
+        # Events keep the reference id; show its version label while it still exists.
+        labels = dict(Reference.objects.filter(pk__in=[r['reference_id'] for r in proj_by_ref])
+                      .values_list('pk', 'version_label'))
+        proj_by_ref = [{**r, 'version': labels.get(r['reference_id']) or r['reference_id']}
+                       for r in proj_by_ref]
 
         context = {
             **self.admin_site.each_context(request),
