@@ -1,11 +1,13 @@
 from allauth.account.signals import user_signed_up
 from django.conf import settings
+from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.utils import timezone
 
 from .example import provision_example_for_user
-from .models import Job, JobEvent, Projection, ProjectionEvent, Publication, Reference
+from .models import Job, JobEvent, Projection, ProjectionEvent, Publication, Reference, UCEEmbedding
+from .notify import notify_projection_complete, notify_projection_error, notify_uce_error
 
 
 @receiver(user_signed_up)
@@ -78,6 +80,27 @@ def record_projection_event(sender, instance, created, **kwargs):
             event=instance.status,
             timestamp=timezone.now(),
         )
+        # Email only when a mapping that ran finishes: not for clones and example jobs
+        # (created or copied, never run), nor for projections failed because their
+        # UCE run failed (the user gets one email for that, below).
+        if instance._old_status == 'running':
+            notify = notify_projection_complete if instance.status == 'complete' else notify_projection_error
+            transaction.on_commit(lambda: notify(instance))
+
+
+@receiver(pre_save, sender=UCEEmbedding)
+def capture_embedding_old_status(sender, instance, **kwargs):
+    if instance.pk:
+        instance._old_status = (
+            UCEEmbedding.objects.filter(pk=instance.pk).values_list('status', flat=True).first())
+    else:
+        instance._old_status = None
+
+
+@receiver(post_save, sender=UCEEmbedding)
+def notify_embedding_failed(sender, instance, created, **kwargs):
+    if getattr(instance, '_old_status', None) == 'running' and instance.status == 'error':
+        transaction.on_commit(lambda: notify_uce_error(instance))
 
 
 @receiver(post_save, sender=Reference)
