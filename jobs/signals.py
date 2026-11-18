@@ -57,33 +57,37 @@ def capture_projection_old_status(sender, instance, **kwargs):
 
 @receiver(post_save, sender=Projection)
 def record_projection_event(sender, instance, created, **kwargs):
+    # Record only mappings that are run: example projections are created complete and
+    # clone projections are created to be copied into (marked 'uncopied' if the copy
+    # fails), so neither is a mapping.
+    old, new = getattr(instance, '_old_status', None), instance.status
+    result = instance.result or {}
     if created:
-        ProjectionEvent.objects.create(
-            projection_id=instance.id,
-            job_id=instance.job_id,
-            user=instance.job.user,
-            reference_id=instance.reference_id,
-            reference_title=instance.reference.name,
-            event='created',
-            timestamp=instance.created_at,
-        )
-    elif getattr(instance, '_old_status', None) != instance.status and \
-            instance.status in ('complete', 'error'):
-        ProjectionEvent.objects.create(
-            projection_id=instance.id,
-            job_id=instance.job_id,
-            user=instance.job.user,
-            reference_id=instance.reference_id,
-            reference_title=instance.reference.name,
-            event=instance.status,
-            timestamp=timezone.now(),
-        )
-        # Email only when a mapping that ran finishes: not for clones and example jobs
-        # (created or copied, never run), nor for projections failed because their
-        # UCE run failed (the user gets one email for that, below).
-        if instance._old_status == 'running':
-            notify = notify_projection_complete if instance.status == 'complete' else notify_projection_error
-            transaction.on_commit(lambda: notify(instance))
+        if new == 'complete' or '_clone_source' in result:
+            return
+        event, timestamp = 'created', instance.created_at
+    elif old == new:
+        return
+    elif new == 'complete' and old == 'running':
+        event, timestamp = 'complete', timezone.now()
+    elif new == 'error' and old in ('pending', 'running') and not result.get('uncopied'):
+        event, timestamp = 'error', timezone.now()
+    else:
+        return
+    ProjectionEvent.objects.create(
+        projection_id=instance.id,
+        job_id=instance.job_id,
+        user=instance.job.user,
+        reference_id=instance.reference_id,
+        reference_title=instance.reference.name,
+        event=event,
+        timestamp=timestamp,
+    )
+    # Email only when a mapping that ran finishes, not for projections failed because
+    # their UCE run failed (the user gets one email for that, below).
+    if old == 'running':
+        notify = notify_projection_complete if new == 'complete' else notify_projection_error
+        transaction.on_commit(lambda: notify(instance))
 
 
 @receiver(pre_save, sender=UCEEmbedding)

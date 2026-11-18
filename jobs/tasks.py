@@ -714,7 +714,7 @@ def _fail_uncopied(job, error):
         emb.save()
     for proj in job.projections.filter(status='pending'):
         proj.status = 'error'
-        proj.result = {'error': error}
+        proj.result = {'error': error, 'uncopied': True}
         proj.save()
 
 

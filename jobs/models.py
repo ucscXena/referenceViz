@@ -282,7 +282,13 @@ class EmbeddingEvent(models.Model):
 
 
 class ProjectionEvent(models.Model):
-    """Permanent record of projection lifecycle events, surviving job/projection deletion."""
+    """Permanent record of mappings, surviving job and projection deletion.
+
+    'created' when a mapping is requested, 'complete' when it finishes running, 'error'
+    when it fails (to submit, while running, or because its UCE run failed). Projections that are
+    copied rather than run (clones, example jobs) record nothing; before Nov 2026,
+    clone projections were recorded as created and complete.
+    """
     EVENT_CHOICES = [('created', 'Created'), ('complete', 'Complete'), ('error', 'Error')]
 
     projection_id = models.UUIDField(db_index=True)  # not a FK — survives deletion
