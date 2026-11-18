@@ -205,7 +205,7 @@ function renderJobRows(job, isAlt, selected, dispatch) {
     } else if (first) {
       cells.push(
         h('td', { rowspan: pcount, class: 'uce-status-cell' }, ...jobStatusContent(job, dispatch)),
-        h('td', { rowspan: pcount }, '—'),
+        h('td', { rowspan: pcount, class: 'no-projections' }, '—'),
       )
     }
     rows.push(first
