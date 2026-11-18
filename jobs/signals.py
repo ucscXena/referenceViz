@@ -6,7 +6,7 @@ from django.dispatch import receiver
 from django.utils import timezone
 
 from .example import provision_example_for_user
-from .models import Job, JobEvent, Projection, ProjectionEvent, Publication, Reference, UCEEmbedding
+from .models import EmbeddingEvent, Job, JobEvent, Projection, ProjectionEvent, Publication, Reference, UCEEmbedding
 from .notify import notify_projection_complete, notify_projection_error, notify_uce_error
 
 
@@ -29,21 +29,19 @@ def capture_job_old_status(sender, instance, **kwargs):
 @receiver(post_save, sender=Job)
 def record_job_event(sender, instance, created, **kwargs):
     if created:
-        JobEvent.objects.create(
-            job_id=instance.id,
-            user=instance.user,
-            event='created',
-            timestamp=instance.created_at,
-        )
-    elif getattr(instance, '_old_status', None) != instance.status and \
-            instance.status in ('complete', 'error'):
-        JobEvent.objects.create(
-            job_id=instance.id,
-            user=instance.user,
-            event=instance.status,
-            cell_count=instance.cell_count() if instance.status == 'complete' else None,
-            timestamp=timezone.now(),
-        )
+        event, timestamp = 'created', instance.created_at
+    else:
+        old = getattr(instance, '_old_status', None)
+        if old == instance.status:
+            return
+        if old == 'uploading' and instance.status == 'ready':
+            event = 'uploaded'
+        elif instance.status == 'error':
+            event = 'error'
+        else:
+            return
+        timestamp = timezone.now()
+    JobEvent.objects.create(job_id=instance.id, user=instance.user, event=event, timestamp=timestamp)
 
 
 @receiver(pre_save, sender=Projection)
@@ -98,9 +96,31 @@ def capture_embedding_old_status(sender, instance, **kwargs):
 
 
 @receiver(post_save, sender=UCEEmbedding)
-def notify_embedding_failed(sender, instance, created, **kwargs):
-    if getattr(instance, '_old_status', None) == 'running' and instance.status == 'error':
+def record_embedding_event(sender, instance, created, **kwargs):
+    old, new = getattr(instance, '_old_status', None), instance.status
+    if old == new:
+        return
+    # Only runs: clones and example jobs create embeddings complete or copy into them.
+    # A late success can follow a timeout that marked the run failed.
+    if new == 'running':
+        event = 'started'
+    elif new == 'complete' and old in ('running', 'error'):
+        event = 'complete'
+    elif new == 'error' and old == 'running':
+        event = 'error'
         transaction.on_commit(lambda: notify_uce_error(instance))
+    else:
+        return
+    EmbeddingEvent.objects.create(
+        embedding_id=instance.id,
+        job_id=instance.job_id,
+        user=instance.job.user,
+        uce_model_id=instance.uce_model_id,
+        uce_model_name=instance.uce_model.name,
+        event=event,
+        cell_count=instance.cell_count() if event == 'complete' else None,
+        timestamp=timezone.now(),
+    )
 
 
 @receiver(post_save, sender=Reference)

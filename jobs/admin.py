@@ -32,7 +32,7 @@ from .aws import boto_client
 from django.contrib.auth.admin import UserAdmin as DefaultUserAdmin
 from django.contrib.auth.models import User
 
-from .models import ConversationMessage, Job, JobEvent, Projection, ProjectionEvent, Publication, Reference, ReferenceGroup, UCEEmbedding, UCEModel, UserProfile
+from .models import ConversationMessage, EmbeddingEvent, Job, JobEvent, Projection, ProjectionEvent, Publication, Reference, ReferenceGroup, UCEEmbedding, UCEModel, UserProfile
 from .tasks import run_analysis
 
 
@@ -162,37 +162,74 @@ class JobAdmin(admin.ModelAdmin):
         week_ago = now - timedelta(days=7)
         month_ago = now - timedelta(days=30)
 
-        # Live counts for UCE runs in progress
-        job_live = UCEEmbedding.objects.aggregate(
+        # All counts come from the event logs, which survive job deletion.
+
+        # Users: anyone who started an upload, a UCE run, or a mapping.
+        def users_since(start=None):
+            ids = set()
+            for qs in (JobEvent.objects.filter(event='created'),
+                       EmbeddingEvent.objects.filter(event='started'),
+                       ProjectionEvent.objects.filter(event='created')):
+                if start:
+                    qs = qs.filter(timestamp__gte=start)
+                ids.update(qs.exclude(user=None).values_list('user', flat=True).distinct())
+            return len(ids)
+
+        # Events change meaning when Job.status came to describe only the upload: before
+        # then, JobEvent 'complete'/'error' recorded the job's UCE result. The first
+        # event of a kind only written since ('uploaded', any EmbeddingEvent) dates it.
+        firsts = [e.timestamp for e in (JobEvent.objects.filter(event='uploaded').first(),
+                                        EmbeddingEvent.objects.first()) if e]
+        since = min(firsts) if firsts else now
+
+        # Uploads
+        uploads = JobEvent.objects.aggregate(
+            created=Count('id', filter=Q(event='created')),
+            uploaded=Count('id', filter=Q(event='uploaded')),
+            error=Count('id', filter=Q(event='error', timestamp__gte=since)),
+        )
+        uploads['uploading'] = Job.objects.filter(status='uploading').count()
+
+        # UCE runs, by model
+        uce_by_model = (
+            EmbeddingEvent.objects
+            .values('uce_model_name')
+            .annotate(started=Count('id', filter=Q(event='started')),
+                      complete=Count('id', filter=Q(event='complete')),
+                      error=Count('id', filter=Q(event='error')))
+            .order_by('-started')
+        )
+        uce_live = UCEEmbedding.objects.aggregate(
             running=Count('id', filter=Q(status='running')),
             pending=Count('id', filter=Q(status='pending')),
         )
 
-        # Historical counts from event log (survives job deletion)
-        job_totals = JobEvent.objects.aggregate(
-            total=Count('id', filter=Q(event='created')),
-            complete=Count('id', filter=Q(event='complete')),
-            error=Count('id', filter=Q(event='error')),
-        )
-        job_totals.update(job_live)
-
-        # Jobs created per week (last 16 weeks) — from event log
+        # Per week, last 16 weeks
         weeks = []
         for i in range(15, -1, -1):
             start = now - timedelta(weeks=i + 1)
             end = now - timedelta(weeks=i)
-            count = JobEvent.objects.filter(event='created', timestamp__gte=start, timestamp__lt=end).count()
-            weeks.append({'label': start.strftime('%-m/%-d'), 'count': count})
+            weeks.append({
+                'label': start.strftime('%-m/%-d'),
+                'jobs': JobEvent.objects.filter(event='created', timestamp__gte=start, timestamp__lt=end).count(),
+                'uce_runs': EmbeddingEvent.objects.filter(event='started', timestamp__gte=start, timestamp__lt=end).count(),
+            })
 
-        # Active users from event log
-        active_week = JobEvent.objects.filter(event='created', timestamp__gte=week_ago).values('user').distinct().count()
-        active_month = JobEvent.objects.filter(event='created', timestamp__gte=month_ago).values('user').distinct().count()
-        total_users = JobEvent.objects.filter(event='created').values('user').distinct().count()
+        # Before Job.status described only the upload, UCE results were recorded on the
+        # job: JobEvent 'complete' (with cell count) and 'error'.
+        legacy = JobEvent.objects.aggregate(
+            complete=Count('id', filter=Q(event='complete')),
+            error=Count('id', filter=Q(event='error', timestamp__lt=since)),
+        )
 
-        # Cell count distribution from event log
+        # Cell counts of completed UCE runs, including the legacy per-job records.
         cell_buckets = defaultdict(int)
         bucket_labels = ['<10k', '10k–50k', '50k–100k', '100k–250k', '250k–500k', '>500k']
-        for n in JobEvent.objects.filter(event='complete').exclude(cell_count=None).values_list('cell_count', flat=True):
+        counts = list(EmbeddingEvent.objects.filter(event='complete').exclude(cell_count=None)
+                      .values_list('cell_count', flat=True))
+        counts += list(JobEvent.objects.filter(event='complete').exclude(cell_count=None)
+                       .values_list('cell_count', flat=True))
+        for n in counts:
             if n < 10_000:
                 cell_buckets['<10k'] += 1
             elif n < 50_000:
@@ -207,7 +244,7 @@ class JobAdmin(admin.ModelAdmin):
                 cell_buckets['>500k'] += 1
         cell_counts = [{'label': l, 'count': cell_buckets[l]} for l in bucket_labels]
 
-        # Projections by reference from event log
+        # Projections by reference
         proj_by_ref = (
             ProjectionEvent.objects
             .values('reference_title', 'reference_id')
@@ -220,11 +257,15 @@ class JobAdmin(admin.ModelAdmin):
         context = {
             **self.admin_site.each_context(request),
             'title': 'Site Stats',
-            'job_totals': job_totals,
+            'total_users': users_since(),
+            'active_month': users_since(month_ago),
+            'active_week': users_since(week_ago),
+            'uploads': uploads,
+            'uce_by_model': uce_by_model,
+            'uce_live': uce_live,
             'weeks': weeks,
-            'active_week': active_week,
-            'active_month': active_month,
-            'total_users': total_users,
+            'legacy': legacy,
+            'since': since,
             'cell_counts': cell_counts,
             'proj_by_ref': proj_by_ref,
         }
@@ -772,3 +813,47 @@ class ConversationMessageAdmin(admin.ModelAdmin):
     def content_preview(self, obj):
         return obj.content[:80] + '…' if len(obj.content) > 80 else obj.content
     content_preview.short_description = 'Content'
+
+
+class _EventAdmin(admin.ModelAdmin):
+    """Read-only view of an event log: the rows are history the stats page counts."""
+    date_hierarchy = 'timestamp'
+    list_select_related = ('user',)
+    list_per_page = 100
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description='Job')
+    def job_link(self, obj):
+        label = str(obj.job_id)[:8]
+        if Job.objects.filter(pk=obj.job_id).exists():
+            return format_html('<a href="{}">{}</a>', reverse('admin:jobs_job_change', args=[obj.job_id]), label)
+        return f'{label} (deleted)'
+
+
+@admin.register(JobEvent)
+class JobEventAdmin(_EventAdmin):
+    list_display = ('timestamp', 'event', 'user', 'job_link', 'cell_count')
+    list_filter = ('event',)
+    search_fields = ('job_id', 'user__email')
+
+
+@admin.register(EmbeddingEvent)
+class EmbeddingEventAdmin(_EventAdmin):
+    list_display = ('timestamp', 'event', 'uce_model_name', 'user', 'job_link', 'cell_count')
+    list_filter = ('event', 'uce_model_name')
+    search_fields = ('job_id', 'embedding_id', 'user__email')
+
+
+@admin.register(ProjectionEvent)
+class ProjectionEventAdmin(_EventAdmin):
+    list_display = ('timestamp', 'event', 'reference_title', 'reference_id', 'user', 'job_link')
+    list_filter = ('event', 'reference_title')
+    search_fields = ('job_id', 'projection_id', 'user__email', 'reference_id')

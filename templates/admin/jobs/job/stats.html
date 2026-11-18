@@ -11,8 +11,13 @@
   .stats-bar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; flex: 1; height: 100%; }
   .stats-bar { width: 100%; background-color: #417690; border-radius: 3px 3px 0 0; min-height: 2px; }
   .stats-bar-count { font-size: 0.7rem; color: #666; margin-top: 3px; }
+  .stats-note { color: #666; font-size: 0.8rem; margin: 0 0 16px; }
   .stats-bar-label { font-size: 0.65rem; color: #999; margin-top: 2px; white-space: nowrap; }
 </style>
+
+<p class="stats-note">Counted from event logs, which survive job deletion. Upload and UCE run
+  counts start {{ since|date:"Y-m-d" }}; earlier UCE results were recorded per job (see Before
+  {{ since|date:"Y-m-d" }}).</p>
 
 <h2>Users</h2>
 <div class="stats-grid">
@@ -24,24 +29,34 @@
     </table>
   </div>
   <div class="stats-card">
-    <table class="stats-table">
-      <tr><th>Total jobs</th><td>{{ job_totals.total }}</td></tr>
-      <tr><th>Complete</th><td>{{ job_totals.complete }}</td></tr>
-      <tr><th>Error</th><td>{{ job_totals.error }}</td></tr>
-      <tr><th>Running</th><td>{{ job_totals.running }}</td></tr>
-      <tr><th>Pending</th><td>{{ job_totals.pending }}</td></tr>
-    </table>
+    <p class="stats-note">Users who started an upload, a UCE run or a mapping.</p>
   </div>
 </div>
 
-<h2>Jobs per week (last 16 weeks)</h2>
+<h2>Uploads</h2>
+<div class="stats-grid">
+  <div class="stats-card">
+    <table class="stats-table">
+      <tr><th>Jobs created (ever)</th><td>{{ uploads.created }}</td></tr>
+      <tr><th>Uploads finished</th><td>{{ uploads.uploaded }}</td></tr>
+      <tr><th>Uploads or clones failed</th><td>{{ uploads.error }}</td></tr>
+      <tr><th>Uploading now</th><td>{{ uploads.uploading }}</td></tr>
+    </table>
+  </div>
+  <div class="stats-card">
+    <p class="stats-note">Jobs created includes uploads never finished, clones of shared results and
+      example jobs.</p>
+  </div>
+</div>
+
+<h2>Jobs created per week (last 16 weeks)</h2>
 <div class="stats-bar-chart">
-  {% with max_week=weeks|dictsort:"count"|last %}
+  {% with max_week=weeks|dictsort:"jobs"|last %}
   {% for week in weeks %}
-    {% if max_week.count > 0 %}
+    {% if max_week.jobs > 0 %}
     <div class="stats-bar-col">
-      <div class="stats-bar" style="height: {% widthratio week.count max_week.count 120 %}px" title="{{ week.count }} jobs"></div>
-      <div class="stats-bar-count">{{ week.count }}</div>
+      <div class="stats-bar" style="height: {% widthratio week.jobs max_week.jobs 120 %}px" title="{{ week.jobs }} jobs"></div>
+      <div class="stats-bar-count">{{ week.jobs }}</div>
       <div class="stats-bar-label">{{ week.label }}</div>
     </div>
     {% endif %}
@@ -49,15 +64,61 @@
   {% endwith %}
 </div>
 
-<h2>Cell count distribution (complete jobs)</h2>
+<h2>UCE runs</h2>
+<div class="stats-grid">
+  <div class="stats-card">
+    <table class="stats-table">
+      <thead><tr><th>Model</th><th>Started</th><th>Complete</th><th>Failed</th></tr></thead>
+      <tbody>
+      {% for row in uce_by_model %}
+        <tr><td>{{ row.uce_model_name }}</td><td>{{ row.started }}</td><td>{{ row.complete }}</td><td>{{ row.error }}</td></tr>
+      {% empty %}
+        <tr><td colspan="4">None yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="stats-card">
+    <table class="stats-table">
+      <tr><th>Running now</th><td>{{ uce_live.running }}</td></tr>
+      <tr><th>Pending now</th><td>{{ uce_live.pending }}</td></tr>
+    </table>
+    <p class="stats-note">Each attempt counts, so a retried run is started twice. Clones and example
+      jobs copy results rather than run.</p>
+  </div>
+</div>
+
+<h2>UCE runs started per week (last 16 weeks)</h2>
+<div class="stats-bar-chart">
+  {% with max_week=weeks|dictsort:"uce_runs"|last %}
+  {% for week in weeks %}
+    {% if max_week.uce_runs > 0 %}
+    <div class="stats-bar-col">
+      <div class="stats-bar" style="height: {% widthratio week.uce_runs max_week.uce_runs 120 %}px" title="{{ week.uce_runs }} runs"></div>
+      <div class="stats-bar-count">{{ week.uce_runs }}</div>
+      <div class="stats-bar-label">{{ week.label }}</div>
+    </div>
+    {% endif %}
+  {% endfor %}
+  {% endwith %}
+</div>
+
+<h2>Before {{ since|date:"Y-m-d" }}</h2>
 <table class="stats-table" style="max-width:400px">
-  <thead><tr><th>Range</th><th>Jobs</th></tr></thead>
+  <tr><th>Jobs whose UCE run completed</th><td>{{ legacy.complete }}</td></tr>
+  <tr><th>Jobs whose UCE run failed</th><td>{{ legacy.error }}</td></tr>
+</table>
+
+<h2>Cell count distribution (completed UCE runs)</h2>
+<table class="stats-table" style="max-width:400px">
+  <thead><tr><th>Range</th><th>Runs</th></tr></thead>
   <tbody>
   {% for bucket in cell_counts %}
     <tr><td>{{ bucket.label }}</td><td>{{ bucket.count }}</td></tr>
   {% endfor %}
   </tbody>
 </table>
+<p class="stats-note">Includes the completed jobs recorded before {{ since|date:"Y-m-d" }}.</p>
 
 <h2>Projections by reference</h2>
 <table class="stats-table" style="max-width:600px">

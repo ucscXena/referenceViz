@@ -238,11 +238,41 @@ class UCEEmbedding(models.Model):
 
 
 class JobEvent(models.Model):
-    """Permanent record of job lifecycle events, surviving job deletion."""
-    EVENT_CHOICES = [('created', 'Created'), ('complete', 'Complete'), ('error', 'Error')]
+    """Permanent record of job lifecycle events, surviving job deletion.
+
+    'created': a Job row was created (uploads, including abandoned ones, clones and
+    example jobs). 'uploaded': an upload finished (uploading -> ready). 'error': an
+    upload or clone failed. 'complete' is legacy: before Job.status described only the
+    upload (Nov 2026), it meant the job's UCE run finished, with its cell count; UCE
+    runs are now recorded as EmbeddingEvents.
+    """
+    EVENT_CHOICES = [('created', 'Created'), ('uploaded', 'Uploaded'),
+                     ('complete', 'Complete (legacy)'), ('error', 'Error')]
 
     job_id = models.UUIDField(db_index=True)  # not a FK — survives job deletion
     user = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name='+')
+    event = models.CharField(max_length=20, choices=EVENT_CHOICES)
+    cell_count = models.IntegerField(null=True, blank=True)
+    timestamp = models.DateTimeField()
+
+    class Meta:
+        ordering = ['timestamp']
+
+
+class EmbeddingEvent(models.Model):
+    """Permanent record of UCE runs, surviving job and embedding deletion.
+
+    'started' each time an embedding starts running (so retries count), 'complete' or
+    'error' when it finishes. Embeddings that are copied rather than run (clones,
+    example jobs) record nothing.
+    """
+    EVENT_CHOICES = [('started', 'Started'), ('complete', 'Complete'), ('error', 'Error')]
+
+    embedding_id = models.UUIDField(db_index=True)  # not a FK — survives deletion
+    job_id = models.UUIDField(db_index=True)
+    user = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name='+')
+    uce_model_id = models.IntegerField()                 # denormalized — survives model changes
+    uce_model_name = models.CharField(max_length=100)
     event = models.CharField(max_length=20, choices=EVENT_CHOICES)
     cell_count = models.IntegerField(null=True, blank=True)
     timestamp = models.DateTimeField()
