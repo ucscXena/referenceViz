@@ -70,3 +70,51 @@ def delete_s3_prefix(prefix):
         logger.info("Deleted %d objects under %s", deleted, prefix)
     except Exception:
         logger.warning("Failed to delete S3 prefix %s", prefix, exc_info=True)
+
+
+def delete_job_s3_files(job):
+    """Delete all S3 files associated with a job and its projections."""
+    result = job.result or {}
+
+    # For jobs still uploading, abort the in-flight multipart upload so S3
+    # doesn't accumulate orphaned parts (the lifecycle rule is a backstop).
+    if job.status == 'uploading' and job.s3_input_key:
+        upload_id = result.get('upload_id')
+        if upload_id:
+            try:
+                boto_client('s3').abort_multipart_upload(
+                    Bucket=settings.AWS_S3_BUCKET,
+                    Key=job.s3_input_key,
+                    UploadId=upload_id,
+                )
+            except Exception:
+                pass
+
+    # UCE embeddings (kept until job is deleted)
+    for emb in job.embeddings.all():
+        emb_result = emb.result or {}
+        delete_s3_uri(emb_result.get('uce_s3_uri') or emb_result.get('s3_uri'))
+        delete_s3_uri(emb_result.get('filtered_expression_s3_uri'))
+        delete_s3_prefix(emb_result.get('output_s3_prefix'))
+
+    # Backward compat: old jobs may have UCE data in job.result instead of an embedding
+    delete_s3_uri(result.get('uce_s3_uri') or result.get('s3_uri'))
+    delete_s3_uri(result.get('filtered_expression_s3_uri'))
+    delete_s3_prefix(result.get('output_s3_prefix'))
+
+    # Input file and UCE request JSON (normally gone after completion,
+    # but may still exist for pending/running/error jobs)
+    delete_s3_key(job.s3_input_key)
+    if job.s3_input_key:
+        request_key = job.s3_input_key.replace('uploads/', 'requests/', 1) + '.json'
+        delete_s3_key(request_key)
+
+    # Batch output/failure URIs (stored in result while running)
+    delete_s3_uri(result.get('output_uri'))
+    delete_s3_uri(result.get('failure_uri'))
+
+    # Projection result files
+    for projection in job.projections.all():
+        proj_result = projection.result or {}
+        delete_s3_uri(proj_result.get('s3_uri') or proj_result.get('output_s3_uri'))
+        delete_s3_uri(proj_result.get('predictions_s3_uri'))

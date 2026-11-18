@@ -10,7 +10,7 @@ from django.conf import settings
 from django.utils import timezone
 from django_rq import job
 
-from .aws import boto_client, delete_s3_key, delete_s3_uri, delete_s3_prefix, notify_staff
+from .aws import boto_client, delete_job_s3_files, delete_s3_key, delete_s3_uri, delete_s3_prefix, notify_staff
 from .batch import (check_batch_job, check_batch_jobs, submit_batch_job,
                     submit_uce_batch_job, submit_preprocess_batch_job,
                     submit_shard_batch_job, submit_uce_brain_shard_batch_job,
@@ -783,6 +783,71 @@ def check_projection_result(projection_id, attempt=0):
         projection.result = {'error': str(e), 'traceback': traceback.format_exc()}
         projection.status = 'error'
         projection.save()
+
+
+# ---------------------------------------------------------------------------
+# Abandoned uploads
+# ---------------------------------------------------------------------------
+
+# A Job stays 'uploading' when its browser never comes back to resume the upload.
+# The bucket's abort-stale-multipart lifecycle rule aborts the S3 upload after 7 days;
+# this removes the Job. It runs once, 8 days after an upload starts, unless a run is
+# already scheduled: with no uploads there is nothing to clean up.
+
+UPLOAD_CLEANUP_JOB_ID = 'cleanup-abandoned-uploads'
+UPLOAD_CLEANUP_DELAY = timedelta(days=8)
+
+
+def schedule_upload_cleanup():
+    """Schedule cleanup_abandoned_uploads unless a run is already waiting. Never raises."""
+    if getattr(settings, 'RQSYNC', False):
+        return
+    try:
+        queue = django_rq.get_queue('default')
+        existing = queue.fetch_job(UPLOAD_CLEANUP_JOB_ID)
+        if existing and existing.get_status() in ('scheduled', 'queued', 'deferred'):
+            return
+        queue.enqueue_in(UPLOAD_CLEANUP_DELAY, cleanup_abandoned_uploads, job_id=UPLOAD_CLEANUP_JOB_ID)
+    except Exception:
+        logger.exception('Could not schedule the abandoned upload cleanup')
+
+
+def cleanup_abandoned_uploads(max_age_days=7, dry_run=False):
+    """
+    Delete Jobs left in 'uploading' that can no longer resume: their S3 multipart
+    upload is gone, or they are older than max_age_days (the upload is aborted).
+    Jobs younger than a day are left alone. Returns [(job label, reason)].
+    """
+    from botocore.exceptions import ClientError
+
+    now = timezone.now()
+    s3 = boto_client('s3')
+    deleted = []
+    for job in Job.objects.filter(status='uploading', created_at__lt=now - timedelta(days=1)).select_related('user'):
+        reason = None
+        upload_id = (job.result or {}).get('upload_id')
+        if now - job.created_at > timedelta(days=max_age_days):
+            reason = f'older than {max_age_days} days'
+        elif not upload_id or not job.s3_input_key:
+            reason = 'no multipart upload recorded'
+        else:
+            try:
+                s3.list_parts(Bucket=settings.AWS_S3_BUCKET, Key=job.s3_input_key,
+                              UploadId=upload_id, MaxParts=1)
+            except ClientError as e:
+                if e.response['Error']['Code'] != 'NoSuchUpload':
+                    raise
+                reason = 'S3 upload no longer exists'
+        if reason is None:
+            continue
+        deleted.append((f'{job.short_id()} {job.user.email} {job.original_filename!r} '
+                        f'({job.created_at:%Y-%m-%d})', reason))
+        if not dry_run:
+            delete_job_s3_files(job)
+            job.delete()
+    for label, reason in deleted:
+        logger.info('cleanup_abandoned_uploads: %s %s: %s', 'would delete' if dry_run else 'deleted', label, reason)
+    return deleted
 
 
 def _format_author(author):

@@ -13,6 +13,7 @@ Usage:
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
+from jobs.aws import delete_job_s3_files
 from jobs.example import _example_settings, provision_example_for_user
 from jobs.models import Job
 
@@ -51,8 +52,7 @@ class Command(BaseCommand):
                 if deleted.exists():
                     self.stdout.write(f'  {user.email}: deleting existing example job(s)')
                     for job in deleted:
-                        from jobs.views import _delete_job_s3_files
-                        _delete_job_s3_files(job)
+                        delete_job_s3_files(job)
                     deleted.delete()
 
             before = Job.objects.filter(user=user, result__example=True).exists()
