@@ -255,77 +255,12 @@ def reference_list(request):
     })
 
 
-@login_required
-@require_POST
-def get_upload_url(request):
-    data = json.loads(request.body)
-    filename = data.get('filename', 'upload')
-
-    job = Job.objects.create(
-        user=request.user,
-        original_filename=filename,
-        status='uploading',
-    )
-
-    s3_key = f"uploads/{job.id}/{filename}"
-    s3 = boto_client('s3')
-    presigned = s3.generate_presigned_post(
-        Bucket=settings.AWS_S3_BUCKET,
-        Key=s3_key,
-        ExpiresIn=300,
-    )
-
-    job.s3_input_key = s3_key
-    job.save()
-
-    return JsonResponse({'job_id': str(job.id), 'presigned': presigned})
-
-
-@login_required
-@require_POST
-def use_example(request):
-    """Copy the example file within S3 and create an uploading job, ready for /confirm/."""
-    example_key = getattr(settings, 'EXAMPLE_FILE_S3_KEY', '')
-    if not example_key:
-        return JsonResponse({'error': 'No example file configured'}, status=404)
-
-    filename = example_key.split('/')[-1]
-    job = Job.objects.create(
-        user=request.user,
-        original_filename=filename,
-        status='uploading',
-    )
-    dest_key = f'uploads/{job.id}/{filename}'
-    boto_client('s3').copy_object(
-        Bucket=settings.AWS_S3_BUCKET,
-        CopySource={'Bucket': settings.AWS_S3_BUCKET, 'Key': example_key},
-        Key=dest_key,
-    )
-    job.s3_input_key = dest_key
-    job.save()
-    return JsonResponse({'job_id': str(job.id)})
-
-
-@login_required
-@require_POST
-def abort_upload(request, job_id):
-    """Delete a job whose S3 upload failed before confirmation."""
-    job = get_object_or_404(Job, pk=str(job_id), user=request.user)
-    if job.status != 'uploading':
-        return JsonResponse({'error': 'job is not uploading'}, status=400)
-    _delete_job_s3_files(job)
-    job.delete()
-    return JsonResponse({'status': 'ok'})
-
-
 # ── Multipart upload endpoints ──────────────────────────────────────────────
 
 @login_required
 @require_POST
-@login_required
-@require_POST
 def multipart_create(request):
-    """Initiate an S3 multipart upload and create a pending Job."""
+    """Initiate an S3 multipart upload and create an uploading Job."""
     data = json.loads(request.body)
     filename = data.get('filename', 'upload')
 
@@ -485,39 +420,6 @@ def multipart_abort(request):
             job.delete()
 
     return JsonResponse({'status': 'ok'})
-
-
-@login_required
-@require_POST
-def confirm_upload(request, job_id):
-    job = get_object_or_404(Job, pk=str(job_id), user=request.user)
-    data = json.loads(request.body) if request.body else {}
-    ref_id = data.get('ref_id')
-    mixed_precision = data.get('mixed_precision', 'bf16')
-
-    if ref_id:
-        reference = get_object_or_404(
-            Reference.objects.select_related('uce_model'), pk=ref_id)
-        embedding, _ = UCEEmbedding.objects.get_or_create(
-            job=job, uce_model=reference.uce_model,
-            defaults={'status': 'pending'},
-        )
-        proj, _ = Projection.objects.get_or_create(job=job, reference=reference,
-                                                    defaults={'embedding': embedding})
-        if not proj.embedding_id:
-            proj.embedding = embedding
-            proj.save(update_fields=['embedding'])
-    else:
-        uce_model = UCEModel.objects.get(is_default=True)
-        embedding, _ = UCEEmbedding.objects.get_or_create(
-            job=job, uce_model=uce_model,
-            defaults={'status': 'pending'},
-        )
-
-    job.status = 'ready'
-    job.save(update_fields=['status'])
-    run_analysis.delay(str(embedding.id), mixed_precision)
-    return JsonResponse({'status': 'queued'})
 
 
 @login_required
